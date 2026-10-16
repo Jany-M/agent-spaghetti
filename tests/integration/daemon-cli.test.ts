@@ -1,11 +1,12 @@
 // Daemon + typed client + CLI, in-process, against a fake scan (no machine access).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HubClient, DaemonDown, emptyLive, liveState, type Integration, type Snapshot, type Switch } from '@agent-spaghetti/sdk';
 import { Settings } from '../../packages/core/src/settings.ts';
+import { Consent } from '../../packages/core/src/consent.ts';
 import { Store } from '../../packages/core/src/store.ts';
 import { Bus } from '../../packages/core/src/bus.ts';
 import { startDaemon } from '../../packages/core/src/daemon.ts';
@@ -23,7 +24,8 @@ async function boot(scan: () => Promise<Snapshot> = async () => SNAP) {
   let live = emptyLive(); bus.subscribe(e => { live = liveState([e], live); });
   const sw: Switch[] = [{ id: 'openclaw-mcp:a', label: 'a', on: false, envId: 'wsl:TestDistro', integration: 'openclaw' }];
   const calls: string[] = [];
-  const services: Services = { store, bus, settings: new Settings(store), live: () => live, scan,
+  let stopped = 0;
+  const services: Services = { store, bus, settings: new Settings(store), consent: new Consent(bus), shutdown: () => { stopped++; }, live: () => live, scan,
     loaded: () => ({ integrations: [THIRD], rejected: [] }),
     onEnvs: async (cmd, args, envIds) => {
       calls.push([cmd, ...args, ...(envIds ?? ['*'])].join(' '));
@@ -35,7 +37,7 @@ async function boot(scan: () => Promise<Snapshot> = async () => SNAP) {
   const d = await startDaemon({ services, token, port: 0 });
   const removeDiscovery = writeDiscovery(dir, d.port);
   const env = { AGENT_SPAGHETTI_DATA_DIR: dir } as NodeJS.ProcessEnv;
-  return { d, bus, dir, env, token, calls, client: HubClient.fromDiscovery(env), close: async () => { removeDiscovery(); await d.close(); } };
+  return { d, bus, dir, env, token, calls, services, stopped: () => stopped, client: HubClient.fromDiscovery(env), close: async () => { removeDiscovery(); await d.close(); } };
 }
 const io = () => { const o: string[] = [], e: string[] = []; return { o, e, io: { out: (s: string) => o.push(s), err: (s: string) => e.push(s) } }; };
 
@@ -133,5 +135,43 @@ test('runDaemon wiring: real settings, grants and host-env commands; no scan or 
   const sw = await c.call('switches');
   assert.ok(Array.isArray(sw.switches));
   assert.deepEqual((await c.call('permissions')).subjects, []);
+  await d.close();
+});
+
+test('CLI 2: questions show in status with their id; answer allow resolves the asker; status --short; shutdown', async () => {
+  const b = await boot();
+  const cli = async (...a: string[]) => { const t = io(); const code = await run(a, t.io, b.env); return { code, out: t.o.join('\n'), err: t.e.join('\n') }; };
+  await cli('scan');
+  const answer = b.services.consent.request({ subject: 'acme', action: 'read', resource: 'PATH:acme', why: 'look for acme', scopes: ['always'] });
+  const id = b.services.consent.pending()[0].id;
+  let r = await cli('status'); assert.match(r.out, new RegExp(`\\? ${id}  acme wants read PATH:acme \\(look for acme\\) → answer ${id} allow\\|deny$`, 'm'));
+  r = await cli('status', '--short'); assert.equal(r.out, 'agent-spaghetti running · 1 tool\nLM Studio · m · ctx 200k\n1 approval waiting');
+  r = await cli('answer', id, 'maybe'); assert.equal(r.code, 1);
+  r = await cli('answer', id, 'allow', 'once'); assert.equal(r.code, 1); assert.match(r.err, /no open question/);
+  r = await cli('answer', id, 'allow'); assert.equal(r.code, 0);
+  assert.deepEqual(await answer, { answer: 'granted', scope: 'always' });
+  r = await cli('shutdown'); assert.equal(r.code, 0);
+  await new Promise(res => setImmediate(res));
+  assert.equal(b.stopped(), 1);
+  await b.close();
+});
+test('runDaemon: a third-party drop-in asks once per action; allowing stores a grant and rescans', async () => {
+  const { runDaemon } = await import('../../packages/core/src/main.ts');
+  const dir = mkdtempSync(join(tmpdir(), 'as-'));
+  mkdirSync(join(dir, 'integrations'));
+  writeFileSync(join(dir, 'integrations', 'acme-tool.json'), JSON.stringify({ manifest: 1, id: 'acme-tool', name: 'Acme', roles: ['tool'], detect: { bin: ['acme-tool-xyz'] } }));
+  const d = await runDaemon({ AGENT_SPAGHETTI_DATA_DIR: dir }, { scanOnStart: false, observe: false });
+  const c = HubClient.fromDiscovery({ AGENT_SPAGHETTI_DATA_DIR: dir });
+  await c.call('scan');
+  const [q] = (await c.call('status')).consents;
+  assert.deepEqual([q.subject, q.action, q.resource, q.why], ['acme-tool', 'read', 'PATH:acme-tool-xyz', 'look for the "acme-tool-xyz" program on PATH']);
+  await c.call('scan');
+  assert.equal((await c.call('status')).consents.length, 1, 'asked once');
+  const before = (await c.call('events', { since: 0 })).filter(e => e.type === 'scan.completed').length;
+  await c.call('consent', { id: q.id, allow: true });
+  assert.deepEqual((await c.call('permissions')).grants.map(g => [g.subject, g.action, g.resource, g.mode]), [['acme-tool', 'read', 'PATH:acme-tool-xyz', 'allow']]);
+  await new Promise(res => setTimeout(res, 3500));
+  assert.ok((await c.call('events', { since: 0 })).filter(e => e.type === 'scan.completed').length > before, 'rescanned');
+  assert.equal((await c.call('status')).consents.length, 0);
   await d.close();
 });

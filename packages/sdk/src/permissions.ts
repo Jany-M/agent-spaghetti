@@ -1,12 +1,17 @@
 // The one permission model (ADR 0005). Pure: used by the daemon, the env bundle and (later) the app.
-import type { Manifest } from './types.ts';
+import type { Cost, Manifest } from './types.ts';
 import { wildcard } from './match.ts';
 
 /** The one list of actions. 1b uses exec/read/net; write/run/config/load arrive with their phases. */
 export const ACTIONS = ['exec', 'read', 'net', 'write', 'run', 'config', 'load'] as const;
 export type Action = (typeof ACTIONS)[number];
+/** How the UI words each action ("<subject> wants to …"). */
+export const ACTION_LABEL: Record<Action, string> = { exec: 'run a program', read: 'read', net: 'contact a local server', write: 'change a file',
+  run: 'hand a task to', config: 'change a setting', load: 'load its own code' };
 export type Mode = 'allow' | 'deny';
 export interface Grant { subject: string; action: Action; resource: string; mode: Mode; by: 'user' | 'default'; ts: number }
+/** An action a third-party integration tried without a grant (recorded by the guard, asked by the daemon). */
+export interface Pending { subject: string; action: Action; resource: string }
 export interface DeclaredAction { action: Action; resource: string; why: string }
 
 /** What a manifest WOULD make the hub do, in the exact resource format the guard checks (what · where · how · why). */
@@ -35,3 +40,13 @@ export const withGrants = (grants: Grant[], add: Grant[]) => [...grants.filter(g
 /** Remove a subject's grants, or only one action+resource. */
 export const withoutGrants = (grants: Grant[], subject: string, action?: Action, resource?: string) =>
   grants.filter(g => !(g.subject === subject && (action === undefined || g.action === action) && (resource === undefined || g.resource === resource)));
+
+/** A question for the user (ADR 0005): third-party actions now, `run` requests from Phase 3. Answered in the tray or CLI. */
+export type ConsentScope = 'once' | 'job' | 'always';
+export interface ConsentRequest {
+  id: string; ts: number; subject: string; action: Action; resource: string; why: string;
+  scopes: ConsentScope[];                                   // what "allow" may mean here; deny is always offered
+  cost?: Cost; task?: string; billing?: string; expiresAt?: number;   // run requests (task text is never stored)
+}
+export interface ConsentAnswer { answer: 'granted' | 'denied' | 'expired'; scope?: ConsentScope }
+export const SCOPE_LABEL: Record<ConsentScope, string> = { once: 'Allow once', job: 'Allow for this job', always: 'Always allow' };

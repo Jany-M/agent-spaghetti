@@ -1,11 +1,10 @@
 // The one enforcement point for third-party integrations (ADR 0005): every primitive goes through check().
-// Built-ins are trusted and run unguarded. A missing grant is 'ask': the call is refused and reported as pending
-// (the prompt arrives in Phase 2). The same code runs in the daemon and inside WSL (env bundle).
+// Built-ins are trusted and run unguarded. A missing grant is 'ask': the call is refused and reported as pending;
+// the daemon then asks the user (core/consent.ts). The same code runs in the daemon and inside WSL (env bundle).
 import { basename } from 'node:path';
-import type { Action, Ctx, Environment, Grant, Integration, Inventory } from '@agent-spaghetti/sdk';
+import type { Action, Ctx, Environment, Grant, Integration, Inventory, Pending } from '@agent-spaghetti/sdk';
 import { check } from '@agent-spaghetti/sdk';
 
-export interface Pending { subject: string; action: Action; resource: string }
 export function guardEnvironment(env: Environment, subject: string, grants: Grant[], pending: Pending[]): Environment {
   const resolved = new Set<string>();                         // paths a granted glob returned may then be read
   const allowed = (action: Action, resource: string) => {

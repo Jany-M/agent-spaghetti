@@ -1,2 +1,2 @@
 { "name": "@agent-spaghetti/sdk", "version": "0.1.0", "private": true, "type": "module",
-  "exports": { ".": "./src/index.ts", "./testing": "./src/testing.ts", "./manifest.schema.json": "./manifest.schema.json" } }
+  "exports": { ".": "./src/index.ts", "./web": "./src/web.ts", "./testing": "./src/testing.ts", "./manifest.schema.json": "./manifest.schema.json" } }

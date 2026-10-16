@@ -9,7 +9,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "secretscan": "node scripts/secretscan.mjs",
     "licensecheck": "node scripts/licensecheck.mjs",
-    "build": "node scripts/build-env.mjs",
+    "build": "node scripts/build.mjs",
+    "tray": "npm run build && electron packages/app",
     "check": "npm run typecheck && npm run secretscan && npm run licensecheck && npm run build && npm test",
     "daemon": "node packages/cli/src/index.ts daemon"
   },

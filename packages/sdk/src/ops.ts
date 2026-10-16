@@ -1,11 +1,11 @@
 // The one list of operations: REST routes, CLI usage text and (Phase 3) MCP tools are all generated from it.
 import type { Snapshot, StoredEvent, Level, Switch, TestResult } from './types.ts';
-import type { Action, DeclaredAction, Grant, Mode } from './permissions.ts';
+import type { Action, ConsentRequest, ConsentScope, DeclaredAction, Grant, Mode } from './permissions.ts';
 import type { LiveState } from './state.ts';
 
 export interface OpSpec { method: 'GET' | 'POST'; path: string; summary: string; usage: string }
 export const OPS = {
-  status:       { method: 'GET',  path: '/v1/status',       usage: 'status',                   summary: 'Last scan and live state' },
+  status:       { method: 'GET',  path: '/v1/status',       usage: 'status [--short]',         summary: 'Last scan, live state and questions waiting for you' },
   scan:         { method: 'POST', path: '/v1/scan',         usage: 'scan',                     summary: 'Scan every environment now' },
   events:       { method: 'GET',  path: '/v1/events',       usage: 'events [--follow]',        summary: 'Stored events (or follow new ones)' },
   integrations: { method: 'GET',  path: '/v1/integrations', usage: 'integrations',             summary: 'Loaded and rejected integrations' },
@@ -20,12 +20,14 @@ export const OPS = {
   disable:      { method: 'POST', path: '/v1/disable',      usage: 'disable <integration>',    summary: 'Skip an integration in scans' },
   enable:       { method: 'POST', path: '/v1/enable',       usage: 'enable <integration>',     summary: 'Scan a disabled integration again' },
   report:       { method: 'GET',  path: '/v1/report',       usage: 'report [--out <file>]',    summary: 'Machine configuration report (Markdown)' },
+  consent:      { method: 'POST', path: '/v1/consent',      usage: 'answer <id> allow|deny [once|job|always]', summary: 'Answer a question waiting for you (ids: status)' },
+  shutdown:     { method: 'POST', path: '/v1/shutdown',     usage: 'shutdown',                 summary: 'Stop the daemon' },
 } as const satisfies Record<string, OpSpec>;
 export type OpId = keyof typeof OPS;
 export interface EnvResult<T> { envId: string; result?: T; error?: string }
 export interface GrantIn { subject: string; mode: Mode; action?: Action; resource?: string }
 export interface OpIO {
-  status: { in: {}; out: { snapshot: Snapshot | null; live: LiveState } };
+  status: { in: {}; out: { snapshot: Snapshot | null; live: LiveState; consents: ConsentRequest[] } };
   scan: { in: {}; out: { snapshot: Snapshot } };
   events: { in: { since?: number; limit?: number }; out: StoredEvent[] };
   integrations: { in: {}; out: { loaded: Array<{ id: string; name: string; source: string; levels: Level[]; disabled: boolean }>; rejected: Array<{ id: string; why: string }> } };
@@ -40,5 +42,7 @@ export interface OpIO {
   disable: { in: { id: string }; out: { disabled: string[] } };
   enable: { in: { id: string }; out: { disabled: string[] } };
   report: { in: {}; out: { markdown: string } };
+  consent: { in: { id: string; allow: boolean; scope?: ConsentScope }; out: { ok: true } };
+  shutdown: { in: {}; out: { stopping: true } };
 }
 export const STREAM_PATH = '/v1/events/stream';

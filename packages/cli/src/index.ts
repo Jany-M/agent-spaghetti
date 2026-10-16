@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // `agent-spaghetti` CLI: thin. Every command is an op through HubClient, rendered by sdk/format. No logic of its own.
 import { writeFileSync } from 'node:fs';
-import { DaemonDown, HubClient, OPS, detectionRows, permissionRows, renderTable, renderTree, switchRows, testLines,
-  type Action, type OpId, type StoredEvent } from '@agent-spaghetti/sdk';
+import { DaemonDown, HubClient, OPS, SCOPE_LABEL, detectionRows, permissionRows, renderStats, renderTable, renderTree, switchRows, testLines,
+  type Action, type ConsentRequest, type ConsentScope, type OpId, type StoredEvent } from '@agent-spaghetti/sdk';
 
 export interface IO { out(s: string): void; err(s: string): void }
 const DOWN = 'agent-spaghetti daemon is not running. Start it with: agent-spaghetti daemon';
@@ -12,7 +12,8 @@ export const usage = () => ['Usage: agent-spaghetti <command> [--json]', '',
 const time = (ts: number) => new Date(ts).toTimeString().slice(0, 8);
 const eventLine = (e: StoredEvent) => `${time(e.ts)}  ${e.type}  ${e.source}  ${e.envId}`;
 /** CLI verbs that are not op names (from the usage strings in OPS). */
-const VERB: Record<string, OpId> = { on: 'switch', off: 'switch', allow: 'grant', deny: 'grant', set: 'setting' };
+const VERB: Record<string, OpId> = { on: 'switch', off: 'switch', allow: 'grant', deny: 'grant', set: 'setting', answer: 'consent' };
+const consentLine = (c: ConsentRequest) => `? ${c.id}  ${c.subject} wants ${c.action} ${c.resource} (${c.why}) → answer ${c.id} allow|deny${c.scopes.length > 1 ? ` [${c.scopes.join('|')}]` : ''}`;
 /** Reads "--name value" and removes it from args. */
 const flag = (args: string[], name: string) => { const i = args.indexOf(name); return i < 0 ? undefined : args.splice(i, 2)[1]; };
 
@@ -34,7 +35,12 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
   try {
     const c = HubClient.fromDiscovery(env);
     switch (op) {
-      case 'status': { const r = await c.call('status'); print(r, () => (r.snapshot ? renderTree(r.snapshot, r.live) : 'No scan yet. Run: agent-spaghetti scan')); break; }
+      case 'status': {
+        const r = await c.call('status');
+        print(r, () => args.includes('--short') ? renderStats(true, r.snapshot, r.live, r.consents).join('\n')
+          : [r.snapshot ? renderTree(r.snapshot, r.live) : 'No scan yet. Run: agent-spaghetti scan', ...r.consents.map(consentLine)].join('\n'));
+        break;
+      }
       case 'scan': {
         const { snapshot } = await c.call('scan');
         print({ snapshot }, () => [renderTree(snapshot), '', renderTable(detectionRows(snapshot)),
@@ -81,6 +87,13 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
         break;
       }
       case 'disable': case 'enable': { const r = await c.call(op, { id: a1 }); print(r, () => `disabled: ${r.disabled.join(', ') || 'none'}`); break; }
+      case 'consent': {
+        const scope = a3 as ConsentScope | undefined;
+        if (a2 !== 'allow' && a2 !== 'deny') { io.err(`usage: agent-spaghetti ${OPS.consent.usage}`); return 1; }
+        if (scope && !(scope in SCOPE_LABEL)) { io.err(`scope must be one of ${Object.keys(SCOPE_LABEL).join(', ')}`); return 1; }
+        const r = await c.call('consent', { id: a1, allow: a2 === 'allow', scope }); print(r, () => `answered: ${a2}${scope ? ` (${scope})` : ''}`); break;
+      }
+      case 'shutdown': { const r = await c.call('shutdown'); print(r, () => 'agent-spaghetti daemon is stopping'); break; }
       case 'report': {
         const r = await c.call('report');
         if (outFile) { writeFileSync(outFile, r.markdown); io.out(`report written to ${outFile} (review it before sharing)`); } else print(r, () => r.markdown);

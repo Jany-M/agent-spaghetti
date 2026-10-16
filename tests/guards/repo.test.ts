@@ -32,6 +32,8 @@ test('dependency direction: sdk imports no package; integrations never import co
   assert.deepEqual(where(/from '@agent-spaghetti\//, ['packages/sdk']), []);
   assert.deepEqual(where(/@agent-spaghetti\/core|packages\/core/, ['integrations']), []);
   assert.deepEqual(where(/from '@agent-spaghetti\/(cli|env)'/, ['packages/core', 'integrations']), []);
+  assert.deepEqual(where(/from 'node:|from '@agent-spaghetti\/(sdk|core)'/, ['packages/ui']), [], 'ui runs in the sandboxed renderer: sdk/web only');
+  assert.deepEqual(where(/from '@agent-spaghetti\/core(?!\/proc')/, ['packages/app']), [], 'the tray only needs core/proc');
 });
 test('built-in index = integration folders (each has manifest.json + fixtures.json)', () => {
   const dirs = readdirSync(join(ROOT, 'integrations')).filter(n => existsSync(join(ROOT, 'integrations', n, 'manifest.json'))).sort();

@@ -1,4 +1,5 @@
 // Shared types. One definition for every package, the env bundle and third-party integrations.
+import type { Pending } from './permissions.ts';
 export type Role = 'agent' | 'backend' | 'client' | 'tool';   // tool = provides services to agents (e.g. an MCP server)
 export type Cost = 'free' | 'metered' | 'unknown';
 export type Level = 'detect' | 'observe' | 'drive' | 'client';
@@ -64,12 +65,13 @@ export interface BackendInfo { id: string; integration: string; model: string; e
 export interface Inspection { detection: Detection; agents: AgentInfo[]; backends: BackendInfo[] }
 export interface EnvStatus { id: string; state: 'running' | 'stopped' | 'error'; why?: string; partial?: string[] }
 export interface Snapshot { ts: number; envs: EnvStatus[]; detections: Detection[]; agents: AgentInfo[]; backends: BackendInfo[]; rejected: Array<{ id: string; why: string }>;
-  pending?: Array<{ subject: string; action: string; resource: string }> }   // permission asks from third-party integrations
+  pending?: Pending[] }   // permission asks from third-party integrations
 
 /** The one list of event types. Later phases append here, nowhere else. */
 export const EVENT_TYPES = [
   'scan.completed', 'scan.integration_error', 'env.status', 'backend.detected', 'agent.detected',
   'session.started', 'session.updated', 'session.ended', 'backend.changed', 'switch.changed', 'permission.pending',
+  'consent.requested', 'consent.answered', 'consent.expired',
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 export interface HubEvent { ts: number; type: EventType; envId: string; source: string; data: Record<string, unknown> }

@@ -6,11 +6,13 @@ import type { Bus } from './bus.ts';
 import type { Loaded } from './registry.ts';
 import type { Route } from './serve.ts';
 import type { Settings } from './settings.ts';
+import type { Consent } from './consent.ts';
 import type { EnvCommand, EnvResults } from './actions.ts';
 import { ENGINES } from './engine/inspect.ts';
 
 export interface Services {
-  store: Store; bus: Bus; settings: Settings;
+  store: Store; bus: Bus; settings: Settings; consent: Consent;
+  shutdown(): void;
   loaded(): Loaded; scan(): Promise<Snapshot>; live(): LiveState;
   /** Run a command in the given (default: every running) environment(s); failures are per env. */
   onEnvs<C extends EnvCommand>(cmd: C, args: string[], envIds?: string[]): Promise<Array<EnvResult<EnvResults[C]>>>;
@@ -32,7 +34,7 @@ const toggle = (s: Services, id: string, off: boolean) => {
 };
 
 export const handlers: Handlers = {
-  status: (_i, s) => ({ snapshot: snapshot(s), live: s.live() }),
+  status: (_i, s) => ({ snapshot: snapshot(s), live: s.live(), consents: s.consent.pending() }),
   scan: async (_i, s) => { const snap = await s.scan(); s.store.saveSnapshot('scan', snap); return { snapshot: snap }; },
   events: (i, s) => s.store.eventsSince(num(i.since, 0), num(i.limit, 500)),
   integrations: (_i, s) => {
@@ -89,6 +91,11 @@ export const handlers: Handlers = {
     if (!snap) throw new Error('no scan yet; run: agent-spaghetti scan');
     return { markdown: renderConfigReport(snap, s.live()) };
   },
+  consent: (i, s) => {
+    if (!s.consent.respond(need(i.id, 'request id'), i.allow === true, i.scope)) throw new Error(`no open question ${i.id} with that scope (already answered or expired?)`);
+    return { ok: true };
+  },
+  shutdown: (_i, s) => { setImmediate(() => s.shutdown()); return { stopping: true }; },   // answer first, then stop
 };
 export const routesFor = (s: Services): Route[] => (Object.keys(OPS) as OpId[]).map(id => ({
   method: OPS[id].method, path: OPS[id].path, handle: (input: Record<string, unknown>) => (handlers[id] as (i: unknown, s: Services) => unknown)(input, s) }));

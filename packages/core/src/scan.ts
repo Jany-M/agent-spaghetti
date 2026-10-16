@@ -1,13 +1,13 @@
 // scanEnv runs the engine over one environment; it is the same code on the host and inside a WSL distro (env bundle).
 // runScan merges all environments into one Snapshot and emits events.
-import type { BackendInfo, Environment, EnvStatus, Grant, Inspection, Integration, Snapshot } from '@agent-spaghetti/sdk';
+import type { BackendInfo, Environment, EnvStatus, Grant, Inspection, Integration, Pending, Snapshot } from '@agent-spaghetti/sdk';
 import { mapLimit, withDeadline } from './async.ts';
 import { inspect } from './engine/inspect.ts';
 import type { Bus } from './bus.ts';
 import type { EnvEntry } from './env/discover.ts';
 import type { Bundle, Spawn } from './env/wsl.ts';
 import { onEnv } from './dispatch.ts';
-import { asSubject, type Pending } from './permissions.ts';
+import { asSubject } from './permissions.ts';
 
 export interface EnvScan { status: EnvStatus; inspections: Inspection[]; errors: Array<{ integration: string; message: string }>; pending: Pending[] }
 export interface ScanOpts { perEnvLimit?: number; deadlineMs?: number; grants?: Grant[] }

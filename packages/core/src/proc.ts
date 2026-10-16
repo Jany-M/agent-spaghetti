@@ -1,6 +1,7 @@
 // The ONLY module that starts processes (PLAN §3.5). Argument arrays only, never a shell string.
 import { execFile, spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { closeSync, openSync } from 'node:fs';
 
 const CMD_SHIM = /\.(cmd|bat)$/i;
 const UNSAFE_FOR_CMD = /["%^&|<>!\r\n]/;
@@ -36,4 +37,16 @@ export function spawnLines(cmd: string, args: string[], onLine: (line: string) =
   createInterface({ input: child.stdout! }).on('line', onLine);
   const exited = new Promise<number>(r => { child.on('error', () => r(127)); child.on('close', c => r(c ?? 1)); });
   return { stop: () => { child.kill(); }, exited };
+}
+
+/** Starts a process that outlives its parent (the tray starting the daemon). Output is appended to `logFile`. */
+export function spawnDetached(cmd: string, args: string[], o: { logFile: string; env?: NodeJS.ProcessEnv }): number | undefined {
+  const { file, argv, verbatim } = resolveCmd(cmd, args);
+  const fd = openSync(o.logFile, 'a');
+  try {
+    const child = spawn(file, argv, { detached: true, windowsHide: true, windowsVerbatimArguments: verbatim, stdio: ['ignore', fd, fd], env: o.env });
+    child.on('error', () => { /* reported by the caller's connect timeout */ });
+    child.unref();
+    return child.pid;
+  } finally { closeSync(fd); }
 }

@@ -1,7 +1,7 @@
 // The one place that turns data into text (CLI, tray tooltip, app). Names always come from manifests.
 import type { AgentInfo, BackendInfo, Snapshot, Switch, TestResult } from './types.ts';
 import type { LiveState } from './state.ts';
-import type { DeclaredAction, Grant } from './permissions.ts';
+import type { ConsentRequest, DeclaredAction, Grant } from './permissions.ts';
 
 const portOf = (url?: string) => { try { return url ? new URL(url).port : ''; } catch { return ''; } };
 /** Same model AND (same port when the agent knows its endpoint, else integration === provider). */
@@ -57,4 +57,27 @@ export function renderConfigReport(s: Snapshot, live?: LiveState, date = new Dat
     '## Agents', s.agents.length ? md([['Agent', 'Env', 'Model', 'Backend'], ...s.agents.map(a => [`${a.integration} · ${a.name}`, a.envId, a.model ?? '-', linkBackend(a, s.backends) ? 'linked' : 'not observed'])]) : 'none', '',
     ...(live && Object.keys(live.sessions).length ? ['## Running sessions', md([['Env', 'Agent', 'Kind', 'Status'], ...Object.values(live.sessions).map(x => [x.envId, x.agentId ?? '-', x.kind ?? '-', x.status ?? '-'])]), ''] : []),
   ].join('\n');
+}
+
+/** Tray icon state, by priority: problem > approval > working > idle. `null` snapshot with no daemon = problem. */
+export type TrayState = 'idle' | 'working' | 'approval' | 'problem';
+export function trayState(up: boolean, snap: Snapshot | null, live: LiveState, pending: ConsentRequest[]): TrayState {
+  if (!up || snap?.envs.some(e => e.state === 'error')) return 'problem';
+  if (pending.length) return 'approval';
+  return Object.keys(live.sessions).length ? 'working' : 'idle';
+}
+const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
+/** Short status lines: tray tooltip, popover header and `agent-spaghetti status --short`. */
+export function renderStats(up: boolean, snap: Snapshot | null, live: LiveState, pending: ConsentRequest[]): string[] {
+  if (!up) return ['agent-spaghetti is not running'];
+  const name = new Map(snap?.detections.map(d => [d.integration, d.name]) ?? []);
+  const lines = [`agent-spaghetti running · ${snap ? plural(new Set(snap.detections.map(d => d.integration)).size, 'tool') : 'no scan yet'}`];
+  const running = Object.values(live.backends).filter(b => b.up && b.models.length);
+  const backends = running.length ? running.map(b => ({ integration: b.integration, model: b.models[0].model, ctx: b.models[0].contextLength ?? undefined }))
+    : (snap?.backends ?? []).map(b => ({ integration: b.integration, model: b.model, ctx: b.contextLength }));
+  for (const l of new Set(backends.map(b => `${name.get(b.integration) ?? b.integration} · ${b.model}${ctxLabel(b.ctx)}`))) lines.push(l);   // one line per server seen from several envs
+  const sessions = Object.keys(live.sessions).length;
+  if (sessions) lines.push(`${plural(sessions, 'session')} running`);
+  if (pending.length) lines.push(`${plural(pending.length, 'approval')} waiting`);
+  return lines;
 }

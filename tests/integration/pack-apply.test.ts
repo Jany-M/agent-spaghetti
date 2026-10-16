@@ -28,7 +28,7 @@ test('apply.sh: dry run changes nothing; real run installs shims, patches config
   const bin = join(home, 'bin'); mkdirSync(bin); mkdirSync(join(home, '.openclaw'));
   writeFileSync(join(home, '.openclaw', 'openclaw.json'), '{}');
   writeFileSync(join(bin, 'openclaw'), FAKE); chmodSync(join(bin, 'openclaw'), 0o755);
-  const build = await spawnFile(process.execPath, ['scripts/build-env.mjs'], { timeoutMs: 60000 });
+  const build = await spawnFile(process.execPath, ['scripts/build.mjs'], { timeoutMs: 60000 });
   assert.equal(build.code, 0, build.stderr.toString());
   const env = { HOME: home, PATH: `${bin}:${dirname(process.execPath)}:/usr/bin:/bin` };
   const run = (args: string[]) => spawnFile('bash', ['packs/openclaw/scripts/apply.sh', ...args], { timeoutMs: 120000, env });
