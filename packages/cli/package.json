@@ -1,0 +1,3 @@
+{ "name": "@agent-spaghetti/cli", "version": "0.1.0", "private": true, "type": "module",
+  "bin": { "agent-spaghetti": "./src/index.ts" },
+  "dependencies": { "@agent-spaghetti/sdk": "*", "@agent-spaghetti/core": "*" } }

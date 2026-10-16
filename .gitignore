@@ -8,3 +8,5 @@ config/overrides.env
 /_dev
 AGENTS.md
 CLAUDE.md
+node_modules/
+dist/

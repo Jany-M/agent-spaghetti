@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentspaghetti.dev/schema/manifest-1.json",
+  "title": "Agent Spaghetti integration manifest, version 1 (ADR 0004, ADR 0008)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["manifest", "id", "name", "roles"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "manifest": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "name": { "type": "string" },
+    "roles": { "type": "array", "minItems": 1, "items": { "enum": ["agent", "backend", "client", "tool"] } },
+    "cost": { "enum": ["free", "metered", "unknown"] },
+    "platforms": { "type": "array", "items": { "enum": ["windows", "linux", "macos"] } },
+    "detect": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "installed": { "type": "array", "items": { "type": "string" } },
+        "process": { "type": "array", "items": { "type": "string" } },
+        "bin": { "type": "array", "items": { "type": "string" } },
+        "env": { "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" } },
+        "paths": { "anyOf": [
+          { "type": "array", "items": { "type": "string" } },
+          { "type": "object", "additionalProperties": false, "properties": {
+            "windows": { "type": "array", "items": { "type": "string" } },
+            "linux": { "type": "array", "items": { "type": "string" } },
+            "macos": { "type": "array", "items": { "type": "string" } } } } ] },
+        "version": { "anyOf": [
+          { "type": "object", "additionalProperties": false, "required": ["from"], "properties": { "from": { "const": "installed" } } },
+          { "type": "object", "additionalProperties": false, "required": ["args"], "properties": { "args": { "type": "array", "items": { "type": "string" } }, "regex": { "type": "string" } } },
+          { "type": "object", "additionalProperties": false, "required": ["file", "json"], "properties": { "file": { "type": "string" }, "json": { "type": "string" } } },
+          { "type": "object", "additionalProperties": false, "required": ["json"], "properties": { "json": { "type": "string" } } } ] },
+        "http": { "type": "object", "additionalProperties": false, "required": ["path"], "properties": {
+          "port": { "type": "integer" }, "path": { "type": "string", "pattern": "^/" } } }
+      }
+    },
+    "models": {
+      "type": "object", "additionalProperties": false, "required": ["list", "id"],
+      "properties": {
+        "path": { "type": "string", "pattern": "^/" },
+        "list": { "type": "string" },
+        "id": { "type": "string" },
+        "filter": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["field", "in"],
+          "properties": { "field": { "type": "string" }, "in": { "type": "array" } } } },
+        "context": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "speaks": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "openai": { "type": "object", "additionalProperties": false, "required": ["port", "base"], "properties": { "port": { "type": "integer" }, "base": { "type": "string" } } },
+        "mcpServer": { "type": "object", "additionalProperties": false, "required": ["command"], "properties": { "command": { "type": "array", "minItems": 1, "items": { "type": "string" } } } },
+        "acp": { "type": "object", "additionalProperties": false, "required": ["command"], "properties": { "command": { "type": "array", "minItems": 1, "items": { "type": "string" } } } },
+        "mcpClient": { "type": "object", "additionalProperties": false, "required": ["config", "key"], "properties": { "config": { "type": "string" }, "key": { "type": "string" } } },
+        "agentPlugins": { "type": "object", "additionalProperties": false, "required": ["dir"], "properties": { "dir": { "type": "string" }, "variant": { "enum": ["agent-plugins", "cursor"] } } }
+      }
+    }
+  }
+}

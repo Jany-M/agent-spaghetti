@@ -1,0 +1,27 @@
+// The ONLY Environment test double in the repo. Fixtures (integrations/*/fixtures.json) are FakeSpec JSON.
+import type { Environment, EnvKind, ExecResult, HttpResult, Inventory } from './types.ts';
+
+export interface FakeSpec {
+  id?: string; kind?: EnvKind; hosts?: string[];
+  http?: Record<string, HttpResult | null>;   // "GET <url>" or "<url>" → response
+  files?: Record<string, string>;             // path or glob pattern → content (glob() returns the key)
+  bins?: Record<string, string>;              // name → resolved path
+  exec?: Record<string, ExecResult>;          // "<cmd> <args joined by space>" → result
+  inventory?: Partial<Inventory>;
+}
+export const fakeInventory = (i: Partial<Inventory> = {}): Inventory =>
+  ({ installed: [], processes: [], listening: [], env: {}, partial: [], ...i });
+
+export function fakeEnv(s: FakeSpec = {}): Environment & { calls: string[] } {
+  const calls: string[] = [];
+  return {
+    calls, id: s.id ?? 'windows', kind: s.kind ?? 'windows',
+    async exec(cmd, args) { calls.push(['exec', cmd, ...args].join(' ')); return s.exec?.[[cmd, ...args].join(' ')] ?? { code: 127, stdout: '', stderr: 'not found' }; },
+    async http(req) { const m = req.method ?? 'GET'; calls.push(`${m} ${req.url}`); return s.http?.[`${m} ${req.url}`] ?? (m === 'GET' ? s.http?.[req.url] : undefined) ?? null; },
+    async readFile(p) { return s.files?.[p] ?? null; },
+    async which(b) { return s.bins?.[b] ?? null; },
+    async glob(p) { return s.files && p in s.files ? p : null; },
+    async hostCandidates() { return s.hosts ?? ['127.0.0.1']; },
+    async inventory() { return fakeInventory(s.inventory); },
+  };
+}
