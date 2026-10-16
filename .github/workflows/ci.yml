@@ -1,0 +1,23 @@
+# Regression guard: typecheck, secret scan, license check, env bundle build and every test, on Windows and Linux.
+# Action versions checked 2026-10-16: actions/checkout v6, actions/setup-node v6.
+name: ci
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
