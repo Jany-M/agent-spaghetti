@@ -19,9 +19,9 @@ Your AI tools each live in their own world. Agent Spaghetti untangles them: it m
 .\apply.ps1
 ```
 
-Check it any time with `.\healthcheck.ps1`. Linux and macOS: `scripts/apply.sh`.
+Check it any time with `.\healthcheck.ps1`. Linux and macOS: `npm run build`, then `packs/openclaw/scripts/apply.sh` and `agent-spaghetti-healthcheck`.
 
-Needs OpenClaw with a working gateway, plus `python3`, `curl` and `tar` on the gateway host. Works best with a model that handles tool calls well.
+Needs OpenClaw with a working gateway (its bundled Node.js is used), plus `python3` (for `jobctl`) and `tar` on the gateway host, and Node.js 24 on Windows to build once. Works best with a model that handles tool calls well.
 
 ## Choosing the LLM
 
@@ -32,7 +32,7 @@ By default it keeps the model OpenClaw already uses. Re-point it with:
 .\apply.ps1 -DryRun         # preview, change nothing
 ```
 
-Other modes (`keep`, `manual`) are described in `config/overrides.env.example`.
+Other modes (`keep`, `manual`) are described in `packs/openclaw/config/overrides.env.example`.
 
 ## Coming next
 

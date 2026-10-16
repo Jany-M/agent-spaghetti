@@ -1,0 +1,9 @@
+#!/bin/sh
+# Installed by apply.sh as `ocmcp` and `agent-spaghetti-healthcheck`: both run the agent-spaghetti env bundle
+# (same commands and output as the old Python tools). node.path is written by apply.sh.
+d="$(dirname "$(readlink -f "$0")")"
+case "$(basename "$0")" in
+  ocmcp) set -- mcp "$@" ;;
+  *healthcheck) set -- health ;;
+esac
+exec "$(cat "$d/node.path")" "$d/agent-spaghetti-env.mjs" openclaw "$@"

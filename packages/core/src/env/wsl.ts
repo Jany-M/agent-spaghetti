@@ -1,6 +1,7 @@
 // WSL distros (ADR 0002 as amended 2026-10-16): list them without side effects, and run the env bundle inside
 // RUNNING distros over stdio. wsl.exe is only used to list, to copy the bundle (when its hash changed) and to run it.
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { spawnFile } from '../proc.ts';
@@ -30,11 +31,9 @@ export async function loadBundle(path = process.env.AGENT_SPAGHETTI_ENV_BUNDLE
   return text && { text, sha256: createHash('sha256').update(text).digest('hex') };
 }
 
-// Node candidates inside a distro: PATH first, then common per-user installs (data, not assumptions about one machine).
-const PROBE = 'd="${XDG_DATA_HOME:-$HOME/.local/share}/agent-spaghetti"; echo "dir=$d"; '
-  + 'for n in "$(command -v node 2>/dev/null)" "$HOME/.openclaw/tools/node/bin/node" "$HOME"/.nvm/versions/node/*/bin/node "$HOME/.volta/bin/node" /usr/local/bin/node /usr/bin/node; do '
-  + '[ -x "$n" ] || continue; m=$("$n" -p "process.versions.node.split(\'.\')[0]" 2>/dev/null); '
-  + 'if [ "${m:-0}" -ge 20 ] 2>/dev/null; then echo "node=$n"; break; fi; done; '
+// Node >= 20 inside a distro: find-node.sh (shared with the OpenClaw pack). Read lazily: the env bundle never needs it.
+export const probeScript = () => 'd="${XDG_DATA_HOME:-$HOME/.local/share}/agent-spaghetti"; echo "dir=$d"; '
+  + `echo "node=$(${readFileSync(new URL('./find-node.sh', import.meta.url), 'utf8')})"; `
   + '[ "$(cat "$d/agent-spaghetti-env.mjs.sha256" 2>/dev/null)" = "$1" ] && echo fresh=1 || echo fresh=0';
 const COPY = 'd="${XDG_DATA_HOME:-$HOME/.local/share}/agent-spaghetti"; mkdir -p "$d" && cat > "$d/agent-spaghetti-env.mjs.tmp" '
   + '&& mv -f "$d/agent-spaghetti-env.mjs.tmp" "$d/agent-spaghetti-env.mjs" && printf %s "$1" > "$d/agent-spaghetti-env.mjs.sha256"';
@@ -43,7 +42,7 @@ export type Prepared = { ok: true; node: string; bundlePath: string } | { ok: fa
 /** Find Node >= 20 in the distro and make sure the current bundle is there (copied only when its hash changed). */
 export async function prepareDistro(distro: string, bundle: Bundle | null, spawn: Spawn = spawnFile): Promise<Prepared> {
   if (!bundle) return { ok: false, why: 'env bundle not built (run: npm run build)' };
-  const probe = await spawn('wsl.exe', wslArgs(distro, ['sh', '-c', PROBE, 'sh', bundle.sha256]), { timeoutMs: 30000 });
+  const probe = await spawn('wsl.exe', wslArgs(distro, ['sh', '-c', probeScript(), 'sh', bundle.sha256]), { timeoutMs: 30000 });
   const kv = Object.fromEntries(probe.stdout.toString('utf8').split('\n').map(l => l.trim().split(/=(.*)/s).slice(0, 2)).filter(p => p.length === 2));
   if (probe.code !== 0 || !kv.dir) return { ok: false, why: `distro not reachable (wsl exit ${probe.code})` };
   if (!kv.node) return { ok: false, why: 'no Node.js >= 20 in this distro (needed to scan inside it)' };

@@ -7,7 +7,7 @@
 //   version
 import type { Integration } from '@agent-spaghetti/sdk';
 import { BUILTINS } from '@agent-spaghetti/integrations';
-import { decodePayload, ENV_COMMANDS, localEnvironment, observeEnv, runEnvCommand, scanEnv, type EnvCommand } from '@agent-spaghetti/core/portable';
+import { decodePayload, ENV_COMMANDS, extraHostsFromEnv, localEnvironment, observeEnv, runEnvCommand, scanEnv, type EnvCommand } from '@agent-spaghetti/core/portable';
 import { packMain } from '@agent-spaghetti/integrations/openclaw/pack/main.ts';
 
 export const VERSION = '0.2.0';
@@ -17,7 +17,7 @@ export async function main(argv: string[]): Promise<number> {
   const [cmd, raw, ...rest] = argv;
   if (cmd === 'version') { process.stdout.write(VERSION + '\n'); return 0; }
   if (cmd === 'openclaw') {
-    const env = localEnvironment();
+    const env = localEnvironment({ extraHosts: extraHostsFromEnv(process.env) });   // LLM_HOSTS from overrides.env
     const inspect = async (ids: string[]) => (await scanEnv(env, BUILTINS.filter(b => ids.includes(b.manifest.id)))).inspections;
     return packMain([raw, ...rest].filter(a => a !== undefined), env, { inspect, manifests: BUILTINS.map(b => b.manifest) });
   }

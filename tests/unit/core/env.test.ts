@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { parseDefaultGateway } from '../../../packages/core/src/env/hosts.ts';
 import { expandPath, globFirst, whichBin, localEnvironment } from '../../../packages/core/src/env/local.ts';
 import { parseWindowsInventory, windowsScript } from '../../../packages/core/src/env/inventory/windows.ts';
@@ -108,4 +108,13 @@ test('local environment: http to a closed port is null; missing binary is 127', 
   const env = localEnvironment();
   assert.equal(await env.http({ url: 'http://127.0.0.1:1/', timeoutMs: 300 }), null);
   assert.equal((await env.exec('definitely-not-a-binary-xyz', [])).code, 127);
+});
+test('distro probe script (shared find-node.sh) finds this Node and reports freshness', { skip: process.platform === 'win32' }, async () => {
+  const { probeScript } = await import('../../../packages/core/src/env/wsl.ts');
+  const { spawnFile } = await import('../../../packages/core/src/proc.ts');
+  const r = await spawnFile('sh', ['-c', probeScript(), 'sh', 'nohash'], { timeoutMs: 20000, env: { ...process.env, PATH: `${dirname(process.execPath)}:${process.env.PATH}` } });
+  const out = r.stdout.toString();
+  assert.match(out, /^dir=.+agent-spaghetti$/m);
+  assert.match(out, /^node=\/.+node$/m);
+  assert.match(out, /^fresh=0$/m);
 });

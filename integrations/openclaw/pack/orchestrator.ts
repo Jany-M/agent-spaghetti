@@ -1,4 +1,4 @@
-// The orchestrator is the default OpenClaw agent, or ORCH_AGENT_ID. Workspace paths may start with ~.
+// The orchestrator is ORCH_AGENT_ID, else the default OpenClaw agent, else the first. Workspace paths may start with ~.
 export interface OrchAgent { id: string; workspace: string }
 export function pickOrchestrator(list: unknown, want: string | undefined, home = process.env.HOME ?? ''): OrchAgent | undefined {
   const ag = (Array.isArray(list) ? list : []).filter(a => a && typeof a.id === 'string');

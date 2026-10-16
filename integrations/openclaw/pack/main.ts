@@ -1,6 +1,6 @@
 // OpenClaw pack commands, run inside the environment that hosts OpenClaw (via the env bundle: `agent-spaghetti-env.mjs openclaw …`).
 //   patch [--dry-run]            machine-specific config patch (provider/model/timeout + park MCP servers)
-//   orchestrator                 prints "<agent id>\t<workspace>"
+//   info                         key=value lines: openclaw, config, state, agent (orchestrator id), workspace
 //   block <AGENTS.md> <block.md> insert/replace the orchestrator section
 //   mcp <command> [...]          ocmcp (list | search | on | off | off-all | probe | status)
 //   health                       read-only wiring report; exit code = problems
@@ -13,7 +13,7 @@ import { buildPatch, pickBackend, stripProvider } from './config-patch.ts';
 import { health } from './health.ts';
 import { mcpMain } from './ocmcp.ts';
 import { pickOrchestrator } from './orchestrator.ts';
-import { configPath, packDir, stripAnsi } from './state.ts';
+import { configPath, dirOf, packDir, stripAnsi } from './state.ts';
 
 export interface PackDeps {
   /** Runs the engine on this environment for the given integration ids. */
@@ -22,7 +22,7 @@ export interface PackDeps {
   vars?: NodeJS.ProcessEnv;
   say?(s: string): void;
 }
-export const USAGE = 'usage: openclaw patch [--dry-run] | orchestrator | block <AGENTS.md> <block.md> | mcp <command> … | health';
+export const USAGE = 'usage: openclaw patch [--dry-run] | info | block <AGENTS.md> <block.md> | mcp <command> … | health';
 
 export async function packMain(args: string[], env: Environment, deps: PackDeps): Promise<number> {
   const [cmd, ...a] = args;
@@ -37,10 +37,12 @@ export async function packMain(args: string[], env: Environment, deps: PackDeps)
   const exe = oc && openclawExe(oc);
   if (!exe) { say('openclaw not found (PATH, its default install folders). Install OpenClaw first.'); return 1; }
   switch (cmd) {
-    case 'orchestrator': {
-      const o = pickOrchestrator(await openclawJson(env, exe, ['agents', 'list']), vars.ORCH_AGENT_ID);
-      if (!o) { say('no OpenClaw agents found; run `openclaw onboard` first'); return 1; }
-      say(`${o.id}\t${o.workspace}`); return 0;
+    case 'info': {
+      const cfg = await configPath(env, exe, vars);
+      const o = pickOrchestrator(await openclawJson(env, exe, ['agents', 'list']), vars.ORCH_AGENT_ID, vars.HOME);
+      if (!cfg || !o) { say('OpenClaw is not set up (no config or no agents); run `openclaw onboard` first'); return 1; }
+      say(Object.entries({ openclaw: exe, config: cfg, state: dirOf(cfg), agent: o.id, workspace: o.workspace || `${dirOf(cfg)}/workspace` }).map(([k, v]) => `${k}=${v}`).join('\n'));
+      return 0;
     }
     case 'mcp': { const cfg = await configPath(env, exe, vars); return mcpMain(a[0] ?? '', a.slice(1), { env, exe, pack: cfg && packDir(cfg), vars, say }); }
     case 'health': return health(env, exe, say);
