@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { HubClient, DaemonDown, type Snapshot } from '@agent-spaghetti/sdk';
+import { HubClient, DaemonDown, emptyLive, liveState, type Integration, type Snapshot, type Switch } from '@agent-spaghetti/sdk';
+import { Settings } from '../../packages/core/src/settings.ts';
 import { Store } from '../../packages/core/src/store.ts';
 import { Bus } from '../../packages/core/src/bus.ts';
 import { startDaemon } from '../../packages/core/src/daemon.ts';
@@ -16,15 +17,25 @@ const SNAP: Snapshot = { ts: 1, envs: [{ id: 'windows', state: 'running' }], age
   detections: [{ integration: 'lmstudio', name: 'LM Studio', envId: 'windows', installs: [], levels: ['detect', 'observe'], cost: 'free', connectable: 'yes', why: '1 model(s) loaded' }],
   backends: [{ id: 'lmstudio:m', integration: 'lmstudio', model: 'm', envId: 'windows', endpoint: 'http://127.0.0.1:1234', contextLength: 200192, reachableFrom: ['windows'] }] };
 
+const THIRD: Integration = { source: 'user', hash: 'h', manifest: { manifest: 1, id: 'acme', name: 'Acme', roles: ['backend'], detect: { bin: ['acme'], http: { port: 9, path: '/v' } } } };
 async function boot(scan: () => Promise<Snapshot> = async () => SNAP) {
   const store = new Store(':memory:'); const bus = new Bus(store);
-  const services: Services = { store, bus, loaded: () => ({ integrations: [], rejected: [] }), scan };
+  let live = emptyLive(); bus.subscribe(e => { live = liveState([e], live); });
+  const sw: Switch[] = [{ id: 'openclaw-mcp:a', label: 'a', on: false, envId: 'wsl:TestDistro', integration: 'openclaw' }];
+  const calls: string[] = [];
+  const services: Services = { store, bus, settings: new Settings(store), live: () => live, scan,
+    loaded: () => ({ integrations: [THIRD], rejected: [] }),
+    onEnvs: async (cmd, args, envIds) => {
+      calls.push([cmd, ...args, ...(envIds ?? ['*'])].join(' '));
+      const r: Record<string, unknown> = { switches: sw, switch: { ...sw[0], on: args[1] === 'on' }, test: { ok: true, steps: [{ name: 'detect', ok: true, detail: 'found', ms: 1 }] } };
+      return (envIds ?? ['windows', 'wsl:TestDistro']).map(envId => envId === 'windows' && cmd === 'switches' ? { envId, error: 'boom' } : { envId, result: r[cmd] as never });
+    } };
   const dir = mkdtempSync(join(tmpdir(), 'as-'));
   const token = loadOrCreateToken(dir);
   const d = await startDaemon({ services, token, port: 0 });
   const removeDiscovery = writeDiscovery(dir, d.port);
   const env = { AGENT_SPAGHETTI_DATA_DIR: dir } as NodeJS.ProcessEnv;
-  return { d, bus, dir, env, token, client: HubClient.fromDiscovery(env), close: async () => { removeDiscovery(); await d.close(); } };
+  return { d, bus, dir, env, token, calls, client: HubClient.fromDiscovery(env), close: async () => { removeDiscovery(); await d.close(); } };
 }
 const io = () => { const o: string[] = [], e: string[] = []; return { o, e, io: { out: (s: string) => o.push(s), err: (s: string) => e.push(s) } }; };
 
@@ -78,4 +89,49 @@ test('CLI: status before scan, scan prints tree + table + rejected, --json parse
   await b.close();
   t = io(); assert.equal(await run(['status'], t.io, { AGENT_SPAGHETTI_DATA_DIR: b.dir }), 2); assert.match(t.e[0], /daemon is not running/);
   t = io(); assert.equal(await run(['wat'], t.io, b.env), 1); assert.match(t.e[0], /Usage: agent-spaghetti/);
+});
+
+test('CLI 1b: switches, on (env resolved, switch.changed → live), test, permissions, allow/revoke, settings, disable, report', async () => {
+  const b = await boot();
+  const cli = async (...a: string[]) => { const t = io(); const code = await run(a, t.io, b.env); return { code, out: t.o.join('\n'), err: t.e.join('\n') }; };
+  let r = await cli('switches'); assert.equal(r.code, 0); assert.match(r.out, /openclaw-mcp:a\s+wsl:TestDistro\s+off/); assert.match(r.out, /windows: boom/);
+  r = await cli('on', 'openclaw-mcp:a'); assert.equal(r.code, 0); assert.match(r.out, /is on/);
+  assert.ok(b.calls.includes('switch openclaw-mcp:a on wsl:TestDistro'));
+  assert.equal((await b.client.call('status')).live.switches['openclaw-mcp:a'].on, true);
+  r = await cli('on', 'nope'); assert.equal(r.code, 1); assert.match(r.err, /unknown switch nope/);
+  r = await cli('test', 'acme', '--env', 'windows'); assert.equal(r.code, 0); assert.match(r.out, /acme in windows\nOK\s+detect/);
+  r = await cli('test', 'ghost'); assert.equal(r.code, 1); assert.match(r.err, /unknown integration ghost/);
+  r = await cli('permissions'); assert.match(r.out, /read\s+PATH:acme\s+not asked yet/);
+  r = await cli('allow', 'acme'); assert.match(r.out, /acme: 2 grant\(s\)/);
+  r = await cli('deny', 'acme', 'net', 'GET /v'); assert.match(r.out, /net\s+GET \/v\s+deny/);
+  r = await cli('permissions'); assert.match(r.out, /read\s+PATH:acme\s+allow/); assert.match(r.out, /net\s+GET \/v\s+deny/);
+  r = await cli('revoke', 'acme', 'read', 'PATH:acme'); assert.match(r.out, /acme: 1 grant/);
+  r = await cli('allow', 'lmstudio'); assert.equal(r.code, 1); assert.match(r.err, /not a third-party integration/);
+  r = await cli('set', 'llmHosts', '192.0.2.5, 192.0.2.6'); assert.match(r.out, /llmHosts\s+192\.0\.2\.5,192\.0\.2\.6/);
+  r = await cli('set', 'nope', '1'); assert.equal(r.code, 1); assert.match(r.err, /unknown setting nope/);
+  r = await cli('disable', 'acme'); assert.match(r.out, /disabled: acme/);
+  r = await cli('integrations'); assert.match(r.out, /acme\s+Acme\s+user\s+\S+\s+disabled/);
+  r = await cli('enable', 'acme'); assert.match(r.out, /disabled: none/);
+  r = await cli('report'); assert.equal(r.code, 1); assert.match(r.err, /no scan yet/);
+  await cli('scan');
+  const out = join(b.dir, 'report.md');
+  r = await cli('report', '--out', out); assert.equal(r.code, 0);
+  const { readFileSync } = await import('node:fs');
+  assert.match(readFileSync(out, 'utf8'), /^# Agent Spaghetti: machine configuration/);
+  await b.close();
+});
+
+test('runDaemon wiring: real settings, grants and host-env commands; no scan or observers unless asked', async () => {
+  const { runDaemon } = await import('../../packages/core/src/main.ts');
+  const dir = mkdtempSync(join(tmpdir(), 'as-'));
+  const d = await runDaemon({ AGENT_SPAGHETTI_DATA_DIR: dir }, { scanOnStart: false, observe: false });
+  const c = HubClient.fromDiscovery({ AGENT_SPAGHETTI_DATA_DIR: dir });
+  assert.equal((await c.call('status')).snapshot, null);
+  assert.equal((await c.call('settings'))['events.retentionDays'].value, 14);
+  await c.call('setting', { key: 'disabled', value: 'cursor' });
+  assert.equal((await c.call('integrations')).loaded.find(i => i.id === 'cursor')!.disabled, true);
+  const sw = await c.call('switches');
+  assert.ok(Array.isArray(sw.switches));
+  assert.deepEqual((await c.call('permissions')).subjects, []);
+  await d.close();
 });

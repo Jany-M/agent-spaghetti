@@ -12,11 +12,11 @@ export interface FakeSpec {
 export const fakeInventory = (i: Partial<Inventory> = {}): Inventory =>
   ({ installed: [], processes: [], listening: [], env: {}, partial: [], ...i });
 
-export function fakeEnv(s: FakeSpec = {}): Environment & { calls: string[] } {
-  const calls: string[] = [];
+export function fakeEnv(s: FakeSpec = {}): Environment & { calls: string[]; inputs: Record<string, string> } {
+  const calls: string[] = [], inputs: Record<string, string> = {};   // inputs: stdin per exec key (last call wins)
   return {
-    calls, id: s.id ?? 'windows', kind: s.kind ?? 'windows',
-    async exec(cmd, args) { calls.push(['exec', cmd, ...args].join(' ')); return s.exec?.[[cmd, ...args].join(' ')] ?? { code: 127, stdout: '', stderr: 'not found' }; },
+    calls, inputs, id: s.id ?? 'windows', kind: s.kind ?? 'windows',
+    async exec(cmd, args, o) { calls.push(['exec', cmd, ...args].join(' ')); if (o?.input !== undefined) inputs[[cmd, ...args].join(' ')] = String(o.input); return s.exec?.[[cmd, ...args].join(' ')] ?? { code: 127, stdout: '', stderr: 'not found' }; },
     async http(req) { const m = req.method ?? 'GET'; calls.push(`${m} ${req.url}`); return s.http?.[`${m} ${req.url}`] ?? (m === 'GET' ? s.http?.[req.url] : undefined) ?? null; },
     async readFile(p) { return s.files?.[p] ?? null; },
     async which(b) { return s.bins?.[b] ?? null; },

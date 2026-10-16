@@ -63,7 +63,8 @@ export interface AgentInfo { id: string; integration: string; name: string; envI
 export interface BackendInfo { id: string; integration: string; model: string; envId: string; endpoint: string; contextLength?: number; reachableFrom: string[] }
 export interface Inspection { detection: Detection; agents: AgentInfo[]; backends: BackendInfo[] }
 export interface EnvStatus { id: string; state: 'running' | 'stopped' | 'error'; why?: string; partial?: string[] }
-export interface Snapshot { ts: number; envs: EnvStatus[]; detections: Detection[]; agents: AgentInfo[]; backends: BackendInfo[]; rejected: Array<{ id: string; why: string }> }
+export interface Snapshot { ts: number; envs: EnvStatus[]; detections: Detection[]; agents: AgentInfo[]; backends: BackendInfo[]; rejected: Array<{ id: string; why: string }>;
+  pending?: Array<{ subject: string; action: string; resource: string }> }   // permission asks from third-party integrations
 
 /** The one list of event types. Later phases append here, nowhere else. */
 export const EVENT_TYPES = [
@@ -76,7 +77,7 @@ export type StoredEvent = HubEvent & { id: number };
 export type Emit = (e: Pick<HubEvent, 'type' | 'data'> & Partial<HubEvent>) => void;
 
 export interface Disposable { dispose(): void }
-export interface Ctx { signal: AbortSignal; inventory: Inventory }
+export interface Ctx { signal: AbortSignal; inventory: Inventory; pollMs?: number }
 export interface Switch { id: string; label: string; on: boolean; envId: string; integration: string }
 export interface TestStep { name: string; ok: boolean; detail: string; ms: number }
 export interface TestResult { ok: boolean; steps: TestStep[] }
@@ -84,9 +85,10 @@ export interface TestResult { ok: boolean; steps: TestStep[] }
 /** Optional code for what a manifest cannot express (ADR 0004 tier 2). */
 export interface IntegrationModule {
   inspect?(env: Environment, base: Inspection, ctx: Ctx): Promise<Inspection>;
-  observe?(env: Environment, emit: Emit, ctx: Ctx): Disposable;
-  switches?(env: Environment, ctx: Ctx): Promise<Switch[]>;
-  setSwitch?(env: Environment, id: string, on: boolean, ctx: Ctx): Promise<void>;
-  test?(env: Environment, det: Detection, ctx: Ctx): Promise<TestResult['steps']>;
+  // The hooks below receive the detection the engine already made, so a module never re-implements finding its tool.
+  observe?(env: Environment, det: Detection, emit: Emit, ctx: Ctx): Disposable;
+  switches?(env: Environment, det: Detection, ctx: Ctx): Promise<Switch[]>;
+  setSwitch?(env: Environment, det: Detection, id: string, on: boolean, ctx: Ctx): Promise<void>;
+  test?(env: Environment, det: Detection, ctx: Ctx): Promise<TestStep[]>;
 }
 export interface Integration { manifest: Manifest; module?: IntegrationModule; source: 'builtin' | 'user'; hash?: string }

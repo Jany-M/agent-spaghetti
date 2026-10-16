@@ -1,3 +1,6 @@
 // What may run inside a WSL distro (env bundle, Node >= 20): no node:sqlite, no daemon.
-export { scanEnv, type EnvScan, type InspectPayload } from './scan.ts';
+export { scanEnv, type EnvScan } from './scan.ts';
+export { decodePayload, type EnvPayload } from './env/wsl.ts';
 export { localEnvironment, currentKind } from './env/local.ts';
+export { observeEnv, type ObserveOpts } from './engine/observe.ts';
+export { runEnvCommand, ENV_COMMANDS, type EnvCommand } from './actions.ts';

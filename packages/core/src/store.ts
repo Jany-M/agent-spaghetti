@@ -21,6 +21,7 @@ export class Store {
     return (this.db.prepare('SELECT * FROM events WHERE id > ? ORDER BY id LIMIT ?').all(id, limit) as any[])
       .map(r => ({ id: r.id, ts: r.ts, type: r.type, envId: r.env_id, source: r.source, data: JSON.parse(r.data) }));
   }
+  lastEventId(): number { return Number((this.db.prepare('SELECT MAX(id) AS m FROM events').get() as { m: number | null }).m ?? 0); }
   pruneEvents(olderThanTs: number): number {
     return Number(this.db.prepare('DELETE FROM events WHERE ts < ?').run(olderThanTs).changes);
   }

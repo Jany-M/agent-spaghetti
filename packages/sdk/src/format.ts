@@ -1,5 +1,7 @@
 // The one place that turns data into text (CLI, tray tooltip, app). Names always come from manifests.
-import type { AgentInfo, BackendInfo, Snapshot } from './types.ts';
+import type { AgentInfo, BackendInfo, Snapshot, Switch, TestResult } from './types.ts';
+import type { LiveState } from './state.ts';
+import type { DeclaredAction, Grant } from './permissions.ts';
 
 const portOf = (url?: string) => { try { return url ? new URL(url).port : ''; } catch { return ''; } };
 /** Same model AND (same port when the agent knows its endpoint, else integration === provider). */
@@ -8,7 +10,7 @@ export function linkBackend(a: AgentInfo, backends: BackendInfo[]): BackendInfo 
 }
 export const ctxLabel = (n?: number) => (n ? ` · ctx ${Math.round(n / 1000)}k` : '');
 
-export function renderTree(s: Snapshot): string {
+export function renderTree(s: Snapshot, live?: LiveState): string {
   const name = new Map(s.detections.map(d => [d.integration, d.name]));
   const nice = (id: string) => name.get(id) ?? id;
   const used = new Set<string>(), lines: string[] = [];
@@ -17,6 +19,9 @@ export function renderTree(s: Snapshot): string {
     const left = `${nice(a.integration)} · ${a.name}`;
     if (b) { used.add(b.id + b.endpoint); lines.push(`${left} → ${nice(b.integration)} · ${b.model}${ctxLabel(b.contextLength)}`); }
     else lines.push(a.provider ? `${left} → ${a.provider} · ${a.model} (not observed)` : `${left} → (model unknown)`);
+    const local = a.id.slice(a.integration.length + 1);
+    for (const x of Object.values(live?.sessions ?? {}).filter(x => x.envId === a.envId && x.agentId === local))
+      lines.push(`  └ ${x.kind ?? 'session'} ${x.status ?? ''}${x.model ? ` · ${x.model}` : ''}`.trimEnd());
   }
   for (const b of s.backends) if (!used.has(b.id + b.endpoint)) lines.push(`${nice(b.integration)} · ${b.model}${ctxLabel(b.contextLength)} (no agent attached)`);
   for (const e of s.envs) {
@@ -32,4 +37,24 @@ export function detectionRows(s: Snapshot): string[][] {
 export function renderTable(rows: string[][]): string {
   const w = rows[0]?.map((_, i) => Math.max(...rows.map(r => (r[i] ?? '').length))) ?? [];
   return rows.map(r => r.map((c, i) => (i === r.length - 1 ? c : c.padEnd(w[i]))).join('  ')).join('\n');
+}
+
+export const switchRows = (sw: Switch[]) => [['Switch', 'Env', 'State'], ...sw.map(s => [s.id, s.envId, s.on ? 'on' : 'off'])];
+export const testLines = (r: TestResult) => [...r.steps.map(s => `${s.ok ? 'OK  ' : 'FAIL'}  ${s.name.padEnd(20)} ${s.detail} (${s.ms} ms)`), r.ok ? 'ALL OK' : 'FAILED'];
+export function permissionRows(subject: string, declared: DeclaredAction[], grants: Grant[], pending: Array<{ action: string; resource: string }>) {
+  const mode = (a: DeclaredAction) => grants.find(g => g.subject === subject && g.action === a.action && g.resource === a.resource)?.mode
+    ?? (pending.some(p => p.action === a.action && p.resource === a.resource) ? 'pending' : 'not asked yet');
+  return [['Action', 'Resource', 'Mode', 'Why'], ...declared.map(a => [a.action, a.resource, mode(a), a.why])];
+}
+
+/** Machine configuration report (ADR 0007): the one renderer, used by the CLI now and the app later. Redact before sharing. */
+export function renderConfigReport(s: Snapshot, live?: LiveState, date = new Date(s.ts)): string {
+  const md = (rows: string[][]) => [`| ${rows[0].join(' | ')} |`, `|${rows[0].map(() => '---').join('|')}|`, ...rows.slice(1).map(r => `| ${r.map(c => c.replaceAll('|', '\\|')).join(' | ')} |`)].join('\n');
+  return [`# Agent Spaghetti: machine configuration (${date.toISOString().slice(0, 10)})`, '',
+    '## Environments', md([['Environment', 'State', 'Notes'], ...s.envs.map(e => [e.id, e.state, [e.why, ...(e.partial ?? [])].filter(Boolean).join('; ') || '-'])]), '',
+    '## Tools', md(detectionRows(s)), '',
+    '## Backends', s.backends.length ? md([['Backend', 'Model', 'Context', 'Reachable from'], ...s.backends.map(b => [b.integration, b.model, b.contextLength ? String(b.contextLength) : '-', b.reachableFrom.join(', ')])]) : 'none running', '',
+    '## Agents', s.agents.length ? md([['Agent', 'Env', 'Model', 'Backend'], ...s.agents.map(a => [`${a.integration} · ${a.name}`, a.envId, a.model ?? '-', linkBackend(a, s.backends) ? 'linked' : 'not observed'])]) : 'none', '',
+    ...(live && Object.keys(live.sessions).length ? ['## Running sessions', md([['Env', 'Agent', 'Kind', 'Status'], ...Object.values(live.sessions).map(x => [x.envId, x.agentId ?? '-', x.kind ?? '-', x.status ?? '-'])]), ''] : []),
+  ].join('\n');
 }

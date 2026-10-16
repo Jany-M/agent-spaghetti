@@ -1,36 +1,71 @@
 // Daemon wiring (no logic of its own). Started by `agent-spaghetti daemon`.
 import { join } from 'node:path';
-import { dataDir, userIntegrationsDir, type Snapshot } from '@agent-spaghetti/sdk';
+import { dataDir, emptyLive, liveState, userIntegrationsDir, type Disposable, type LiveState, type Snapshot } from '@agent-spaghetti/sdk';
 import { BUILTINS } from '@agent-spaghetti/integrations';
 import { Store } from './store.ts';
 import { Bus } from './bus.ts';
 import { loadIntegrations, type Loaded } from './registry.ts';
-import { discoverEnvironments } from './env/discover.ts';
+import { discoverEnvironments, type EnvEntry } from './env/discover.ts';
 import { extraHostsFromEnv } from './env/hosts.ts';
 import { loadBundle } from './env/wsl.ts';
 import { runScan } from './scan.ts';
 import { startDaemon } from './daemon.ts';
 import { loadOrCreateToken, writeDiscovery } from './config.ts';
-import type { Services } from './ops.ts';
+import { Settings } from './settings.ts';
+import { onEnv } from './dispatch.ts';
+import { startObservers } from './observers.ts';
+import { handlers, type Services } from './ops.ts';
 
-export async function runDaemon(env: NodeJS.ProcessEnv = process.env) {
+const DAY = 86400000;
+/** scanOnStart (default on) runs the first scan, which also starts live observation. */
+export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: { observe?: boolean; scanOnStart?: boolean } = {}) {
   const dir = dataDir(env);
   const store = new Store(join(dir, 'store.db'));
   const bus = new Bus(store);
+  const settings = new Settings(store);
+  const prune = () => store.pruneEvents(Date.now() - settings.get('events.retentionDays') * DAY);
+  prune();
+  const pruneTimer = setInterval(prune, DAY); pruneTimer.unref();
+
+  // Live state starts now: observers report what is running when they start.
+  let live: LiveState = { ...emptyLive(), lastEventId: store.lastEventId() };
+  bus.subscribe(e => { live = liveState([e], live); });
+
   const load = () => loadIntegrations(BUILTINS, userIntegrationsDir(dir));
   let loaded: Loaded = await load();
+  let entries: EnvEntry[] = [];
+  let observers: Disposable | null = null;
+  const ctx = async () => ({
+    integrations: loaded.integrations.filter(i => !settings.get('disabled').includes(i.manifest.id)),
+    grants: settings.grants(), extraHosts: [...extraHostsFromEnv(env), ...settings.get('llmHosts')], bundle: await loadBundle(),
+  });
   const services: Services = {
-    store, bus, loaded: () => loaded,
+    store, bus, settings, loaded: () => loaded, live: () => live,
     async scan(): Promise<Snapshot> {
       loaded = await load();                                   // drop-ins are re-read on every scan
-      const extraHosts = extraHostsFromEnv(env);
-      const pending = loaded.integrations.filter(i => i.source === 'user')
-        .map(i => ({ id: i.manifest.id, why: 'pending review (permissions arrive in Phase 1b, ADR 0005)' }));
-      return runScan(await discoverEnvironments({ extraHosts }), loaded.integrations.filter(i => i.source === 'builtin'), bus,
-        { rejected: [...loaded.rejected, ...pending], bundle: await loadBundle(), extraHosts });
+      const c = await ctx();
+      entries = await discoverEnvironments({ extraHosts: c.extraHosts });
+      const snap = await runScan(entries, c.integrations, bus, { ...c, rejected: loaded.rejected });
+      if (o.observe !== false) {
+        observers?.dispose();
+        observers = startObservers(entries, c.integrations, { ...c, backendPollMs: settings.get('observe.backendPollMs'), sessionPollMs: settings.get('observe.sessionPollMs') },
+          (envId, e) => bus.emit({ ts: Date.now(), envId, ...e }));
+      }
+      return snap;
+    },
+    async onEnvs(cmd, args, envIds) {
+      if (!entries.length) entries = await discoverEnvironments({ extraHosts: (await ctx()).extraHosts });
+      const c = await ctx();
+      const targets = envIds ? envIds.map(id => entries.find(e => e.status.id === id) ?? { status: { id, state: 'error' as const, why: 'unknown environment' } })
+        : entries.filter(e => e.status.state === 'running');
+      return Promise.all(targets.map(async e => {
+        try { return { envId: e.status.id, result: await onEnv(e, c, cmd, args) }; }
+        catch (err) { return { envId: e.status.id, error: (err as Error).message }; }
+      }));
     },
   };
   const server = await startDaemon({ services, token: loadOrCreateToken(dir), port: Number(env.AGENT_SPAGHETTI_PORT ?? 0) });
   const removeDiscovery = writeDiscovery(dir, server.port);
-  return { port: server.port, dir, services, close: async () => { removeDiscovery(); await server.close(); store.close(); } };
+  if (o.scanOnStart !== false) void Promise.resolve(handlers.scan({}, services)).catch(e => process.stderr.write(`first scan failed: ${(e as Error).message}\n`));
+  return { port: server.port, dir, services, close: async () => { observers?.dispose(); clearInterval(pruneTimer); removeDiscovery(); await server.close(); store.close(); } };
 }
