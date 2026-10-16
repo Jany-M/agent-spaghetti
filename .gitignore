@@ -1,0 +1,10 @@
+*.bak
+*.log
+.env
+secrets.*
+jobs/
+__pycache__/
+config/overrides.env
+/_dev
+AGENTS.md
+CLAUDE.md

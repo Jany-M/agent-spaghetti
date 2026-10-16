@@ -1,0 +1,238 @@
+#!/usr/bin/env python3
+"""jobctl - durable job state for sequential multi-agent hand-off.
+
+A job is a folder: JOB.md (goal), PLAN.md (steps), LOG.md (append-only), results/NN.md.
+All state is files, so a crash, restart, compaction or new chat can resume with `jobctl status`.
+
+Step line in PLAN.md:   ### 01 [ ] worker: Title      ([ ] open  [~] running  [x] done  [!] blocked)
+"""
+import os, re, sys, time, glob
+
+ROOT = os.environ.get("JOBS_DIR") or os.path.join(os.environ.get("OPENCLAW_STATE_DIR") or os.path.expanduser("~/.openclaw"), "jobs")
+AGENTS = ("worker", "toolsmith", "verifier")
+STEP_RE = re.compile(r"^### (\d\d) \[( |~|x|!)\] (\w+): (.*)$")
+MARK = {" ": "OPEN", "~": "RUNNING", "x": "DONE", "!": "BLOCKED"}
+
+
+def die(msg, code=1):
+    print("ERROR: " + msg, file=sys.stderr)
+    sys.exit(code)
+
+
+def jdir(job):
+    d = os.path.join(ROOT, job)
+    if not os.path.isdir(d):
+        cands = sorted(glob.glob(os.path.join(ROOT, "*" + job + "*")))
+        if len(cands) == 1:
+            return cands[0]
+        die("unknown job '%s' (run: jobctl status)" % job)
+    return d
+
+
+def now():
+    return time.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def log(d, msg):
+    with open(os.path.join(d, "LOG.md"), "a", encoding="utf-8") as f:
+        f.write("- %s  %s\n" % (now(), msg))
+
+
+def parse(d):
+    """-> header lines, list of steps {n, mark, agent, title, body:[...]}"""
+    steps, head, cur = [], [], None
+    for line in open(os.path.join(d, "PLAN.md"), encoding="utf-8").read().splitlines():
+        m = STEP_RE.match(line)
+        if m:
+            cur = {"n": m.group(1), "mark": m.group(2), "agent": m.group(3), "title": m.group(4), "body": []}
+            steps.append(cur)
+        elif cur is not None:
+            cur["body"].append(line)
+        else:
+            head.append(line)
+    return head, steps
+
+
+def save(d, head, steps):
+    out = list(head)
+    for s in steps:
+        out.append("### %s [%s] %s: %s" % (s["n"], s["mark"], s["agent"], s["title"]))
+        out.extend(s["body"])
+    open(os.path.join(d, "PLAN.md"), "w", encoding="utf-8").write("\n".join(out).rstrip() + "\n")
+
+
+def field(step, name):
+    for l in step["body"]:
+        if l.startswith(name + ":"):
+            return l[len(name) + 1:].strip()
+    return ""
+
+
+def get_step(steps, nn):
+    nn = "%02d" % int(nn)
+    for s in steps:
+        if s["n"] == nn:
+            return s
+    die("no step %s" % nn)
+
+
+def goal(d):
+    for l in open(os.path.join(d, "JOB.md"), encoding="utf-8").read().splitlines():
+        if l.startswith("Goal:"):
+            return l[5:].strip()
+    return ""
+
+
+def result_status(path):
+    if not os.path.isfile(path):
+        return None
+    lines = [l.strip() for l in open(path, encoding="utf-8", errors="replace").read().splitlines() if l.strip()]
+    if lines and lines[-1].startswith("STATUS:"):
+        return lines[-1]
+    return "NO-STATUS-LINE"
+
+
+# ---------------------------------------------------------------- commands
+def c_new(a):
+    if len(a) < 2:
+        die('usage: jobctl new <slug> "<goal>"')
+    slug = re.sub(r"[^a-z0-9-]+", "-", a[0].lower()).strip("-")[:40] or "job"
+    job = time.strftime("%Y%m%d-%H%M") + "-" + slug
+    d = os.path.join(ROOT, job)
+    os.makedirs(os.path.join(d, "results"), exist_ok=True)
+    open(os.path.join(d, "JOB.md"), "w", encoding="utf-8").write(
+        "# Job %s\nGoal: %s\nCreated: %s\n" % (job, " ".join(a[1:]), now()))
+    open(os.path.join(d, "PLAN.md"), "w", encoding="utf-8").write("# Plan\n")
+    log(d, "job created")
+    print(job)
+
+
+def c_add(a):
+    if len(a) < 5:
+        die('usage: jobctl add <job> <agent> "<title>" "<what to do>" "<done when>"')
+    d = jdir(a[0])
+    if a[1] not in AGENTS:
+        die("agent must be one of: " + ", ".join(AGENTS))
+    head, steps = parse(d)
+    n = "%02d" % (len(steps) + 1)
+    steps.append({"n": n, "mark": " ", "agent": a[1], "title": a[2],
+                  "body": ["Do: " + a[3], "Done when: " + a[4], ""]})
+    save(d, head, steps)
+    log(d, "step %s added (%s: %s)" % (n, a[1], a[2]))
+    print("step %s added" % n)
+
+
+def c_brief(a):
+    if not a:
+        die("usage: jobctl brief <job>")
+    d = jdir(a[0])
+    head, steps = parse(d)
+    open_ = [s for s in steps if s["mark"] in (" ", "~")]
+    if any(s["mark"] == "!" for s in steps) and not open_:
+        die("job has a BLOCKED step; use jobctl retry or tell the user")
+    if not open_:
+        print("NO OPEN STEPS - job complete. Give the user the final summary.")
+        return
+    s = open_[0]
+    total = len(steps)
+    res = os.path.join(d, "results", s["n"] + ".md")
+    prior = [os.path.join(d, "results", p["n"] + ".md") for p in steps if p["mark"] == "x"]
+    s["mark"] = "~"
+    save(d, head, steps)
+    log(d, "step %s RUNNING (%s)" % (s["n"], s["agent"]))
+    print("AGENT: " + s["agent"])
+    print("LABEL: %s-%s" % (s["n"], re.sub(r"[^a-z0-9]+", "-", s["title"].lower()).strip("-")[:40]))
+    print("TASK:")
+    print("You are the %s for job %s. Do step %s of %d ONLY, then stop." % (s["agent"].upper(), os.path.basename(d), s["n"], total))
+    print("Job goal: " + goal(d))
+    print("Step %s: %s" % (s["n"], s["title"]))
+    print("Do: " + field(s, "Do"))
+    print("Done when: " + field(s, "Done when"))
+    if prior:
+        print("Earlier results you may read (do not redo them):")
+        for p in prior:
+            print("  - " + p)
+    print("Plan file: " + os.path.join(d, "PLAN.md"))
+    print("Write your result to: " + res)
+    print("Result file format: short summary (max 30 lines: what you did, key outputs, artifact paths).")
+    print("The LAST line must be exactly 'STATUS: DONE' or 'STATUS: BLOCKED - <reason>'.")
+    print("Then reply with ONE line only: '%s DONE' or '%s BLOCKED: <reason>'." % (s["n"], s["n"]))
+    print("Do not do other steps. Do not spawn agents. Never write secrets into files.")
+
+
+def c_done(a):
+    if len(a) < 2:
+        die('usage: jobctl done <job> <NN> "<summary>"')
+    d = jdir(a[0])
+    head, steps = parse(d)
+    s = get_step(steps, a[1])
+    st = result_status(os.path.join(d, "results", s["n"] + ".md"))
+    if st is None:
+        die("result file results/%s.md is missing. Mark it blocked (jobctl block) or retry." % s["n"])
+    if st == "NO-STATUS-LINE":
+        die("results/%s.md has no final 'STATUS:' line. Retry the step." % s["n"])
+    if not st.startswith("STATUS: DONE"):
+        die("worker reported '%s'. Use: jobctl block %s %s \"reason\"" % (st, a[0], s["n"]))
+    s["mark"] = "x"
+    save(d, head, steps)
+    log(d, "step %s DONE: %s" % (s["n"], " ".join(a[2:])))
+    left = [x for x in steps if x["mark"] in (" ", "~")]
+    print("step %s done. %d open step(s) left.%s" % (s["n"], len(left), "" if left else " JOB COMPLETE."))
+
+
+def c_block(a):
+    if len(a) < 2:
+        die('usage: jobctl block <job> <NN> "<reason>"')
+    d = jdir(a[0])
+    head, steps = parse(d)
+    s = get_step(steps, a[1])
+    s["mark"] = "!"
+    save(d, head, steps)
+    log(d, "step %s BLOCKED: %s" % (s["n"], " ".join(a[2:])))
+    print("step %s blocked" % s["n"])
+
+
+def c_retry(a):
+    if len(a) < 2:
+        die("usage: jobctl retry <job> <NN>")
+    d = jdir(a[0])
+    head, steps = parse(d)
+    s = get_step(steps, a[1])
+    s["mark"] = " "
+    p = os.path.join(d, "results", s["n"] + ".md")
+    if os.path.isfile(p):
+        os.replace(p, p + ".prev")
+    save(d, head, steps)
+    log(d, "step %s reset for retry" % s["n"])
+    print("step %s reopened" % s["n"])
+
+
+def c_status(a):
+    if a:
+        d = jdir(a[0])
+        head, steps = parse(d)
+        print("JOB %s\nGoal: %s" % (os.path.basename(d), goal(d)))
+        for s in steps:
+            print("  %s %-8s %s: %s" % (s["n"], MARK[s["mark"]], s["agent"], s["title"]))
+        return
+    jobs = sorted(p for p in glob.glob(os.path.join(ROOT, "*")) if os.path.isfile(os.path.join(p, "PLAN.md")))
+    if not jobs:
+        print("no jobs")
+    for p in jobs:
+        _, steps = parse(p)
+        cnt = {k: sum(1 for s in steps if s["mark"] == k) for k in MARK}
+        state = "COMPLETE" if steps and cnt[" "] + cnt["~"] + cnt["!"] == 0 else ("BLOCKED" if cnt["!"] else "IN-PROGRESS")
+        print("%-40s %-11s done %d/%d  running %d  open %d  blocked %d" % (
+            os.path.basename(p), state, cnt["x"], len(steps), cnt["~"], cnt[" "], cnt["!"]))
+
+
+CMDS = {"new": c_new, "add": c_add, "brief": c_brief, "done": c_done, "block": c_block,
+        "retry": c_retry, "status": c_status}
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2 or sys.argv[1] not in CMDS:
+        print(__doc__)
+        print("commands: " + ", ".join(CMDS))
+        sys.exit(2)
+    os.makedirs(ROOT, exist_ok=True)
+    CMDS[sys.argv[1]](sys.argv[2:])
