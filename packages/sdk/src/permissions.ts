@@ -1,5 +1,5 @@
 // The one permission model (ADR 0005). Pure: used by the daemon, the env bundle and (later) the app.
-import type { Manifest, Platform } from './types.ts';
+import type { Manifest } from './types.ts';
 import { wildcard } from './match.ts';
 
 /** The one list of actions. 1b uses exec/read/net; write/run/config/load arrive with their phases. */
@@ -28,7 +28,6 @@ export function check(grants: Grant[], subject: string, action: Action, resource
   const g = grants.find(g => g.subject === subject && g.action === action && wildcard(g.resource, resource));
   return g ? g.mode : 'ask';
 }
-export const platformsOf = (m: Manifest): Platform[] => m.platforms ?? ['windows', 'linux', 'macos'];
 const same = (g: Pick<Grant, 'subject' | 'action' | 'resource'>, x: Pick<Grant, 'subject' | 'action' | 'resource'>) =>
   g.subject === x.subject && g.action === x.action && g.resource === x.resource;
 /** Set (replace) grants; returns a new list. */

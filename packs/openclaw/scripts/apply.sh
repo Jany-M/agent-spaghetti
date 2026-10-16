@@ -24,8 +24,6 @@ INFO="$(pack info)" || die "$INFO"
 val() { printf '%s\n' "$INFO" | sed -n "s/^$1=//p"; }
 OC="$(val openclaw)"; CFG="$(val config)"; STATE="$(val state)"; ORCH="$(val agent)"; ORCH_WS="$(val workspace)"
 OD="$STATE/agent-spaghetti"
-# migrate the pre-rename folder (was <state>/orchestrator)
-if [ $DRY -eq 0 ] && [ -d "$STATE/orchestrator" ] && [ ! -e "$OD" ]; then mv "$STATE/orchestrator" "$OD"; fi
 echo "openclaw: $OC"; echo "config  : $CFG"; echo "node    : $NODE"
 echo "orchestrator agent: $ORCH  (workspace $ORCH_WS)"
 
@@ -38,14 +36,13 @@ else echo "(dry-run: skipped)"; fi
 
 say "2. install helper scripts"
 if [ $DRY -eq 0 ]; then
+  rm -rf "$OD/bin"                                                         # fresh every time: no stale helpers
   mkdir -p "$OD/bin" "$OD/mcp" "$STATE/jobs" "$HOME/.local/bin"
-  rm -rf "$OD/bin/lib"                                                     # pre-TS helpers
   install -m 755 "$PACK/scripts/jobctl" "$OD/bin/"
   install -m 644 "$BUNDLE" "$OD/bin/agent-spaghetti-env.mjs"
   printf '%s\n' "$NODE" > "$OD/bin/node.path"
   for t in ocmcp agent-spaghetti-healthcheck; do install -m 755 "$PACK/scripts/pack-shim" "$OD/bin/$t"; done
   install -m 644 "$PACK/mcp/catalog.json" "$OD/mcp/catalog.json"
-  rm -f "$HOME/.local/bin/orch-healthcheck"
   for t in jobctl ocmcp agent-spaghetti-healthcheck; do ln -sf "$OD/bin/$t" "$HOME/.local/bin/$t"; done
   echo "installed to $OD/bin (symlinked in ~/.local/bin; make sure that is on PATH)"
 fi

@@ -18,7 +18,7 @@ const ok = (v: unknown): ExecResult => ({ code: 0, stdout: JSON.stringify(v), st
 const cfg = (paths: Record<string, unknown>) => Object.fromEntries(Object.entries(paths).map(([k, v]) => [`${OC} config get ${k} --json`, ok(v)]));
 const LMS = { integration: 'lmstudio', base: 'http://192.0.2.10:1234/v1', model: 'test-model', contextLength: 16384 };
 
-test('block: replaces an existing (also pre-rename) block, else the old section, else appends', () => {
+test('block: replaces an earlier version of our block, else the old section, else appends', () => {
   const fresh = `${BEGIN}\nNEW\n${END}\n`;
   assert.equal(applyBlock('# A\n<!-- BEGIN ORCHESTRATOR (managed by old-name) -->\nOLD\n<!-- END ORCHESTRATOR -->\n# B\n', 'NEW\n'), `# A\n${fresh}# B\n`);
   assert.equal(applyBlock('## X\nx\n## Background Work and Completion Reporting\nold\n## Y\ny\n', 'NEW'), `## X\nx\n${fresh}\n## Y\ny\n`);

@@ -40,7 +40,7 @@ $tarFile = Join-Path $env:TEMP "agent-spaghetti-src-$PID.tar"
 try {
   & tar.exe -cf $tarFile -C $repo dist/agent-spaghetti-env.mjs packages/core/src/env/find-node.sh $pack
   if ($LASTEXITCODE -ne 0) { throw 'tar failed.' }
-  & wsl.exe -d $Distro --cd ~ --exec rm -rf $src .openclaw-orchestrator-src
+  & wsl.exe -d $Distro --cd ~ --exec rm -rf $src
   & wsl.exe -d $Distro --cd ~ --exec mkdir -p $src
   $p = Start-Process wsl.exe -ArgumentList "-d $Distro --cd ~ --exec tar -xf - -C $src" -RedirectStandardInput $tarFile -NoNewWindow -Wait -PassThru
   if ($p.ExitCode -ne 0) { throw "Failed to copy the pack into WSL (tar exit $($p.ExitCode))." }
