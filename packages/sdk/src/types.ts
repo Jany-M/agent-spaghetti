@@ -45,7 +45,7 @@ export interface Manifest {
   manifest: 1; id: string; name: string; roles: Role[]; cost?: Cost; platforms?: Platform[];
   detect?: {
     installed?: string[];
-    process?: string[];
+    process?: string[]; processNotIn?: string[];   // path fragments of copies bundled in other tools
     bin?: string[];
     env?: string[];
     paths?: string[] | Partial<Record<Platform, string[]>>;

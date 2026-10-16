@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { fakeEnv, fakeInventory, type FakeSpec } from '@agent-spaghetti/sdk/testing';
 import type { Integration, Manifest } from '@agent-spaghetti/sdk';
 import { inspect } from '../../../packages/core/src/engine/inspect.ts';
+import { BUILTINS } from '@agent-spaghetti/integrations';
 
 const run = async (m: Partial<Manifest>, spec: FakeSpec, module?: Integration['module']) => {
   const env = fakeEnv(spec);
@@ -86,4 +87,11 @@ test('a module enriches the base result', async () => {
   const { r } = await run({ detect: { bin: ['t'] } }, { bins: { t: '/t' } }, { async inspect(env, base) { return { ...base, agents: [{ id: 'x:a', integration: 'x', name: 'a', envId: env.id }] }; } });
   assert.equal(r!.agents[0].name, 'a');
   assert.ok(r!.detection.levels.includes('observe'));
+});
+test('processNotIn: a copy bundled inside another tool (any slash, any case) is not this tool', async () => {
+  const llama = BUILTINS.find(b => b.manifest.id === 'llamacpp')!;
+  const inv = (path: string) => ({ installed: [], processes: [{ name: 'llama-server', pid: 9, path }], listening: [], env: {}, partial: [] });
+  const ctx = (path: string) => ({ signal: AbortSignal.timeout(5000), inventory: inv(path) });
+  assert.equal(await inspect(llama, fakeEnv(), ctx('C:\\Users\\u\\.LMStudio\\extensions\\backends\\x\\llama-server.exe')), null);
+  assert.equal((await inspect(llama, fakeEnv(), ctx('/home/u/llama.cpp/build/bin/llama-server')))!.detection.installs[0].via, 'process');
 });

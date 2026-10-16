@@ -11,6 +11,9 @@
     "process": [
       "llama-server"
     ],
+    "processNotIn": [
+      "/.lmstudio/"
+    ],
     "bin": [
       "llama-server"
     ],

@@ -18,6 +18,7 @@
       "properties": {
         "installed": { "type": "array", "items": { "type": "string" } },
         "process": { "type": "array", "items": { "type": "string" } },
+        "processNotIn": { "type": "array", "items": { "type": "string" }, "description": "Path fragments of copies bundled inside other tools (e.g. LM Studio's own llama-server): such processes are not this tool" },
         "bin": { "type": "array", "items": { "type": "string" } },
         "env": { "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" } },
         "paths": { "anyOf": [

@@ -12,7 +12,8 @@ const exeName = (n: string) => n.replace(/\.exe$/i, '');
 export const httpGet = (env: Environment, url: string) => env.http({ url, timeoutMs: PROBE_MS });
 
 const processInstalls = (d: Detect, inv: Inventory): Install[] =>
-  inv.processes.filter(p => d.process?.some(n => wildcard(exeName(n), p.name))).map((p): Install => ({ path: p.path, via: 'process', pid: p.pid }));
+  inv.processes.filter(p => d.process?.some(n => wildcard(exeName(n), p.name))
+    && !d.processNotIn?.some(f => p.path?.replaceAll('\\', '/').toLowerCase().includes(f.toLowerCase()))).map((p): Install => ({ path: p.path, via: 'process', pid: p.pid }));
 async function findInstalls(env: Environment, d: Detect, inv: Inventory): Promise<Install[]> {
   const out: Install[] = [];
   const add = (x: Install) => {
