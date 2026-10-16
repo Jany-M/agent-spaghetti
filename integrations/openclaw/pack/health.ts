@@ -38,8 +38,10 @@ export async function healthSteps(env: Environment, exe: string, home = ''): Pro
   const doc = orch?.workspace ? await env.readFile(`${orch.workspace}/AGENTS.md`) : null;
   check('AGENTS.md has the orchestrator block', !!doc?.includes(BEGIN_PREFIX));
   check('hand-off text intact', !!doc && HANDOFF_WORDS.every(w => doc.includes(w)), HANDOFF_WORDS.join(', '));
-  for (const t of ['jobctl', 'ocmcp']) check(`${t} on PATH`, !!(await env.which(t)));
-  const j = await env.exec('jobctl', ['status'], { timeoutMs: 30000 });
+  // where setup links them (on agents' PATH; the env bundle itself may run without ~/.local/bin on PATH)
+  const where = Object.fromEntries(await Promise.all(['jobctl', 'ocmcp'].map(async t => [t, (await env.glob(`~/.local/bin/${t}`)) ?? (await env.which(t))] as const)));
+  for (const [t, p] of Object.entries(where)) check(`${t} installed`, !!p, p ?? 'missing: Set up again');
+  const j = where.jobctl ? await env.exec(where.jobctl, ['status'], { timeoutMs: 30000 }) : { code: 1, stdout: '' };
   check('jobs', true, j.code === 0 && j.stdout.trim() ? j.stdout.trim().split('\n').join('; ') : 'no jobs');
   return steps;
 }

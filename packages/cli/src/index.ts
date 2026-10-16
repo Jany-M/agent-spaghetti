@@ -15,7 +15,7 @@ export const usage = () => ['Usage: agent-spaghetti <command> [--json]', '',
 /** CLI verbs that are not op names (from the usage strings in OPS). */
 const VERB: Record<string, OpId> = { on: 'switch', off: 'switch', allow: 'grant', deny: 'grant', set: 'setting', answer: 'consent', disconnect: 'connect' };
 const readStdin = async () => { let s = ''; for await (const c of process.stdin) s += c; return s; };
-const consentLine = (c: ConsentRequest) => `? ${c.id}  ${c.subject} wants ${c.action} ${c.resource} (${c.why}) → answer ${c.id} allow|deny${c.scopes.length > 1 ? ` [${c.scopes.join('|')}]` : ''}`;
+const consentLine = (c: ConsentRequest) => `? ${c.id}  ${c.labels?.title ?? `${c.subject} wants ${c.action} ${c.resource}`} (${c.why}) → answer ${c.id} allow|deny${c.scopes.length > 1 ? ` [${c.scopes.join('|')}]` : ''}`;
 /** Reads "--name value" and removes it from args. */
 const flag = (args: string[], name: string) => { const i = args.indexOf(name); return i < 0 ? undefined : args.splice(i, 2)[1]; };
 

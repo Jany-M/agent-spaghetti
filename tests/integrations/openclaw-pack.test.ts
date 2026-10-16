@@ -128,5 +128,5 @@ test('health: one step per check; reads AGENTS.md of the default agent', async (
   assert.deepEqual(steps.filter(s => !s.ok), []);
   assert.equal(steps.find(s => s.name === 'primary model set')!.detail, 'lmstudio/test-model');
   const bad = await healthSteps(fakeEnv({ kind: 'linux', exec: good }), OC);
-  assert.deepEqual(bad.filter(s => !s.ok).map(s => s.name), ['LLM endpoint answers', 'AGENTS.md has the orchestrator block', 'hand-off text intact', 'jobctl on PATH', 'ocmcp on PATH']);
+  assert.deepEqual(bad.filter(s => !s.ok).map(s => s.name), ['LLM endpoint answers', 'AGENTS.md has the orchestrator block', 'hand-off text intact', 'jobctl installed', 'ocmcp installed']);
 });
