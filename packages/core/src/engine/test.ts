@@ -15,8 +15,11 @@ export async function testIntegration(host: Environment, i: Integration, grants:
   const m = i.manifest;
   const inventory = await host.inventory(m.detect?.env ?? []);
   const { env } = asSubject(i, host, { signal: AbortSignal.timeout(60000), inventory }, grants);
-  const r = await inspectAs(i, host, inventory, grants);
-  await step('detect', async () => [!!r, r ? `${r.detection.why}${r.detection.version ? ` (version ${r.detection.version})` : ''}` : 'not found in this environment']);
+  const t0 = Date.now();
+  let failed = '';
+  const r = await inspectAs(i, host, inventory, grants).catch((e: Error) => { failed = e.message; return null; });
+  steps.push({ name: 'detect', ok: !!r, ms: Date.now() - t0,
+    detail: r ? `${r.detection.why}${r.detection.version ? ` (version ${r.detection.version})` : ''}` : failed || 'not found in this environment' });
   if (!r) return { ok: false, steps };
   if (m.detect?.http) await step('server reachable', async () => [!!r.detection.endpoint, r.detection.endpoint ?? 'no answer on any port or host']);
   if (m.models && r.detection.endpoint) await step('models', async () => [true, r.backends.map(b => b.model).join(', ') || 'none loaded']);

@@ -38,7 +38,7 @@ export async function runScan(entries: EnvEntry[], integrations: Integration[], 
     if (e.env) return scanEnv(e.env, integrations, o);
     if (!e.distro) return { status: e.status, inspections: [], errors: [], pending: [] };
     try { const s = await onEnv(e, { ...o, integrations }, 'inspect'); return { ...s, pending: s.pending ?? [] }; }
-    catch (err) { return { status: { ...e.status, partial: [(err as Error).message.replace(`${e.distro}: `, '')] }, inspections: [], errors: [], pending: [] }; }
+    catch (err) { return { status: { ...e.status, partial: [(err as Error).message] }, inspections: [], errors: [], pending: [] }; }
   }));
   const snap: Snapshot = { ts: now(), envs: [], detections: [], agents: [], backends: [], rejected: o.rejected ?? [], pending: [] };
   const merged = new Map<string, BackendInfo>();

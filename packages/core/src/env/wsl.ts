@@ -82,6 +82,6 @@ export const decodePayload = (s: string | undefined): EnvPayload =>
 /** One-shot bundle command inside a distro, JSON result. */
 export async function distroCall<T>(distro: string, bundle: Bundle | null, cmd: string, payload: EnvPayload, args: string[] = [], spawn: Spawn = spawnFile): Promise<T> {
   const r = await runInDistro(distro, bundle, [cmd, encodePayload(payload), ...args], '', spawn);
-  if (!r.ok) throw new Error(`${distro}: ${r.why}`);
-  try { return JSON.parse(r.stdout) as T; } catch { throw new Error(`${distro}: env bundle returned no JSON`); }
+  if (!r.ok) throw new Error(r.why);
+  try { return JSON.parse(r.stdout) as T; } catch { throw new Error('env bundle returned no JSON'); }
 }
