@@ -2,8 +2,13 @@
   "name": "agent-spaghetti",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24.19" },
-  "workspaces": ["packages/*", "integrations"],
+  "engines": {
+    "node": ">=24.19"
+  },
+  "workspaces": [
+    "packages/*",
+    "integrations"
+  ],
   "scripts": {
     "test": "node --test --test-reporter=spec \"tests/**/*.test.ts\"",
     "typecheck": "tsc -p tsconfig.json",
@@ -14,5 +19,13 @@
     "check": "npm run typecheck && npm run secretscan && npm run licensecheck && npm run build && npm test",
     "daemon": "node packages/cli/src/index.ts daemon"
   },
-  "devDependencies": { "@types/node": "24.19.2", "esbuild": "0.28.2", "typescript": "5.9.3" }
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3"
+  },
+  "allowScripts": {
+    "electron": true,
+    "esbuild": true
+  }
 }
