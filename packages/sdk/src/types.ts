@@ -127,6 +127,15 @@ export interface IntegrationModule {
   run?(env: Environment, det: Detection, req: RunRequest, ctx: Ctx): AsyncIterable<RunEvent>;
   /** Add (on) or remove agent-spaghetti's MCP server where the tool's own CLI is the documented way (else core/connect.ts does it). */
   connect?(env: Environment, det: Detection, cli: Cli, on: boolean, dryRun: boolean): Promise<Connected>;
+  /** Tool-side setup (e.g. the OpenClaw workflow pack): check reports, apply changes the tool (Tools → Set up, `agent-spaghetti setup`). */
+  setup?(env: Environment, det: Detection, o: SetupOpts): Promise<TestStep[]>;
+}
+/** A loaded model of a local OpenAI-compatible server, as an agent's config needs it. */
+export interface LocalModel { integration: string; base: string; model: string; contextLength?: number }
+export interface SetupOpts {
+  action: 'check' | 'apply'; dryRun: boolean; cli: Cli;
+  options: Record<string, string>;                         // this tool's settings without the prefix (openclaw.model → model)
+  localModels(): Promise<LocalModel[]>;                    // the engine's scan of this environment
 }
 /** How to run agent-spaghetti in an environment (`[...args, 'mcp', '--as', id]` starts the MCP bridge). */
 export interface Cli { command: string; args: string[] }

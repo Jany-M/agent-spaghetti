@@ -1,15 +1,11 @@
-// The OpenClaw pack (TS port of orch_config.py, ocmcp, healthcheck and apply.sh's inline Python).
+// The OpenClaw pack: model patch, ocmcp, health report, AGENTS.md block (setup apply end to end: tests/integration/pack-apply.test.ts).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import type { ExecResult, Inspection } from '@agent-spaghetti/sdk';
 import { fakeEnv } from '@agent-spaghetti/sdk/testing';
-import { BUILTIN_MANIFESTS } from '@agent-spaghetti/integrations';
 import { applyBlock, BEGIN, END } from '../../integrations/openclaw/pack/block.ts';
 import { entryFor, search, derive } from '../../integrations/openclaw/pack/catalog.ts';
-import { buildPatch, pickBackend, providerIdFor, stripProvider } from '../../integrations/openclaw/pack/config-patch.ts';
+import { buildPatch, byPreference, providerIdFor, stripProvider } from '../../integrations/openclaw/pack/config-patch.ts';
 import { pickOrchestrator } from '../../integrations/openclaw/pack/orchestrator.ts';
 import { packMain } from '../../integrations/openclaw/pack/main.ts';
 
@@ -40,18 +36,16 @@ test('catalog: local > exact > longest generic substring (+qualifiers) > derived
   assert.deepEqual(hits.map(h => h.server.name), ['github']);
 });
 
-test('orchestrator: ORCH_AGENT_ID > isDefault > first; ~ expanded', () => {
+test('orchestrator: the default agent, else the first; ~ expanded', () => {
   const list = [{ id: 'a', workspace: '~/ws-a' }, { id: 'b', isDefault: true, workspace: '/w/b' }];
-  assert.deepEqual(pickOrchestrator(list, undefined, '/home/u'), { id: 'b', workspace: '/w/b' });
-  assert.deepEqual(pickOrchestrator(list, 'a', '/home/u'), { id: 'a', workspace: '/home/u/ws-a' });
-  assert.equal(pickOrchestrator([], undefined), undefined);
+  assert.deepEqual(pickOrchestrator(list, '/home/u'), { id: 'b', workspace: '/w/b' });
+  assert.deepEqual(pickOrchestrator([list[0]], '/home/u'), { id: 'a', workspace: '/home/u/ws-a' });
+  assert.equal(pickOrchestrator([]), undefined);
 });
 
-test('pickBackend prefers LM Studio, then Ollama…; provider ids', () => {
-  const b = (integration: string, port: number) => ({ id: integration, integration, model: 'm', envId: 'linux', endpoint: `http://192.0.2.10:${port}`, reachableFrom: ['linux'] });
-  const baseOf = (id: string) => BUILTIN_MANIFESTS.find(m => m.id === id)?.speaks?.openai?.base;
-  assert.equal(pickBackend([b('ollama', 11434), b('lmstudio', 1234)], baseOf)?.base, 'http://192.0.2.10:1234/v1');
-  assert.equal(pickBackend([], baseOf), null);
+test('local models: LM Studio first, then Ollama…; provider ids', () => {
+  const m = (integration: string) => ({ integration, base: 'http://192.0.2.10:1/v1', model: 'm' });
+  assert.deepEqual(byPreference([m('ollama'), m('vllm'), m('lmstudio')]).map(x => x.integration), ['lmstudio', 'ollama', 'vllm']);
   assert.equal(providerIdFor('lmstudio'), 'lmstudio');
   assert.equal(providerIdFor('ollama'), 'local-ollama');
 });
@@ -62,7 +56,7 @@ test('patch auto: endpoint up → keep primary, only timeout + MCP parking', asy
     'agents.defaults.model': { primary: 'lmstudio/m1' }, 'mcp.servers': { s1: {}, s2: { enabled: true } } }),
     http: { 'http://192.0.2.10:1234/v1/models': { status: 200, body: '{}' } } });
   let detected = false;
-  const p = await buildPatch({ env, exe: OC, vars: {}, say, detect: async () => { detected = true; return LMS; } });
+  const p = await buildPatch({ env, exe: OC, model: 'auto', say, detect: async () => { detected = true; return [LMS]; } });
   assert.equal(detected, false);
   assert.deepEqual(p, { models: { providers: { lmstudio: { timeoutSeconds: 900 } } }, mcp: { servers: { s1: { enabled: false }, s2: { enabled: false } } } });
   assert.ok(!JSON.stringify(p).includes('NEVER'), 'apiKey is never copied');
@@ -71,7 +65,7 @@ test('patch auto: endpoint up → keep primary, only timeout + MCP parking', asy
 test('patch auto: endpoint down → re-detect, new provider gets api + default key, primary set', async () => {
   const env = fakeEnv({ kind: 'linux', exec: cfg({ 'models.providers': { lmstudio: {} }, 'models.providers.lmstudio': { baseUrl: 'http://192.0.2.99:1234/v1', models: [] },
     'agents.defaults.model': 'lmstudio/old' }) });
-  const p = await buildPatch({ env, exe: OC, vars: {}, say, detect: async () => ({ ...LMS, integration: 'ollama' }) });
+  const p = await buildPatch({ env, exe: OC, model: 'auto', say, detect: async () => [{ ...LMS, integration: 'vllm' }, { ...LMS, integration: 'ollama' }] });
   assert.deepEqual(p.agents, { defaults: { model: { primary: 'local-ollama/test-model' } } });
   assert.equal(p.models.providers['local-ollama'].api, 'openai-completions');
   assert.equal(p.models.providers['local-ollama'].apiKey, 'local');
@@ -81,58 +75,58 @@ test('patch auto: endpoint down → re-detect, new provider gets api + default k
 test('patch auto: endpoint down and nothing found → keep the current model with a warning', async () => {
   const env = fakeEnv({ kind: 'linux', exec: cfg({ 'models.providers': { lmstudio: {} }, 'models.providers.lmstudio': { baseUrl: 'http://192.0.2.99:1234/v1' }, 'agents.defaults.model': 'lmstudio/m1' }) });
   const said: string[] = [];
-  const p = await buildPatch({ env, exe: OC, vars: {}, say: s => said.push(s), detect: async () => null });
+  const p = await buildPatch({ env, exe: OC, model: '', say: s => said.push(s), detect: async () => [] });
   assert.deepEqual(p, { models: { providers: { lmstudio: { timeoutSeconds: 900 } } } });
   assert.match(said.join('\n'), /WARNING: the endpoint of lmstudio\/m1 does not answer/);
 });
-test('patch follow updates a declared context window; manual needs all three vars; nothing found → clear error', async () => {
-  const env = fakeEnv({ kind: 'linux', exec: cfg({ 'models.providers': { lmstudio: {} }, 'models.providers.lmstudio': { baseUrl: LMS.base, models: [{ id: 'test-model', contextWindow: 4096 }] } }) });
-  const p = await buildPatch({ env, exe: OC, vars: { PROVIDER_MODE: 'follow' }, say, detect: async () => LMS });
+test('patch <server>:<model> uses that loaded model (declared window follows the server); keep never touches it; clear errors', async () => {
+  const env = fakeEnv({ kind: 'linux', exec: cfg({ 'models.providers': { lmstudio: {} }, 'models.providers.lmstudio': { baseUrl: LMS.base, models: [{ id: 'test-model', contextWindow: 4096 }] },
+    'agents.defaults.model': 'lmstudio/other' }) });
+  const p = await buildPatch({ env, exe: OC, model: 'lmstudio:test-model', say, detect: async () => [LMS] });
   assert.equal(p.models.providers.lmstudio.models[0].contextWindow, 16384);
   assert.equal(p.models.providers.lmstudio.apiKey, undefined, 'existing provider keeps its own key');
-  await assert.rejects(buildPatch({ env, exe: OC, vars: { PROVIDER_MODE: 'manual', PROVIDER_ID: 'x' }, say, detect: async () => null }), /MANUAL|manual/);
-  await assert.rejects(buildPatch({ env, exe: OC, vars: { PROVIDER_MODE: 'follow' }, say, detect: async () => null }), /no local LLM server/);
-  await assert.rejects(buildPatch({ env: fakeEnv({ kind: 'linux', exec: cfg({ 'models.providers': {} }) }), exe: OC, vars: {}, say, detect: async () => null }), /no local LLM server/);
+  assert.deepEqual(p.agents, { defaults: { model: { primary: 'lmstudio/test-model' } } });
+  assert.deepEqual(await buildPatch({ env, exe: OC, model: 'keep', say, detect: async () => [LMS] }), { models: { providers: { lmstudio: { timeoutSeconds: 900 } } } });
+  await assert.rejects(buildPatch({ env, exe: OC, model: 'lmstudio:nope', say, detect: async () => [LMS] }), /lmstudio has no loaded model nope/);
+  await assert.rejects(buildPatch({ env: fakeEnv({ kind: 'linux', exec: cfg({ 'models.providers': {} }) }), exe: OC, model: 'auto', say, detect: async () => [] }), /no local LLM server/);
   assert.deepEqual(stripProvider({ models: {}, agents: { defaults: {} }, mcp: { servers: {} } }), { mcp: { servers: {} } });
 });
 
-test('packMain: openclaw missing → exit 1; mcp list/on and block go through the CLI and files', async () => {
+test('packMain: unknown command → usage; openclaw missing → exit 1; mcp list/on go through the CLI; health exit code = problems', async () => {
   const noOc = async (): Promise<Inspection[]> => [];
   const lines: string[] = [];
-  assert.equal(await packMain(['mcp', 'list'], fakeEnv(), { inspect: noOc, manifests: [], say: s => lines.push(s) }), 1);
+  assert.equal(await packMain(['patch'], fakeEnv(), { inspect: noOc, say: s => lines.push(s) }), 1);
+  assert.match(lines[0], /^usage: openclaw mcp/);
+  assert.equal(await packMain(['mcp', 'list'], fakeEnv(), { inspect: noOc, say: s => lines.push(s) }), 1);
   const det = { integration: 'openclaw', name: 'OpenClaw', envId: 'linux', installs: [{ via: 'bin' as const, path: OC }], levels: [], cost: 'free' as const, connectable: 'yes' as const, why: '' };
   const env = fakeEnv({ kind: 'linux', exec: { ...cfg({ 'mcp.servers': { github: { enabled: false }, zz: { url: 'https://h.example.com/x' } } }),
     [`${OC} config file`]: { code: 0, stdout: '\x1b[1m~/.openclaw/openclaw.json\x1b[0m\n', stderr: '' },
     [`${OC} config patch --stdin`]: ok({}), [`${OC} mcp reload`]: ok({}) } });
-  const deps = { inspect: async () => [{ detection: det, agents: [], backends: [] }], manifests: [], vars: { HOME: '/home/u', MCP_CATALOG: '/nope' }, say: (s: string) => lines.push(s) };
+  const deps = { inspect: async () => [{ detection: det, agents: [], backends: [] }], vars: { HOME: '/home/u' }, say: (s: string) => lines.push(s) };
   lines.length = 0;
   assert.equal(await packMain(['mcp', 'list'], env, deps), 0);
-  assert.deepEqual(lines, ['off  github                     MCP server', 'ON   zz                         remote MCP server at h.example.com']);
+  assert.deepEqual(lines, ['off  github                     GitHub repos, issues, pull requests, code search, files', 'ON   zz                         remote MCP server at h.example.com'], 'the generic catalog is built in');
   assert.equal(await packMain(['mcp', 'on', 'nope'], env, deps), 1);
-  lines.length = 0;
-  assert.equal(await packMain(['patch'], fakeEnv({ kind: 'linux' }), { ...deps, vars: { PROVIDER_MODE: 'manual' } }), 1);
-  assert.match(lines.join('\n'), /^ERROR: PROVIDER_MODE=manual needs/m);
   assert.equal(await packMain(['mcp', 'on', 'github'], env, deps), 0);
   assert.deepEqual(JSON.parse(env.inputs[`${OC} config patch --stdin`]), { mcp: { servers: { github: { enabled: true } } } });
   assert.ok(env.calls.includes(`exec ${OC} mcp reload`));
-  const dir = mkdtempSync(join(tmpdir(), 'as-pack-'));
-  try {
-    writeFileSync(join(dir, 'b.md'), 'BLOCK');
-    assert.equal(await packMain(['block', join(dir, 'AGENTS.md'), join(dir, 'b.md')], env, deps), 0);
-    assert.equal(readFileSync(join(dir, 'AGENTS.md'), 'utf8'), `${BEGIN}\nBLOCK\n${END}\n`);
-  } finally { rmSync(dir, { recursive: true }); }
+  lines.length = 0;
+  assert.ok(await packMain(['health'], env, deps) > 0);
+  assert.match(lines.join('\n'), /FAIL  gateway service up/);
 });
 
-test('health: counts problems; reads AGENTS.md of the default agent', async () => {
+test('health: one step per check; reads AGENTS.md of the default agent', async () => {
   const good = { ...cfg({ 'models.providers': { lmstudio: {} }, 'models.providers.lmstudio': { baseUrl: LMS.base, timeoutSeconds: 900 },
     'agents.defaults.model': 'lmstudio/test-model', 'agents.defaults': { maxConcurrent: 2, subagents: { maxConcurrent: 1 } },
     'agents.entries': { main: { tools: { profile: 'minimal' } }, worker: {}, toolsmith: {}, verifier: {} }, tools: { toolSearch: false }, 'mcp.servers': { a: { enabled: false } } }),
     [`${OC} agents list --json`]: ok([{ id: 'main', isDefault: true, workspace: '/w' }]),
     [`${OC} gateway status`]: { code: 0, stdout: 'Gateway: running', stderr: '' } };
-  const lines: string[] = [];
-  const { health } = await import('../../integrations/openclaw/pack/health.ts');
+  const { healthSteps } = await import('../../integrations/openclaw/pack/health.ts');
   const env = fakeEnv({ kind: 'linux', exec: good, http: { [`${LMS.base}/models`]: { status: 200, body: '' } }, bins: { jobctl: '/b/jobctl', ocmcp: '/b/ocmcp' },
     files: { '/w/AGENTS.md': `${BEGIN}\nsessions_spawn sessions_yield jobctl brief\n${END}` } });
-  assert.equal(await health(env, OC, s => lines.push(s)), 0, lines.join('\n'));
-  assert.equal(await health(fakeEnv({ kind: 'linux', exec: good }), OC, () => {}), 5);   // endpoint down, no block, no hand-off text, jobctl and ocmcp missing
+  const steps = await healthSteps(env, OC);
+  assert.deepEqual(steps.filter(s => !s.ok), []);
+  assert.equal(steps.find(s => s.name === 'primary model set')!.detail, 'lmstudio/test-model');
+  const bad = await healthSteps(fakeEnv({ kind: 'linux', exec: good }), OC);
+  assert.deepEqual(bad.filter(s => !s.ok).map(s => s.name), ['LLM endpoint answers', 'AGENTS.md has the orchestrator block', 'hand-off text intact', 'jobctl on PATH', 'ocmcp on PATH']);
 });

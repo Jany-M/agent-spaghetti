@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { entryFor, search, type Catalog } from './catalog.ts';
 import { MCP_NAME, mcpServers, setMcpEnabled, type McpServer } from './mcp.ts';
 import { stripAnsi } from './state.ts';
+import { packFile } from './files.ts';
 
 export interface McpDeps { env: Environment; exe: string; pack: string | null; vars: NodeJS.ProcessEnv; say(s: string): void }
 const load = (p: string): Catalog => { try { return JSON.parse(readFileSync(p, 'utf8')); } catch { return {}; } };
@@ -13,7 +14,7 @@ export const MCP_COMMANDS = ['list', 'search', 'on', 'off', 'off-all', 'probe', 
 export async function mcpMain(cmd: string, a: string[], d: McpDeps): Promise<number> {
   if (!(MCP_COMMANDS as readonly string[]).includes(cmd)) { d.say(`ocmcp: turn OpenClaw MCP servers on/off (they are OFF by default)\ncommands: ${MCP_COMMANDS.join(', ')}`); return 2; }
   const servers = (await mcpServers(d.env, d.exe)).filter(s => s.name !== MCP_NAME);   // ours is managed by `connect`
-  const generic = load(d.vars.MCP_CATALOG ?? `${d.pack}/mcp/catalog.json`), local = d.pack ? load(`${d.pack}/catalog.local.json`) : {};
+  const generic: Catalog = d.vars.MCP_CATALOG ? load(d.vars.MCP_CATALOG) : JSON.parse(packFile('mcp/catalog.json')), local = d.pack ? load(`${d.pack}/catalog.local.json`) : {};
   const cat = (s: McpServer) => entryFor(s, generic, local);
   const broken = (s: McpServer) => cat(s).broken ? `  [BROKEN: ${cat(s).broken}]` : '';
   const names = new Set(servers.map(s => s.name));

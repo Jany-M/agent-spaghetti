@@ -84,8 +84,8 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
         break;
       }
       case 'switch': { const r = await c.call('switch', { id: a1, on: cmd === 'on', envId }); print(r, () => `${r.id} (${r.envId}) is ${r.on ? 'on' : 'off'}`); break; }
-      case 'test': {
-        const r = await c.call('test', { integration: a1, envId });
+      case 'test': case 'setup': {
+        const r = op === 'test' ? await c.call('test', { integration: a1, envId }) : await c.call('setup', { integration: a1, envId, check: args.includes('--check'), dryRun: args.includes('--dry-run') });
         print(r, () => r.map(x => [`${a1} in ${x.envId}`, ...(x.result ? testLines(x.result) : [`FAIL  ${x.error}`])].join('\n')).join('\n\n'));
         return r.every(x => x.result?.ok) ? 0 : 1;
       }

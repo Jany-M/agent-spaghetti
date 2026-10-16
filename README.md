@@ -15,28 +15,17 @@ Your AI tools each live in their own world. Agent Spaghetti untangles them: it m
 - Long tasks are split into steps and handed from agent to agent, saved to files, so a crash, restart or new chat resumes where it stopped.
 - One step at a time, so a single local GPU never gets overloaded.
 - Tools are switched on only when a step needs them.
-- Survives reinstalls of OpenClaw or your LLM server: run one command and it is back.
+- Survives reinstalls of OpenClaw or your LLM server: set it up again with one click.
 
 ## Install (Windows + WSL)
 
-```powershell
-.\apply.ps1
-```
+`npm install` and `npm run tray` (Node.js 24 on Windows), then in the tray: **Tools → OpenClaw → Set up** (**Dry run** first if you like; **Check** any time later). Inside the distro, `agent-spaghetti-healthcheck` prints the same check. Without the tray: `node packages/cli/src/index.ts setup openclaw [--dry-run|--check]`.
 
-Check it any time with `.\healthcheck.ps1`. Linux and macOS: `npm run build`, then `packs/openclaw/scripts/apply.sh` and `agent-spaghetti-healthcheck`.
-
-Needs OpenClaw with a working gateway (its bundled Node.js is used), plus `python3` (for `jobctl`) and `tar` on the gateway host, and Node.js 24 on Windows to build once. Works best with a model that handles tool calls well.
+Needs OpenClaw with a working gateway (in a running WSL distro, or on Linux/macOS), plus `python3` on the gateway host (for `jobctl`). Works best with a model that handles tool calls well.
 
 ## Choosing the LLM
 
-By default it keeps the model OpenClaw already uses. Re-point it with:
-
-```powershell
-.\apply.ps1 -Mode follow    # use whatever model the local server has loaded now
-.\apply.ps1 -DryRun         # preview, change nothing
-```
-
-Other modes (`keep`, `manual`) are described in `packs/openclaw/config/overrides.env.example`.
+By default (`auto`) the setup keeps the model OpenClaw already uses while it answers, else it picks the first local server with a loaded model. Pick one yourself in **Settings → openclaw.model**: `keep` (never touch it) or `<server>:<model>` from **Runs → New task** / `targets` (e.g. `lmstudio:<loaded model>`), then **Set up** again.
 
 ## The daemon, the tray and delegation
 

@@ -4,7 +4,6 @@
 secrets.*
 jobs/
 __pycache__/
-overrides.env
 /_dev
 AGENTS.md
 CLAUDE.md

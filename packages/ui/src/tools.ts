@@ -13,6 +13,7 @@ export interface ToolsProps {
   tests: Record<string, string[]>; details: Record<string, ToolDetails>;
   onToggleGroup(group: string, open: boolean): void; onExpand(id: string): void;
   onConnect(id: string, on: boolean): void; onPreference(id: string, p: Preference): void; onTest(id: string): void; onSkip(id: string, skip: boolean): void;
+  onSetup(id: string, o: { check?: boolean; dryRun?: boolean }): void;
   onSwitch(s: Switch, on: boolean): void; onGrant(id: string, a: DeclaredAction, mode: Mode | null): void;
 }
 
@@ -40,6 +41,10 @@ function Row({ r, p }: { r: ToolRow; p: ToolsProps }) {
       r.preference ? h('select', { 'aria-label': `When ${r.name} is found`, value: r.preference, disabled: busy, onChange: (e: { target: { value: string } }) => p.onPreference(r.id, e.target.value as Preference) },
         ...(Object.keys(PREF_LABEL) as Preference[]).map(k => h('option', { key: k, value: k }, PREF_LABEL[k]))) : null,
       h('button', { disabled: busy, onClick: () => p.onTest(r.id) }, p.busy === `test ${r.id}` ? 'Testing…' : 'Test'),
+      ...(r.setup && r.state !== 'not found' ? [
+        h('button', { key: 'su', disabled: busy, title: 'Install the agent-spaghetti workflow in this tool (backup first)', onClick: () => p.onSetup(r.id, {}) }, p.busy === `setup ${r.id}` ? 'Setting up…' : 'Set up'),
+        h('button', { key: 'sd', disabled: busy, title: 'Validate the setup without changing anything', onClick: () => p.onSetup(r.id, { dryRun: true }) }, 'Dry run'),
+        h('button', { key: 'sc', disabled: busy, onClick: () => p.onSetup(r.id, { check: true }) }, 'Check')] : []),
       h('button', { disabled: busy, onClick: () => p.onSkip(r.id, r.state !== 'skipped') }, r.state === 'skipped' ? 'Scan again' : 'Skip in scans')),
     h('details', { onToggle: (e: { currentTarget: { open: boolean } }) => { if (e.currentTarget.open) p.onExpand(r.id); } }, h('summary', null, 'More'),
       ...(more.length ? more : [h('div', { key: 'none', className: 'empty' }, d ? 'No switches or permissions.' : 'Loading…')])));
@@ -101,6 +106,10 @@ export function ToolsPanel({ bridge }: { bridge: Bridge }) {
       setTests(t => ({ ...t, [id]: r.flatMap(x => [`${id} in ${x.envId}`, ...(x.result ? testLines(x.result) : [`FAIL  ${x.error}`])]) }));
     }),
     onSkip: (id, skip) => act(`skip ${id}`, () => bridge.call(skip ? 'disable' : 'enable', { id })),
+    onSetup: (id, o) => act(`setup ${id}`, async () => {
+      const r = await bridge.call('setup', { integration: id, ...o });
+      setTests(t => ({ ...t, [id]: r.flatMap(x => [`${o.check ? 'check' : o.dryRun ? 'dry run' : 'set up'} in ${x.envId}`, ...(x.result ? testLines(x.result) : [`FAIL  ${x.error}`])]) }));
+    }),
     onSwitch: (s, on) => act(`switch ${s.id}`, () => bridge.call('switch', { id: s.id, on, envId: s.envId }).then(() => expand(s.integration))),
     onGrant: (id, a, mode) => act(`grant ${id}`, () => (mode ? bridge.call('grant', { subject: id, mode, action: a.action, resource: a.resource })
       : bridge.call('revoke', { subject: id, action: a.action, resource: a.resource })).then(() => expand(id))),

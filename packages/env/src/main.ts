@@ -4,7 +4,7 @@
 //   observe <payload>                 long-running; one JSON event per line
 //   switches <payload> | switch <payload> <id> on|off | test <payload> <integration>
 //   run <payload> <integration>       a delegated task, { req, runId } on stdin; one RunEvent per line
-//   openclaw <command> [...]          OpenClaw pack commands (apply.sh / ocmcp), see integrations/openclaw/pack
+//   openclaw mcp|health [...]         OpenClaw pack commands for the distro (ocmcp, agent-spaghetti-healthcheck)
 //   mcp --as <client>                 agent-spaghetti's MCP server for a client in this distro (talks to the daemon on Windows)
 //   version
 import type { Integration } from '@agent-spaghetti/sdk';
@@ -27,10 +27,10 @@ export async function main(argv: string[]): Promise<number> {
     await serveMcpStdio(new HubClient(hub), { source: all[all.indexOf('--as') + 1] ?? 'mcp', parentRunId: Number(process.env.AGENT_SPAGHETTI_PARENT_RUN) || undefined });
     return 0;
   }
-  if (cmd === 'openclaw') {
-    const env = localEnvironment({ extraHosts: extraHostsFromEnv(process.env) });   // LLM_HOSTS from overrides.env
+  if (cmd === 'openclaw') {     // `ocmcp` and `agent-spaghetti-healthcheck` (installed by OpenClaw's setup)
+    const env = localEnvironment({ extraHosts: extraHostsFromEnv(process.env) });
     const inspect = async (ids: string[]) => (await scanEnv(env, BUILTINS.filter(b => ids.includes(b.manifest.id)))).inspections;
-    return packMain([raw, ...rest].filter(a => a !== undefined), env, { inspect, manifests: BUILTINS.map(b => b.manifest) });
+    return packMain([raw, ...rest].filter(a => a !== undefined), env, { inspect });
   }
   const p = decodePayload(raw);
   const env = localEnvironment({ id: p.envId || undefined, extraHosts: p.extraHosts });

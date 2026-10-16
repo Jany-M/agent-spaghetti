@@ -48,7 +48,7 @@ export const handlers: Handlers = {
     const l = s.loaded(), off = s.settings.get('disabled');
     return { rows: toolRows({ snapshot: snapshot(s), live: s.live(), targets: handlers.targets({}, s) as Target[], consents: s.consent.pending(),
       prefs: { auto: s.settings.get('connect.auto'), never: s.settings.get('connect.never') },
-      loaded: l.integrations.map(i => ({ id: i.manifest.id, name: i.manifest.name, source: i.source, roles: i.manifest.roles, levels: levelsOf(i, ENGINES), disabled: off.includes(i.manifest.id) })) }),
+      loaded: l.integrations.map(i => ({ id: i.manifest.id, name: i.manifest.name, source: i.source, roles: i.manifest.roles, levels: levelsOf(i, ENGINES), disabled: off.includes(i.manifest.id), setup: !!i.module?.setup })) }),
       rejected: l.rejected };
   },
   switches: async (_i, s) => {
@@ -145,6 +145,19 @@ export const handlers: Handlers = {
       errors.push(`${envId}: ${r?.error ?? 'not running'}`);
     }
     throw new Error(errors.join('; '));
+  },
+  setup: async (i, s) => {   // where the tool's own program was found (the OpenClaw gateway's distro, not a Windows companion app)
+    const id = need(i.integration, 'integration');
+    if (!s.loaded().integrations.find(x => x.manifest.id === id)?.module?.setup) throw new Error(`${id} has nothing to set up`);
+    const envIds = [...new Set(snapshot(s)?.detections.filter(d => d.integration === id && (!i.envId || d.envId === i.envId)
+      && d.installs.some(x => x.via === 'bin' || x.via === 'path')).map(d => d.envId))];
+    if (!envIds.length) throw new Error(`${id} was not found by the last scan`);
+    return Promise.all(envIds.map(async envId => {
+      const cli = s.cli(envId);
+      if (!cli) return { envId, error: 'agent-spaghetti cannot run there (see: status)' };
+      const [r] = await s.onEnvs('setup', [id, JSON.stringify(cli), i.check ? 'check' : 'apply', i.dryRun ? 'dry-run' : '', JSON.stringify(s.settings.optionsOf(id))], [envId]);
+      return r ?? { envId, error: 'not running' };
+    }));
   },
   hook: (i, s) => {   // metadata only: the hook command already dropped prompts, responses and file contents
     const d = i.data ?? {};

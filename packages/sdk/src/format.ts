@@ -109,9 +109,10 @@ export interface ToolRow {
   connection?: 'connected' | 'not connected';               // clients only
   preference?: 'always' | 'never' | 'ask';                  // clients only (ADR 0009)
   asks: number;                                             // questions about this tool waiting for the user
+  setup?: true;                                             // has tool-side setup (Set up / Check)
 }
 export interface ToolInput {
-  loaded: Array<{ id: string; name: string; source: 'builtin' | 'user'; roles: Role[]; levels: Level[]; disabled: boolean }>;
+  loaded: Array<{ id: string; name: string; source: 'builtin' | 'user'; roles: Role[]; levels: Level[]; disabled: boolean; setup?: boolean }>;
   snapshot: Snapshot | null; live: LiveState; targets: Target[]; prefs: { auto: string[]; never: string[] }; consents: Array<{ subject: string }>;
 }
 /** The one row model behind the Tools panel and the CLI (ADR 0009). */
@@ -129,7 +130,7 @@ export function toolRows(x: ToolInput): ToolRow[] {
       why: i.disabled ? 'skipped in scans' : (client[0] ?? dets[0])?.why ?? 'not found on this machine',
       ...(client.length ? { connection: client.some(d => d.connected) ? 'connected' as const : 'not connected' as const,
         preference: x.prefs.auto.includes(i.id) ? 'always' as const : x.prefs.never.includes(i.id) ? 'never' as const : 'ask' as const } : {}),
-      asks: x.consents.filter(c => c.subject === i.id).length,
+      asks: x.consents.filter(c => c.subject === i.id).length, ...(i.setup ? { setup: true as const } : {}),
     };
   });
 }

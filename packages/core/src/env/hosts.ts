@@ -20,5 +20,5 @@ export async function hostCandidates(kind: EnvKind, extra: string[]): Promise<st
   }
   return [...new Set([...out, ...extra.filter(Boolean)])];
 }
-/** LLM_HOSTS (space/comma separated): the same variable the OpenClaw pack already used. */
+/** LLM_HOSTS (space/comma separated) in the daemon's environment; the `llmHosts` setting adds to it. */
 export const extraHostsFromEnv = (e: NodeJS.ProcessEnv = process.env) => (e.LLM_HOSTS ?? '').split(/[\s,]+/).filter(Boolean);

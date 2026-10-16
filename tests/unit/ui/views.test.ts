@@ -56,8 +56,8 @@ test('tools panel: blocks by type with counts, found first, missing folded; clie
   const { ToolsView, preferenceLists } = await import('@agent-spaghetti/ui');
   const row = (id: string, o: Record<string, unknown>) => ({ id, name: id.toUpperCase(), group: 'apps', source: 'builtin', levels: [], envs: ['windows'], state: 'installed', why: 'w', asks: 0, ...o }) as never;
   const props = { busy: null, error: null, closed: new Set(['apps', 'models']), tests: { ed: ['OK    detect'] }, details: {},
-    onToggleGroup: noop, onExpand: noop, onConnect: noop, onPreference: noop, onTest: noop, onSkip: noop, onSwitch: noop, onGrant: noop,
-    rows: [row('ed', { connection: 'not connected', preference: 'ask', asks: 1 }), row('cur', { connection: 'connected', preference: 'always' }),
+    onToggleGroup: noop, onExpand: noop, onConnect: noop, onPreference: noop, onTest: noop, onSkip: noop, onSwitch: noop, onGrant: noop, onSetup: noop,
+    rows: [row('oc', { group: 'agents', setup: true }), row('ed', { connection: 'not connected', preference: 'ask', asks: 1 }), row('cur', { connection: 'connected', preference: 'always' }),
       row('lms', { group: 'models', state: 'ready' }), row('gone', { state: 'not found' })] };
   const a = html(h(ToolsView, props));
   assert.match(a, /<details class="group" open="">.*?Editors &amp; apps · 2.*?1 in use/s, 'a waiting question opens a closed block');
@@ -66,6 +66,8 @@ test('tools panel: blocks by type with counts, found first, missing folded; clie
   assert.match(a, /ED<\/span>.*?installed.*?not connected.*?<button class="allow">Connect<\/button>/s);
   assert.match(a, /CUR<\/span>.*?<button class="">Disconnect<\/button>.*?<option value="always" selected="">Always connect/s);
   assert.match(a, /<pre>OK {4}detect<\/pre>/);
+  assert.match(a, /OC<\/span>.*?>Set up<\/button>.*?>Dry run<\/button>.*?>Check<\/button>/s, 'tools with setup offer it');
+  assert.ok(!/ED<\/span>.*?>Set up</s.test(a.slice(a.indexOf('ED</span>'), a.indexOf('CUR</span>'))));
   assert.deepEqual(preferenceLists(['a', 'x'], ['x'], 'x', 'never'), { 'connect.auto': ['a'], 'connect.never': ['x'] });
   assert.deepEqual(preferenceLists(['a'], ['x'], 'x', 'always'), { 'connect.auto': ['a', 'x'], 'connect.never': [] });
   assert.deepEqual(preferenceLists(['x'], [], 'x', 'ask'), { 'connect.auto': [], 'connect.never': [] });

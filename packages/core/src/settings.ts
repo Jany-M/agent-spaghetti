@@ -9,6 +9,7 @@ export const SETTINGS = {
   'connect.auto': { default: [] as string[], help: 'Clients connected to agent-spaghetti on every scan ("Always connect")' },
   'connect.never': { default: [] as string[], help: 'Clients never connected and never asked about ("Don\'t connect")' },
   'scan.everyMin': { default: 10, help: 'Minutes between automatic full rescans (0 = only on start, on demand and when a tool starts or stops)' },
+  'openclaw.model': { default: 'auto', help: 'Model OpenClaw\'s setup gives the workflow: auto (keep it while it answers, else the first loaded local model), keep, or <server>:<model> from targets' },
   'observe.toolPollMs': { default: 3000, help: 'How often running tools and model servers are re-checked' },
   'observe.sessionPollMs': { default: 2000, help: 'How often agent sessions are polled (tools without an event stream)' },
   'backend.concurrency': { default: 1, help: 'Requests a local model server runs at once (the rest wait in its queue)' },
@@ -16,7 +17,7 @@ export const SETTINGS = {
   'delegate.deadlineSec': { default: 1800, help: 'Longest a delegated run may take' },
 } as const;
 export type SettingKey = keyof typeof SETTINGS;
-export type SettingValue<K extends SettingKey> = (typeof SETTINGS)[K]['default'] extends readonly string[] ? string[] : number;
+export type SettingValue<K extends SettingKey> = (typeof SETTINGS)[K]['default'] extends readonly string[] ? string[] : (typeof SETTINGS)[K]['default'] extends string ? string : number;
 
 export class Settings {
   private store: Store;
@@ -24,16 +25,21 @@ export class Settings {
   get<K extends SettingKey>(k: K): SettingValue<K> { return (this.store.getKv<SettingValue<K>>(`setting:${k}`) ?? SETTINGS[k].default) as SettingValue<K>; }
   set<K extends SettingKey>(k: K, v: SettingValue<K>): void {
     const d = SETTINGS[k].default;
-    if (Array.isArray(d) ? !Array.isArray(v) || v.some(x => typeof x !== 'string') : typeof v !== 'number' || !Number.isFinite(v)) throw new Error(`invalid value for ${k}`);
+    if (Array.isArray(d) ? !Array.isArray(v) || v.some(x => typeof x !== 'string') : typeof d === 'string' ? typeof v !== 'string' : typeof v !== 'number' || !Number.isFinite(v)) throw new Error(`invalid value for ${k}`);
     this.store.setKv(`setting:${k}`, v);
   }
-  /** From CLI/REST text: lists are comma separated ('' = empty), numbers as numbers. */
+  /** From CLI/REST text: lists are comma separated ('' = empty), numbers as numbers, text as is. */
   setText(k: string, text: string): void {
     if (!isSettingKey(k)) throw new Error(`unknown setting ${k} (known: ${Object.keys(SETTINGS).join(', ')})`);
-    this.set(k, (Array.isArray(SETTINGS[k].default) ? text.split(',').map(x => x.trim()).filter(Boolean) : Number(text)) as never);
+    const d = SETTINGS[k].default;
+    this.set(k, (Array.isArray(d) ? text.split(',').map(x => x.trim()).filter(Boolean) : typeof d === 'string' ? text.trim() : Number(text)) as never);
   }
   all(): Record<string, { value: unknown; help: string }> {
     return Object.fromEntries((Object.keys(SETTINGS) as SettingKey[]).map(k => [k, { value: this.get(k), help: SETTINGS[k].help }]));
+  }
+  /** One tool's own settings without the prefix (openclaw.model → { model: … }), for its module hooks. */
+  optionsOf(id: string): Record<string, string> {
+    return Object.fromEntries((Object.keys(SETTINGS) as SettingKey[]).filter(k => k.startsWith(`${id}.`)).map(k => [k.slice(id.length + 1), String(this.get(k))]));
   }
   grants(): Grant[] { return this.store.getKv<Grant[]>('grants') ?? []; }
   setGrants(g: Grant[]): void { this.store.setKv('grants', g); }

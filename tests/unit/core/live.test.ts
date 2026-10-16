@@ -41,7 +41,7 @@ test('asSubject: built-ins untouched; env values reach a third party only when g
   assert.deepEqual(pending, [{ subject: 'acme', action: 'read', resource: 'env:ACME_HOST' }]);
   assert.deepEqual(asSubject(user({ detect: { env: ['ACME_HOST'] } }), env, ctx, [allow('read', 'env:ACME_HOST')]).ctx.inventory.env, { ACME_HOST: 'h' });
 });
-test('settings: defaults, typed set, text parsing, unknown keys and bad values refused, grants persist', () => {
+test('settings: defaults, typed set (lists, numbers, text), text parsing, unknown keys and bad values refused, grants persist', () => {
   const s = new Settings(new Store(':memory:'));
   assert.equal(s.get('events.retentionDays'), 14);
   s.setText('llmHosts', ' 192.0.2.1 ,,192.0.2.2'); assert.deepEqual(s.get('llmHosts'), ['192.0.2.1', '192.0.2.2']);
@@ -51,6 +51,8 @@ test('settings: defaults, typed set, text parsing, unknown keys and bad values r
   assert.throws(() => s.setText('nope', '1'), /unknown setting nope/);
   s.setGrants([allow('net', 'GET /v')]); assert.equal(s.grants().length, 1);
   assert.equal(s.all()['events.retentionDays'].value, 14);
+  assert.equal(s.get('openclaw.model'), 'auto');
+  s.setText('openclaw.model', ' lmstudio:m '); assert.deepEqual(s.optionsOf('openclaw'), { model: 'lmstudio:m' }, 'a tool gets its own settings without the prefix');
 });
 
 const lms: Integration = { source: 'builtin', manifest: { manifest: 1, id: 'lmstudio', name: 'LM Studio', roles: ['backend'], cost: 'free',

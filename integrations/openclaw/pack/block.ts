@@ -1,4 +1,4 @@
-// The orchestrator section of the default agent's AGENTS.md, between stable markers (port of apply.sh's inline Python).
+// The orchestrator section of the default agent's AGENTS.md, between stable markers.
 // Text always comes from a file, never a shell string. Any earlier version of our block is replaced.
 export const BEGIN_PREFIX = '<!-- BEGIN ORCHESTRATOR';
 export const BEGIN = '<!-- BEGIN ORCHESTRATOR (managed by agent-spaghetti; edit roles/orchestrator.block.md) -->';

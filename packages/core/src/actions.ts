@@ -6,9 +6,9 @@ import { inspectAs } from './engine/observe.ts';
 import { testIntegration } from './engine/test.ts';
 import { scanEnv, type EnvScan } from './scan.ts';
 
-export const ENV_COMMANDS = ['inspect', 'switches', 'switch', 'test', 'connect'] as const;
+export const ENV_COMMANDS = ['inspect', 'switches', 'switch', 'test', 'connect', 'setup'] as const;
 export type EnvCommand = (typeof ENV_COMMANDS)[number];
-export interface EnvResults { inspect: EnvScan; switches: Switch[]; switch: Switch; test: TestResult; connect: ConnectResult }
+export interface EnvResults { inspect: EnvScan; switches: Switch[]; switch: Switch; test: TestResult; connect: ConnectResult; setup: TestResult }
 
 /** Integrations with switches, with the detection the engine made (modules never re-detect). */
 async function withSwitches(env: Environment, integrations: Integration[], grants: Grant[]) {
@@ -38,6 +38,16 @@ export async function runEnvCommand<C extends EnvCommand>(env: Environment, inte
         const r = i && await inspectAs(i, env, await env.inventory(i.manifest.detect?.env ?? []), grants);
         if (!i || !r) throw new Error(`${args[0]} is not installed in ${env.id}`);
         return { integration: i.manifest.id, envId: env.id, ...await setConnection(env, i, r.detection, JSON.parse(args[1]), args[2] !== 'off', args[3] === 'dry-run') };
+      }
+      case 'setup': {            // args: integration id, Cli JSON, 'check' | 'apply', 'dry-run' or '', options JSON
+        const i = integrations.find(i => i.manifest.id === args[0]);
+        const r = i?.module?.setup && await inspectAs(i, env, await env.inventory(i.manifest.detect?.env ?? []), grants);
+        if (!i || !r) throw new Error(`${args[0]} has nothing to set up in ${env.id}`);
+        const localModels = async () => (await scanEnv(env, integrations.filter(x => x.manifest.models && x.manifest.speaks?.openai), { grants })).inspections
+          .flatMap(x => x.backends.map(b => ({ integration: b.integration, base: b.endpoint + integrations.find(y => y.manifest.id === b.integration)!.manifest.speaks!.openai!.base, model: b.model, contextLength: b.contextLength })));
+        const steps = await i.module!.setup!(env, r.detection, { action: args[2] === 'check' ? 'check' : 'apply', dryRun: args[3] === 'dry-run', cli: JSON.parse(args[1]),
+          options: JSON.parse(args[4] || '{}'), localModels });
+        return { ok: steps.every(s => s.ok), steps };
       }
       case 'test': {
         const i = integrations.find(i => i.manifest.id === args[0]);

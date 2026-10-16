@@ -10,6 +10,8 @@
 import type { AgentInfo, IntegrationModule, RunEvent } from '@agent-spaghetti/sdk';
 import { parseJsonLoose } from '@agent-spaghetti/sdk';
 import { MCP_NAME, mcpServers, setMcpEnabled, setOurServer } from './pack/mcp.ts';
+import { healthSteps } from './pack/health.ts';
+import { applySetup } from './pack/setup.ts';
 import { openclawExe, openclawJson } from './cli.ts';
 export { openclawExe, openclawJson };
 /** Longest configured provider id wins (ids may contain '/'); otherwise the first segment. */
@@ -102,6 +104,12 @@ export const openclawModule: IntegrationModule = {
     if (!dryRun) await setOurServer(env, exe, on ? { command: cli.command, args: [...cli.args, 'mcp', '--as', 'openclaw'] } : null);
     return { description: on ? `add the ${MCP_NAME} MCP server to OpenClaw (kept on; other servers stay parked)` : `remove the ${MCP_NAME} MCP server from OpenClaw`,
       changes: [`openclaw config patch: mcp.servers.${MCP_NAME}${on ? '' : ' = null'}`, 'openclaw mcp reload'], applied: !dryRun };
+  },
+  /** The workflow pack: check = the wiring report; apply = install it (model from the `openclaw.model` setting). */
+  async setup(env, det, o) {
+    const exe = openclawExe(det);
+    if (!exe) throw new Error('openclaw not found');
+    return o.action === 'check' ? healthSteps(env, exe) : applySetup({ env, exe, dryRun: o.dryRun, model: o.options.model ?? 'auto', cli: o.cli, localModels: o.localModels });
   },
   async switches(env, det) {
     const exe = openclawExe(det);
