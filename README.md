@@ -1,8 +1,12 @@
+<div align="center">
+  <img width="400" height="400" alt="logo_light" src="https://github.com/user-attachments/assets/2a4fab94-ac95-4e36-a97f-39aecd2b67df" />
+
 # Agent Spaghetti
 
 *Multi Agent Orchestrator for tools and LLMs that have no intention of cooperating.*
 
 Your AI tools each live in their own world. Agent Spaghetti untangles them: it makes your agents hand work to each other, one step at a time, on the LLM you choose, local or online.
+</div>
 
 ## What you get today
 
@@ -35,6 +39,8 @@ By default it keeps the model OpenClaw already uses. Re-point it with:
 Other modes (`keep`, `manual`) are described in `packs/openclaw/config/overrides.env.example`.
 
 ## The daemon, the tray and delegation
+
+<img width="380" height="520" alt="taskbar_dark" src="https://github.com/user-attachments/assets/345fcd88-737a-4870-94dc-856b6ffc28cd" />
 
 `npm install`, then (Node.js 24 on Windows):
 
