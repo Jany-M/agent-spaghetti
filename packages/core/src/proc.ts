@@ -34,7 +34,8 @@ export interface LinesOpts { env?: NodeJS.ProcessEnv; input?: string; cwd?: stri
 export function spawnLines(cmd: string, args: string[], onLine: (line: string) => void, opts: LinesOpts = {}):
   { stop(): void; exited: Promise<number>; stderr(): string } {
   const { file, argv, verbatim } = resolveCmd(cmd, args);
-  const child = spawn(file, argv, { windowsHide: true, windowsVerbatimArguments: verbatim, cwd: opts.cwd, env: opts.env,
+  const group = process.platform !== 'win32';   // own process group: stop() also ends what the child started (e.g. `sh -c 'a | b'`)
+  const child = spawn(file, argv, { windowsHide: true, windowsVerbatimArguments: verbatim, cwd: opts.cwd, env: opts.env, detached: group,
     stdio: [opts.input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] });
   let err = '';
   child.stderr!.on('data', (d: Buffer) => { err = (err + d.toString('utf8')).slice(-2000); });
@@ -42,7 +43,8 @@ export function spawnLines(cmd: string, args: string[], onLine: (line: string) =
   if (opts.input !== undefined) child.stdin!.end(opts.input);
   createInterface({ input: child.stdout! }).on('line', onLine);
   const exited = new Promise<number>(r => { child.on('error', () => r(127)); child.on('close', c => r(c ?? 1)); });
-  return { stop: () => { child.kill(); }, exited, stderr: () => err };
+  const stop = () => { try { if (group && child.pid) process.kill(-child.pid, 'SIGTERM'); else child.kill(); } catch { child.kill(); } };
+  return { stop, exited, stderr: () => err };
 }
 /** Lines as an async iterable (runs); throws after the last line when the process failed. */
 export async function* execLines(cmd: string, args: string[], o: LinesOpts & { signal?: AbortSignal } = {}): AsyncIterable<string> {

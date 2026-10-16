@@ -89,8 +89,9 @@ export const openclawModule: IntegrationModule = {
     const agent = req.model ?? toAgents(await openclawJson(env, exe, ['agents', 'list']), {}, env.id).find(a => a.isDefault)?.id.slice('openclaw:'.length) ?? 'main';
     const lines: string[] = [];
     try {
-      for await (const l of env.execLines(exe, ['agent', '--agent', agent, '--session-id', `agent-spaghetti-${ctx.runId ?? Date.now()}`, '--message-file', '/dev/stdin', '--json'],
-        { input: req.task, cwd: req.cwd, signal: ctx.signal })) lines.push(l);
+      // through `cat |`: Node gives children a socket as stdin, which /dev/stdin cannot open (ENXIO); a pipe it can
+      const args = ['agent', '--agent', agent, '--session-id', `agent-spaghetti-${ctx.runId ?? Date.now()}`, '--message-file', '/dev/stdin', '--json'];
+      for await (const l of env.execLines('sh', ['-c', 'cat | "$0" "$@"', exe, ...args], { input: req.task, cwd: req.cwd, signal: ctx.signal })) lines.push(l);
     } catch (e) { if (ctx.signal.aborted || !lines.length) throw e; }   // exit 1 still prints the JSON reason
     yield* agentResult(lines.join('\n'));
   },

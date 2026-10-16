@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { spawnFile, spawnLines } from '../../../packages/core/src/proc.ts';
 import { withDeadline, mapLimit } from '../../../packages/core/src/async.ts';
 import { http } from '../../../packages/core/src/http.ts';
@@ -37,4 +38,15 @@ test('mapLimit keeps order and never exceeds the limit', async () => {
 });
 test('http returns null when unreachable', async () => {
   assert.equal(await http({ url: 'http://127.0.0.1:1/', timeoutMs: 500 }), null);
+});
+test('spawnLines stop() ends what the child started too (POSIX process group)', { skip: process.platform === 'win32' }, async () => {
+  let pid = 0;
+  const p = spawnLines('sh', ['-c', 'cat | "$0" -e "console.log(process.pid); setTimeout(() => {}, 60000)"', node], l => { pid = Number(l); }, { input: '' });
+  for (let i = 0; i < 100 && !pid; i++) await new Promise(r => setTimeout(r, 20));
+  assert.ok(pid > 0);
+  p.stop();
+  await p.exited;
+  await new Promise(r => setTimeout(r, 200));
+  const state = () => { try { return readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ')[1]?.[0]; } catch { return 'gone'; } };   // Z: ended, not reaped yet
+  assert.ok(['gone', 'Z'].includes(state() ?? 'gone'), `the grandchild is still ${state()}`);
 });
