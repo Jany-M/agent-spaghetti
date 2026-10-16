@@ -64,3 +64,9 @@ test('placeholders only: no real-looking user homes or drive paths in code, mani
     .filter(m => !/(Users[\\/]+|home\/|Users\/)(u|user|test|TestUser)$/.test(m.split(': ')[1]));
   assert.deepEqual(offenders, []);
 });
+test('GUI parity (ADR 0009): every op names a panel, the tray menu or machine; every panel offers an op', async () => {
+  const { OPS, PANELS } = await import('@agent-spaghetti/sdk');
+  const allowed = new Set<string>([...PANELS, 'tray-menu', 'machine']);
+  for (const [id, o] of Object.entries(OPS)) assert.ok(allowed.has((o as { gui?: string }).gui ?? ''), `op ${id} has no known gui`);
+  for (const p of PANELS) assert.ok(Object.values(OPS).some(o => o.gui === p), `panel ${p} offers nothing`);
+});

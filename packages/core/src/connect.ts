@@ -28,28 +28,37 @@ async function write(env: Environment, files: Record<string, string>, dryRun: bo
   if (!dryRun) for (const [p, c] of Object.entries(files)) await env.writeFile(p, c);
   return Object.keys(files).map(p => `write ${p}`);
 }
-function installPlugin(env: Environment, spec: NonNullable<NonNullable<Manifest['speaks']>['agentPlugins']>, cli: Cli, client: string, dryRun: boolean) {
+type Speaks = NonNullable<Manifest['speaks']>;
+async function plugin(env: Environment, spec: NonNullable<Speaks['agentPlugins']>, cli: Cli, client: string, on: boolean, dryRun: boolean) {
   const dir = pluginDir(spec.dir);
+  if (!on) {
+    if (!dryRun) await env.remove(dir);
+    return { description: `remove the agent-spaghetti plugin from ${dir} (reload the client)`, changes: [`remove ${dir}`] };
+  }
   const files = Object.fromEntries(Object.entries(pluginFiles(spec.variant ?? 'agent-plugins', cli, client)).map(([k, v]) => [`${dir}/${k}`, v]));
-  return write(env, files, dryRun).then(changes => ({ description: `install the agent-spaghetti plugin in ${dir} (reload the client to load it)`, changes }));
+  return { description: `install the agent-spaghetti plugin in ${dir} (reload the client to load it)`, changes: await write(env, files, dryRun) };
 }
-/** JSON-merge one server entry; the previous file is kept as .bak; a file that is not JSON is never touched. */
-async function mergeMcp(env: Environment, spec: NonNullable<NonNullable<Manifest['speaks']>['mcpClient']>, cli: Cli, client: string, dryRun: boolean) {
+/** JSON-merge (or delete) our one server entry; the previous file is kept as .bak; a file that is not JSON is never touched. */
+async function mcpConfig(env: Environment, spec: NonNullable<Speaks['mcpClient']>, cli: Cli, client: string, on: boolean, dryRun: boolean) {
   const text = await env.readFile(spec.config);
   const json = text === null ? {} : parseJson(text);
   if (!json || typeof json !== 'object' || Array.isArray(json)) throw new Error(`${spec.config} is not a JSON object; not changed`);
   const doc = json as Record<string, Record<string, unknown>>;
-  doc[spec.key] = { ...(doc[spec.key] ?? {}), [SERVER_NAME]: { ...(spec.type ? { type: 'stdio' } : {}), ...mcpEntry(cli, client) } };
+  const { [SERVER_NAME]: _, ...others } = doc[spec.key] ?? {};
+  if (!on && text === null) return { description: `${spec.config} does not exist; nothing to remove`, changes: [] };
+  doc[spec.key] = on ? { ...others, [SERVER_NAME]: { ...(spec.type ? { type: 'stdio' } : {}), ...mcpEntry(cli, client) } } : others;
   const files: Record<string, string> = { ...(text === null ? {} : { [`${spec.config}.bak`]: text }), [spec.config]: JSON.stringify(doc, null, 2) };
-  return write(env, files, dryRun).then(changes => ({ description: `add the ${SERVER_NAME} MCP server to ${spec.config} (restart the client to load it)`, changes }));
+  return { description: `${on ? 'add' : 'remove'} the ${SERVER_NAME} MCP server ${on ? 'to' : 'from'} ${spec.config} (restart the client)`, changes: await write(env, files, dryRun) };
 }
 
-export async function connectIntegration(env: Environment, i: Integration, det: Detection, cli: Cli, dryRun: boolean): Promise<Connected> {
-  if (i.module?.connect) return i.module.connect(env, det, cli, dryRun);
+/** Connect (on) or disconnect a client: the module's own way, else the plugin and/or the MCP config entry. Disconnect is the exact inverse. */
+export async function setConnection(env: Environment, i: Integration, det: Detection, cli: Cli, on: boolean, dryRun: boolean): Promise<Connected> {
+  if (i.module?.connect) return i.module.connect(env, det, cli, on, dryRun);
   const sp = i.manifest.speaks, client = i.manifest.id;
-  const r = sp?.agentPlugins ? await installPlugin(env, sp.agentPlugins, cli, client, dryRun)
-    : sp?.mcpClient ? await mergeMcp(env, sp.mcpClient, cli, client, dryRun)
-    : null;
-  if (!r) throw new Error(`${i.manifest.name} has no MCP client or plugin support agent-spaghetti knows of`);
-  return { ...r, applied: !dryRun };
+  if (!sp?.agentPlugins && !sp?.mcpClient) throw new Error(`${i.manifest.name} has no MCP client or plugin support agent-spaghetti knows of`);
+  // connect: the plugin where supported, else the MCP config; disconnect: both (whichever a user or an older version added)
+  const steps = on ? [sp.agentPlugins ? plugin(env, sp.agentPlugins, cli, client, on, dryRun) : mcpConfig(env, sp.mcpClient!, cli, client, on, dryRun)]
+    : [...(sp.agentPlugins ? [plugin(env, sp.agentPlugins, cli, client, on, dryRun)] : []), ...(sp.mcpClient ? [mcpConfig(env, sp.mcpClient, cli, client, on, dryRun)] : [])];
+  const r = await Promise.all(steps);
+  return { description: r.map(x => x.description).join('; '), changes: r.flatMap(x => x.changes), applied: !dryRun };
 }

@@ -28,6 +28,7 @@ export function guardEnvironment(env: Environment, subject: string, grants: Gran
     },
     readFile: async p => (resolved.has(p) || allowed('read', p) ? env.readFile(p) : null),
     writeFile: async (p, c) => { if (!allowed('write', p)) throw new Error(`not permitted: write ${p}`); return env.writeFile(p, c); },
+    remove: async p => { if (!allowed('write', p)) throw new Error(`not permitted: write ${p}`); return env.remove(p); },
   };
 }
 /** Env values reach a third-party integration only when granted. */

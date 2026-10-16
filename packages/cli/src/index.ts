@@ -15,7 +15,7 @@ export const usage = () => ['Usage: agent-spaghetti <command> [--json]', '',
 const time = (ts: number) => new Date(ts).toTimeString().slice(0, 8);
 const eventLine = (e: StoredEvent) => `${time(e.ts)}  ${e.type}  ${e.source}  ${e.envId}`;
 /** CLI verbs that are not op names (from the usage strings in OPS). */
-const VERB: Record<string, OpId> = { on: 'switch', off: 'switch', allow: 'grant', deny: 'grant', set: 'setting', answer: 'consent' };
+const VERB: Record<string, OpId> = { on: 'switch', off: 'switch', allow: 'grant', deny: 'grant', set: 'setting', answer: 'consent', disconnect: 'connect' };
 const runLine = (r: RunRow) => `${String(r.id).padStart(4)}  ${new Date(r.ts).toLocaleString()}  ${r.source} → ${r.target}${r.model ? ` (${r.model})` : ''}  ${r.kind}  ${r.outcome}`
   + `${r.durationMs ? ` ${Math.round(r.durationMs / 1000)}s` : ''}${r.costUsd ? ` $${r.costUsd.toFixed(4)}` : ''}${r.verdict ? ` [${r.verdict}]` : ''}${r.reason ? `  · ${r.reason}` : ''}`;
 const readStdin = async () => { let s = ''; for await (const c of process.stdin) s += c; return s; };
@@ -138,7 +138,7 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
       case 'cancel': { const r = await c.call('cancel', { id: Number(a1) }); print(r, () => (r.cancelled ? `run ${a1} cancelled` : `run ${a1} is not running`)); break; }
       case 'verdict': { const r = await c.call('verdict', { id: Number(a1), value: a2 as 'up' }); print(r, () => `run ${a1}: ${a2}`); break; }
       case 'connect': {
-        const r = await c.call('connect', { integration: a1, dryRun: args.includes('--dry-run') });
+        const r = await c.call('connect', { integration: a1, on: cmd !== 'disconnect', dryRun: args.includes('--dry-run') });
         print(r, () => [`${r.applied ? 'Done' : 'Would'}: ${r.description} (${r.envId})`, ...r.changes.map(x => `  ${x}`)].join('\n'));
         break;
       }

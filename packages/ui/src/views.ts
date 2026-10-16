@@ -11,15 +11,15 @@ export function ApprovalCard({ req, names, now, onAnswer }: { req: ConsentReques
   const name = names.get(req.subject) ?? req.subject, what = req.action === 'run' ? names.get(req.resource) ?? req.resource : req.resource;
   const left = req.expiresAt ? Math.max(0, Math.round((req.expiresAt - now) / 1000)) : null;
   return h('div', { className: 'card ask', role: 'group', 'aria-label': `Question from ${name}` },
-    h('div', { className: 'what' }, `${name} wants to ${ACTION_LABEL[req.action]} `, h('code', null, what),
+    h('div', { className: 'what' }, ...(req.labels?.title ? [req.labels.title] : [`${name} wants to ${ACTION_LABEL[req.action]} `, h('code', null, what)]),
       req.cost && req.cost !== 'free' ? h('span', { className: 'badge' }, req.cost === 'metered' ? 'paid' : req.cost) : null),
     h('div', { className: 'why' }, req.why),
     req.task !== undefined ? h('pre', null, req.task) : null,
     req.billing ? h('div', { className: 'meta' }, req.billing) : null,
     left !== null ? h('div', { className: 'meta' }, `expires in ${left} s (then denied)`) : null,
     h('div', { className: 'row' },
-      h('button', { onClick: () => onAnswer(req.id, false) }, 'Deny'),
-      ...req.scopes.map(s => h('button', { key: s, className: 'allow', onClick: () => onAnswer(req.id, true, s) }, SCOPE_LABEL[s]))));
+      h('button', { onClick: () => onAnswer(req.id, false) }, req.labels?.deny ?? 'Deny'),
+      ...req.scopes.map(s => h('button', { key: s, className: 'allow', onClick: () => onAnswer(req.id, true, s) }, req.labels?.[s] ?? SCOPE_LABEL[s]))));
 }
 
 function sessions(s: Status) {

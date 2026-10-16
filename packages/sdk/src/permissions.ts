@@ -54,6 +54,7 @@ export interface ConsentRequest {
   id: string; ts: number; subject: string; action: Action; resource: string; why: string;
   scopes: ConsentScope[];                                   // what "allow" may mean here; deny is always offered
   cost?: Cost; task?: string; billing?: string; expiresAt?: number;   // run requests (task text is never stored)
+  labels?: Partial<Record<ConsentScope | 'deny' | 'title', string>>;   // card words when the generic ones do not fit (connect preference)
 }
 export interface ConsentAnswer { answer: 'granted' | 'denied' | 'expired'; scope?: ConsentScope }
 export const SCOPE_LABEL: Record<ConsentScope, string> = { once: 'Allow once', job: 'Allow for this job', always: 'Always allow' };

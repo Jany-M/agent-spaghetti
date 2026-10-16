@@ -1,5 +1,5 @@
 // The one Environment implementation (Node APIs). Runs on the Windows host, on Linux, and inside WSL via the env bundle.
-import { access, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { homedir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
@@ -56,6 +56,7 @@ export function localEnvironment(o: { id?: string; kind?: EnvKind; extraHosts?: 
     httpLines,
     readFile: p => readFile(expandPath(p), 'utf8').catch(() => null),
     writeFile: async (p, c) => { const f = expandPath(p); await mkdir(dirname(f), { recursive: true }); await writeFile(f, c); },
+    remove: p => rm(expandPath(p), { recursive: true, force: true }),
     which: b => whichBin(b),
     glob: p => globFirst(expandPath(p)),
     hostCandidates: () => hostCandidates(kind, o.extraHosts ?? []),

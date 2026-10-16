@@ -87,12 +87,11 @@ export async function isConnected(env: Environment, m: Manifest): Promise<boolea
   const servers = pick(parseJson((await env.readFile(s.mcpClient.config)) ?? ''), s.mcpClient.key);
   return !!servers && typeof servers === 'object' && 'agent-spaghetti' in servers;
 }
-function explain(m: Manifest, installs: Install[], hit: unknown, backends: BackendInfo[], inv: Inventory, connected: boolean): Pick<Detection, 'connectable' | 'why'> {
+function explain(m: Manifest, installs: Install[], hit: unknown, backends: BackendInfo[], inv: Inventory, connected: boolean | undefined): Pick<Detection, 'connectable' | 'why'> {
   const partial = inv.partial.length ? ` (partial scan: ${inv.partial.join(', ')})` : '';
   if (m.detect?.http && !hit) return { connectable: 'needs-setup', why: 'installed, server not running' + partial };
   if (m.models) return { connectable: 'yes', why: backends.length ? `${backends.length} model(s) loaded` : 'server up, no model loaded' };
-  if (m.speaks?.mcpClient || m.speaks?.agentPlugins) return connected ? { connectable: 'yes', why: 'connected to agent-spaghetti' }
-    : { connectable: 'needs-setup', why: `not connected yet (run: agent-spaghetti connect ${m.id})` };
+  if (connected !== undefined) return { connectable: 'yes', why: connected ? 'connected to agent-spaghetti' : 'not connected to agent-spaghetti' };
   return { connectable: 'yes', why: installs.length > 1 ? `${installs.length} installs` : hit || installs.some(i => i.via === 'process') ? 'running' : 'installed' };
 }
 
@@ -115,10 +114,11 @@ export async function inspect(i: Integration, env: Environment, ctx: Ctx): Promi
   const hit = d.http ? await reach(env, d, ctx.inventory, installs) : null;
   if (!installs.length && !hit) return null;
   const backends = m.models && hit ? await listModels(env, m, hit) : [];
+  const connected = m.speaks?.mcpClient || m.speaks?.agentPlugins ? await isConnected(env, m) : undefined;
   const detection: Detection = {
     integration: m.id, name: m.name, envId: env.id, installs, endpoint: hit?.endpoint,
     version: await readVersion(env, d.version, installs, hit?.body), levels: levelsOf(i, ENGINES), cost: m.cost ?? 'unknown',
-    ...explain(m, installs, hit, backends, ctx.inventory, await isConnected(env, m)),
+    ...explain(m, installs, hit, backends, ctx.inventory, connected), ...(connected === undefined ? {} : { connected }),
   };
   const base: Inspection = { detection, agents: [], backends };
   return i.module?.inspect ? i.module.inspect(env, base, ctx) : base;

@@ -1,9 +1,9 @@
-// `connect`: plugin install (Agent Plugins / Cursor) and MCP config merge; dry runs write nothing.
+// `connect` both ways: plugin (Agent Plugins / Cursor), MCP config entry, module CLIs; disconnect is the exact inverse; dry runs write nothing.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeEnv } from '@agent-spaghetti/sdk/testing';
 import { VERSION, type Integration, type Manifest } from '@agent-spaghetti/sdk';
-import { connectIntegration, pluginFiles } from '../../../packages/core/src/connect.ts';
+import { setConnection, pluginFiles } from '../../../packages/core/src/connect.ts';
 
 const cli = { command: 'node', args: ['C:/Program Files/as/cli.ts'] };
 const det = { integration: 'x', name: 'X', envId: 'windows', installs: [], levels: [], cost: 'free' as const, connectable: 'yes' as const, why: '' };
@@ -25,24 +25,63 @@ test('plugin files: Agent Plugins variant vs Cursor variant from the same source
 });
 test('connect: plugin into the client folder; MCP merge keeps other servers and a .bak; malformed config untouched; dry run writes nothing', async () => {
   const env = fakeEnv();
-  const r = await connectIntegration(env, integ({ agentPlugins: { dir: '~/.cursor/plugins/local/', variant: 'cursor' } }), det, cli, false);
+  const r = await setConnection(env, integ({ agentPlugins: { dir: '~/.cursor/plugins/local/', variant: 'cursor' } }), det, cli, true, false);
   assert.equal(r.applied, true);
   assert.ok(env.calls.includes('write ~/.cursor/plugins/local/agent-spaghetti/hooks/hooks.json'));
   const conf = '%APPDATA%/C/mcp.json';
   const merged = fakeEnv({ files: { [conf]: '{"mcpServers":{"other":{"command":"x"}},"keep":1}' } });
-  await connectIntegration(merged, integ({ mcpClient: { config: conf, key: 'mcpServers' } }), det, cli, false);
+  await setConnection(merged, integ({ mcpClient: { config: conf, key: 'mcpServers' } }), det, cli, true, false);
   const doc = JSON.parse((await merged.readFile(conf))!);
   assert.deepEqual(Object.keys(doc.mcpServers), ['other', 'agent-spaghetti']);
   assert.equal(doc.keep, 1);
   assert.equal(await merged.readFile(`${conf}.bak`), '{"mcpServers":{"other":{"command":"x"}},"keep":1}');
-  await assert.rejects(connectIntegration(fakeEnv({ files: { [conf]: '{oops' } }), integ({ mcpClient: { config: conf, key: 'mcpServers' } }), det, cli, false), /not a JSON object; not changed/);
+  await assert.rejects(setConnection(fakeEnv({ files: { [conf]: '{oops' } }), integ({ mcpClient: { config: conf, key: 'mcpServers' } }), det, cli, true, false), /not a JSON object; not changed/);
   assert.equal(doc.mcpServers['agent-spaghetti'].type, undefined);
   const typed = fakeEnv();
-  await connectIntegration(typed, integ({ mcpClient: { config: conf, key: 'servers', type: true } }), det, cli, false);
+  await setConnection(typed, integ({ mcpClient: { config: conf, key: 'servers', type: true } }), det, cli, true, false);
   assert.equal(JSON.parse((await typed.readFile(conf))!).servers['agent-spaghetti'].type, 'stdio', 'VS Code needs "type"');
   const dry = fakeEnv();
-  const d = await connectIntegration(dry, integ({ mcpClient: { config: conf, key: 'servers' } }), det, cli, true);
+  const d = await setConnection(dry, integ({ mcpClient: { config: conf, key: 'servers' } }), det, cli, true, true);
   assert.deepEqual([d.applied, d.changes], [false, [`write ${conf}`]]);
   assert.ok(!dry.calls.some(c => c.startsWith('write')));
-  await assert.rejects(connectIntegration(fakeEnv(), integ({}), det, cli, false), /no MCP client or plugin support/);
+  await assert.rejects(setConnection(fakeEnv(), integ({}), det, cli, true, false), /no MCP client or plugin support/);
+});
+
+test('disconnect is the exact inverse: plugin folder removed; only our MCP entry deleted (others and .bak kept); nothing to remove is fine', async () => {
+  const env = fakeEnv();
+  const both = integ({ agentPlugins: { dir: '~/.cursor/plugins/local', variant: 'cursor' }, mcpClient: { config: '~/.cursor/mcp.json', key: 'mcpServers' } });
+  await setConnection(env, both, det, cli, true, false);
+  assert.ok(await env.readFile('~/.cursor/plugins/local/agent-spaghetti/mcp.json'));
+  assert.equal(await env.readFile('~/.cursor/mcp.json'), null, 'connect uses the plugin where the client has plugins');
+  await env.writeFile('~/.cursor/mcp.json', '{"mcpServers":{"other":{"command":"x"},"agent-spaghetti":{"command":"old"}}}');
+  const off = await setConnection(env, both, det, cli, false, false);
+  assert.equal(await env.readFile('~/.cursor/plugins/local/agent-spaghetti/mcp.json'), null);
+  assert.deepEqual(JSON.parse((await env.readFile('~/.cursor/mcp.json'))!), { mcpServers: { other: { command: 'x' } } });
+  assert.ok(await env.readFile('~/.cursor/mcp.json.bak'));
+  assert.deepEqual(off.changes, ['remove ~/.cursor/plugins/local/agent-spaghetti', 'write ~/.cursor/mcp.json.bak', 'write ~/.cursor/mcp.json']);
+  const none = await setConnection(fakeEnv(), integ({ mcpClient: { config: '~/x.json', key: 'servers' } }), det, cli, false, false);
+  assert.deepEqual(none.changes, []);
+});
+test('module connect both ways: claude mcp add/remove; OpenClaw config patch (null deletes) + reload', async () => {
+  const { BUILTINS } = await import('@agent-spaghetti/integrations');
+  const claude = BUILTINS.find(b => b.manifest.id === 'claude-cli')!, oc = BUILTINS.find(b => b.manifest.id === 'openclaw')!;
+  const d = { ...det, installs: [{ path: '/b/tool', via: 'bin' as const }] };
+  const ok = { code: 0, stdout: '', stderr: '' };
+  const env = fakeEnv({ exec: { '/b/tool mcp remove --scope user agent-spaghetti': ok, '/b/tool mcp add --scope user agent-spaghetti -- node C:/Program Files/as/cli.ts mcp --as claude-cli': ok,
+    '/b/tool config patch --stdin': ok, '/b/tool mcp reload': ok } });
+  await setConnection(env, claude, d, cli, false, false);
+  assert.deepEqual(env.calls, ['exec /b/tool mcp remove --scope user agent-spaghetti']);
+  await setConnection(env, oc, d, cli, true, false);
+  assert.deepEqual(JSON.parse(env.inputs['/b/tool config patch --stdin']), { mcp: { servers: { 'agent-spaghetti': { command: 'node', args: ['C:/Program Files/as/cli.ts', 'mcp', '--as', 'openclaw'], enabled: true } } } });
+  await setConnection(env, oc, d, cli, false, false);
+  assert.deepEqual(JSON.parse(env.inputs['/b/tool config patch --stdin']), { mcp: { servers: { 'agent-spaghetti': null } } });
+  assert.equal(env.calls.filter(c => c === 'exec /b/tool mcp reload').length, 2);
+});
+test('connectionPlan: never disconnects, always connects, unset asks once; tools that cannot connect are left alone', async () => {
+  const { connectionPlan } = await import('../../../packages/core/src/connections.ts');
+  const d = (integration: string, connected?: boolean, envId = 'windows') => ({ ...det, integration, envId, ...(connected === undefined ? {} : { connected }) });
+  const dets = [d('a', true), d('b', false), d('c', false), d('c', true, 'wsl:T'), d('e', false), d('f', true), d('g')];
+  assert.deepEqual(connectionPlan(dets, { auto: ['b', 'c'], never: ['f'] }, new Set(['e'])),
+    [{ id: 'b', do: 'connect' }, { id: 'f', do: 'disconnect' }], 'c is connected somewhere; e was asked already; a connected by hand stays');
+  assert.deepEqual(connectionPlan(dets, { auto: [], never: [] }, new Set()).map(s => s.id + ':' + s.do), ['b:ask', 'e:ask']);
 });

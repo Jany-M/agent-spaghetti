@@ -6,6 +6,8 @@ export const SETTINGS = {
   disabled: { default: [] as string[], help: 'Integrations the scan skips (hub-side off switch)' },
   llmHosts: { default: [] as string[], help: 'Extra hosts to probe for local servers (added to LLM_HOSTS)' },
   'events.retentionDays': { default: 14, help: 'Days of events kept in the store' },
+  'connect.auto': { default: [] as string[], help: 'Clients connected to agent-spaghetti on every scan ("Always connect")' },
+  'connect.never': { default: [] as string[], help: 'Clients never connected and never asked about ("Don\'t connect")' },
   'scan.everyMin': { default: 10, help: 'Minutes between automatic full rescans (0 = only on start, on demand and when a tool starts or stops)' },
   'observe.toolPollMs': { default: 3000, help: 'How often running tools and model servers are re-checked' },
   'observe.sessionPollMs': { default: 2000, help: 'How often agent sessions are polled (tools without an event stream)' },

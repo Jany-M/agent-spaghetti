@@ -27,6 +27,7 @@ export function fakeEnv(s: FakeSpec = {}): Environment & { calls: string[]; inpu
     execLines: (cmd, args, o) => { const k = [cmd, ...args].join(' '); calls.push(`lines ${k}`); if (o?.input !== undefined) inputs[k] = o.input; return replay(s.lines?.[k], k); },
     httpLines: req => { const k = `${req.method ?? 'GET'} ${req.url}`; calls.push(`lines ${k}`); if (req.body !== undefined) inputs[k] = req.body; return replay(s.lines?.[k], k); },
     async writeFile(p, c) { calls.push(`write ${p}`); (s.files ??= {})[p] = c; },
+    async remove(p) { calls.push(`remove ${p}`); for (const k of Object.keys(s.files ?? {})) if (k === p || k.startsWith(`${p}/`)) delete s.files![k]; },
     async readFile(p) { return s.files?.[p] ?? null; },
     async which(b) { return s.bins?.[b] ?? null; },
     async glob(p) { return s.files && p in s.files ? p : null; },

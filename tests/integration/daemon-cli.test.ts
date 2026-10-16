@@ -43,7 +43,7 @@ async function boot(scan: () => Promise<Snapshot> = async () => SNAP) {
     onEnvs: async (cmd, args, envIds) => {
       calls.push([cmd, ...args, ...(envIds ?? ['*'])].join(' '));
       const r: Record<string, unknown> = { switches: sw, switch: { ...sw[0], on: args[1] === 'on' }, test: { ok: true, steps: [{ name: 'detect', ok: true, detail: 'found', ms: 1 }] },
-        connect: { integration: args[0], envId: envIds?.[0], description: 'add it', changes: ['x'], applied: args[2] !== 'dry-run' } };
+        connect: { integration: args[0], envId: envIds?.[0], description: 'add it', changes: ['x'], applied: args[3] !== 'dry-run' } };
       return (envIds ?? ['windows', 'wsl:TestDistro']).map(envId => envId === 'windows' && (cmd === 'switches' || cmd === 'connect') ? { envId, error: 'boom' } : { envId, result: r[cmd] as never });
     } };
   const dir = mkdtempSync(join(tmpdir(), 'as-'));
@@ -223,9 +223,52 @@ test('CLI 3: targets, delegate to a free local model (result printed), runs, run
     r = await cli('delegate', 'nope', 'x'); assert.equal(r.code, 1); assert.match(r.err, /unknown or unavailable target nope/);
     b.services.store.saveSnapshot('scan', { ...SNAP, detections: [...SNAP.detections, ...['windows', 'wsl:TestDistro'].map(envId => ({ ...SNAP.detections[0], integration: 'openclaw', name: 'OpenClaw', envId }))] });
     r = await cli('connect', 'openclaw', '--dry-run'); assert.equal(r.code, 0, r.err); assert.match(r.out, /^Would: add it \(wsl:TestDistro\)\n  x$/);
-    assert.ok(b.calls.includes('connect openclaw {"command":"node","args":["/x/cli.ts"]} dry-run windows'), 'tried the Windows install first');
+    assert.ok(b.calls.includes('connect openclaw {"command":"node","args":["/x/cli.ts"]} on dry-run windows'), 'tried the Windows install first');
+    b.services.store.saveSnapshot('scan', { ...SNAP, detections: [...SNAP.detections, ...['windows', 'wsl:TestDistro'].map(envId => ({ ...SNAP.detections[0], integration: 'openclaw', name: 'OpenClaw', envId,
+      ...(envId === 'wsl:TestDistro' ? { connected: false } : {}) }))] });
+    b.calls.length = 0;
+    r = await cli('connect', 'openclaw'); assert.equal(r.code, 0, r.err); assert.match(r.out, /^Done: add it \(wsl:TestDistro\)/);
+    assert.equal(b.calls[0], 'connect openclaw {"command":"node","args":["/x/cli.ts"]} on  wsl:TestDistro', 'the env where it is a client first');
+    assert.equal((await b.client.call('status')).snapshot!.detections.find(d => d.integration === 'openclaw' && d.envId === 'wsl:TestDistro')!.connected, true, 'snapshot patched');
+    r = await cli('disconnect', 'openclaw'); assert.equal(r.code, 0, r.err);
+    assert.ok(b.calls.some(c => c.startsWith('connect openclaw {"command":"node","args":["/x/cli.ts"]} off')));
     r = await cli('connect', 'ghost'); assert.equal(r.code, 1); assert.match(r.err, /ghost was not found by the last scan/);
     const types = (await b.client.call('events', { since: 0 })).map(e => e.type);
-    for (const t of ['run.started', 'run.finished', 'backend.queue']) assert.ok(types.includes(t as never), t);
+    for (const t of ['run.started', 'run.finished', 'backend.queue', 'client.connected']) assert.ok(types.includes(t as never), t);
   } finally { await b.close(); }
+});
+test('runDaemon: a found client is asked once; "this session" connects until shutdown; a crash is cleaned up at the next start; "don\'t" sticks', async () => {
+  const { runDaemon } = await import('../../packages/core/src/main.ts');
+  const conf = '%APPDATA%/Code/User/mcp.json';
+  const host = fakeEnv({ inventory: { processes: [{ name: 'Code', pid: 1 }] } });
+  const machine = async () => [{ status: { id: 'windows', state: 'running' as const }, env: host }];
+  const entry = async () => JSON.parse((await host.readFile(conf)) ?? '{"servers":{}}').servers['agent-spaghetti'];
+  const question = async (c: HubClient) => { for (let i = 0; i < 100; i++) { const q = (await c.call('status')).consents[0]; if (q) return q; await new Promise(r => setTimeout(r, 20)); } throw new Error('no question'); };
+  const dir = mkdtempSync(join(tmpdir(), 'as-'));
+  let d = await runDaemon({ AGENT_SPAGHETTI_DATA_DIR: dir }, { scanOnStart: false, observe: false, discover: machine });
+  let c = HubClient.fromDiscovery({ AGENT_SPAGHETTI_DATA_DIR: dir });
+  await c.call('scan');
+  const q = await question(c);
+  assert.deepEqual([q.subject, q.labels?.title, q.labels?.once, q.labels?.always, q.labels?.deny], ['vscode', 'Connect VS Code to agent-spaghetti?', 'Connect for this session', 'Always connect', "Don't connect"]);
+  await c.call('scan');
+  assert.equal((await c.call('status')).consents.length, 1, 'asked once per daemon run');
+  await c.call('consent', { id: q.id, allow: true, scope: 'once' });
+  for (let i = 0; i < 100 && !(await entry()); i++) await new Promise(r => setTimeout(r, 20));
+  assert.equal((await entry()).type, 'stdio');
+  await d.close();
+  assert.equal(await entry(), undefined, 'session connection undone on shutdown');
+  // a crash: the session list survives, the connection too; the next start undoes it, then asks again
+  await host.writeFile(conf, '{"servers":{"agent-spaghetti":{"command":"node"}}}');
+  const st = new Store(join(dir, 'store.db')); st.setKv('connect.session', ['vscode']); st.close();
+  d = await runDaemon({ AGENT_SPAGHETTI_DATA_DIR: dir }, { scanOnStart: false, observe: false, discover: machine });
+  c = HubClient.fromDiscovery({ AGENT_SPAGHETTI_DATA_DIR: dir });
+  try {
+    await c.call('scan');
+    assert.equal(await entry(), undefined, 'left over from the crash: disconnected');
+    await c.call('consent', { id: (await question(c)).id, allow: false });
+    for (let i = 0; i < 100 && !(await c.call('settings'))['connect.never'].value; i++) await new Promise(r => setTimeout(r, 20));
+    assert.deepEqual((await c.call('settings'))['connect.never'].value, ['vscode']);
+    await c.call('scan');
+    assert.equal((await c.call('status')).consents.length, 0, "don't connect: never asked again");
+  } finally { await d.close(); }
 });

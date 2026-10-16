@@ -34,6 +34,7 @@ export interface Environment {
   httpLines(req: HttpRequest): AsyncIterable<string>;
   readFile(path: string): Promise<string | null>;
   writeFile(path: string, content: string): Promise<void>;   // creates folders; `connect` only (a `write` grant for third parties)
+  remove(path: string): Promise<void>;                       // file or folder, recursive; missing is fine; `connect` only (`write`)
   which(bin: string): Promise<string | null>;            // absolute path on PATH
   glob(pattern: string): Promise<string | null>;         // first match; expands ~, %VAR% (windows), $VAR; '*' inside one segment
   hostCandidates(): Promise<string[]>;                   // where this env may reach local servers; re-resolved per call
@@ -67,6 +68,7 @@ export interface Detection {
   integration: string; name: string; envId: string; version?: string; endpoint?: string;
   installs: Install[];
   levels: Level[]; cost: Cost; connectable: 'yes' | 'needs-setup' | 'no'; why: string;
+  connected?: boolean;   // clients only: agent-spaghetti's MCP server is in the tool (undefined = cannot connect here)
 }
 export interface AgentInfo { id: string; integration: string; name: string; envId: string; provider?: string; model?: string; endpoint?: string; isDefault?: boolean }
 export interface BackendInfo { id: string; integration: string; model: string; envId: string; endpoint: string; contextLength?: number; reachableFrom: string[] }
@@ -80,7 +82,7 @@ export const EVENT_TYPES = [
   'scan.completed', 'scan.integration_error', 'env.status', 'backend.detected', 'agent.detected',
   'session.started', 'session.updated', 'session.ended', 'backend.changed', 'tool.changed', 'switch.changed', 'permission.pending',
   'consent.requested', 'consent.answered', 'consent.expired',
-  'run.started', 'run.event', 'run.finished', 'backend.queue', 'client.hook',
+  'run.started', 'run.event', 'run.finished', 'backend.queue', 'client.hook', 'client.connected',
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 export interface HubEvent { ts: number; type: EventType; envId: string; source: string; data: Record<string, unknown> }
@@ -123,8 +125,8 @@ export interface IntegrationModule {
   setSwitch?(env: Environment, det: Detection, id: string, on: boolean, ctx: Ctx): Promise<void>;
   test?(env: Environment, det: Detection, ctx: Ctx): Promise<TestStep[]>;
   run?(env: Environment, det: Detection, req: RunRequest, ctx: Ctx): AsyncIterable<RunEvent>;
-  /** Give the tool agent-spaghetti's MCP server where its own CLI is the documented way (else the generic `connect` is used). */
-  connect?(env: Environment, det: Detection, cli: Cli, dryRun: boolean): Promise<Connected>;
+  /** Add (on) or remove agent-spaghetti's MCP server where the tool's own CLI is the documented way (else core/connect.ts does it). */
+  connect?(env: Environment, det: Detection, cli: Cli, on: boolean, dryRun: boolean): Promise<Connected>;
 }
 /** How to run agent-spaghetti in an environment (`[...args, 'mcp', '--as', id]` starts the MCP bridge). */
 export interface Cli { command: string; args: string[] }

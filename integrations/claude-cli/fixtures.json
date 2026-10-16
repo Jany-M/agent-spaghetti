@@ -20,7 +20,8 @@
         "drive",
         "client"
       ],
-      "connectable": "needs-setup"
+      "connectable": "yes",
+      "connected": false
     }
   },
   {

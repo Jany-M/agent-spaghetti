@@ -15,7 +15,8 @@ import { Settings } from './settings.ts';
 import { onEnv, runOnEnv } from './dispatch.ts';
 import { startObservers } from './observers.ts';
 import { Consent } from './consent.ts';
-import type { Services } from './ops.ts';
+import { handlers, type Services } from './ops.ts';
+import { CONNECT_LABELS, connectionPlan } from './connections.ts';
 import { Ledger } from './ledger.ts';
 import { Runner } from './runner.ts';
 import { fileURLToPath } from 'node:url';
@@ -100,7 +101,33 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
       observers = startObservers(entries, c.integrations, { ...c, toolPollMs: settings.get('observe.toolPollMs'), sessionPollMs: settings.get('observe.sessionPollMs') },
         (envId, e) => bus.emit({ ts: Date.now(), envId, ...e }));
     }
+    await applyConnections(snap);
     return snap;
+  }
+  // Connection preferences (ADR 0009). Session connections live in kv until undone: on shutdown, or at the next start after a crash.
+  const SESSION = 'connect.session';
+  const session = () => store.getKv<string[]>(SESSION) ?? [];
+  const setSession = (ids: string[]) => store.setKv(SESSION, [...new Set(ids)]);
+  const leftover = new Set(session());                       // a crash left these connected
+  const asked = new Set<string>();
+  const connect = (id: string, on: boolean) => Promise.resolve(handlers.connect({ integration: id, on }, services))
+    .catch(e => process.stderr.write(`${on ? 'connect' : 'disconnect'} ${id} failed: ${(e as Error).message}\n`));
+  async function applyConnections(snap: Snapshot) {
+    for (const id of leftover) if (!settings.get('connect.auto').includes(id)) await connect(id, false);
+    if (leftover.size) { leftover.clear(); setSession([]); }
+    const now = store.loadSnapshot<Snapshot>('scan') ?? snap;   // connect/disconnect above patched it
+    for (const step of connectionPlan(now.detections, { auto: settings.get('connect.auto'), never: settings.get('connect.never') }, asked)) {
+      if (step.do !== 'ask') { await connect(step.id, step.do === 'connect'); continue; }
+      asked.add(step.id);
+      const name = now.detections.find(d => d.integration === step.id)?.name ?? step.id;
+      void consent.request({ subject: step.id, action: 'config', resource: 'agent-spaghetti MCP server', scopes: ['once', 'always'], labels: { ...CONNECT_LABELS, title: `Connect ${name} to agent-spaghetti?` },
+        why: `${name} was found. Connected, it can hand tasks to your other AI tools through agent-spaghetti (each paid one still asks first).` }).then(async a => {
+        if (a.answer === 'expired') return;                      // ask again at the next start
+        const list = a.answer === 'denied' ? 'connect.never' : a.scope === 'always' ? 'connect.auto' : null;
+        if (list) settings.set(list, [...settings.get(list).filter(x => x !== step.id), step.id]);
+        if (a.answer === 'granted') { if (a.scope === 'once') setSession([...session(), step.id]); await connect(step.id, true); }
+      });
+    }
   }
   const services: Services = {
     store, bus, settings, consent, ledger, runner, host, loaded: () => loaded, live: () => live,
@@ -132,7 +159,10 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
     if (every > 0 && Date.now() - last >= every) void services.scan().catch(() => {});
   }, 60000);
   autoScan.unref();
-  const close = async () => { clearTimeout(rescan); clearInterval(autoScan); observers?.dispose(); clearInterval(pruneTimer); removeDiscovery(); await server.close(); store.close(); };
+  const close = async () => {
+    for (const id of session()) await connect(id, false);    // "Connect for this session" ends here
+    setSession([]);
+    clearTimeout(rescan); clearInterval(autoScan); observers?.dispose(); clearInterval(pruneTimer); removeDiscovery(); await server.close(); store.close(); };
   if (o.scanOnStart !== false) void services.scan().catch(e => process.stderr.write(`first scan failed: ${(e as Error).message}\n`));
   return { port: server.port, dir, services, close };
 }

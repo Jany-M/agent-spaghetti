@@ -9,7 +9,7 @@
 // The config file itself is never opened by the hub.
 import type { AgentInfo, IntegrationModule, RunEvent } from '@agent-spaghetti/sdk';
 import { parseJsonLoose } from '@agent-spaghetti/sdk';
-import { MCP_NAME, addMcpServer, mcpServers, setMcpEnabled } from './pack/mcp.ts';
+import { MCP_NAME, mcpServers, setMcpEnabled, setOurServer } from './pack/mcp.ts';
 import { openclawExe, openclawJson } from './cli.ts';
 export { openclawExe, openclawJson };
 /** Longest configured provider id wins (ids may contain '/'); otherwise the first segment. */
@@ -63,7 +63,8 @@ export const openclawModule: IntegrationModule = {
     if (!exe) return base;
     const [list, providers] = await Promise.all([openclawJson(env, exe, ['agents', 'list']), openclawJson(env, exe, ['config', 'get', 'models.providers'])]);
     if (!Array.isArray(list)) return { ...base, detection: { ...base.detection, connectable: 'needs-setup', why: 'installed; `openclaw agents list --json` failed (is OpenClaw configured?)' } };
-    return { ...base, agents: toAgents(list, providers, env.id) };
+    const connected = (await mcpServers(env, exe)).some(s => s.name === MCP_NAME);
+    return { detection: { ...base.detection, connected }, backends: base.backends, agents: toAgents(list, providers, env.id) };
   },
   observe(env, det, emit, ctx) {
     const exe = openclawExe(det);
@@ -95,12 +96,12 @@ export const openclawModule: IntegrationModule = {
     } catch (e) { if (ctx.signal.aborted || !lines.length) throw e; }   // exit 1 still prints the JSON reason
     yield* agentResult(lines.join('\n'));
   },
-  async connect(env, det, cli, dryRun) {
+  async connect(env, det, cli, on, dryRun) {
     const exe = openclawExe(det);
     if (!exe) throw new Error('openclaw not found');
-    const server = { command: cli.command, args: [...cli.args, 'mcp', '--as', 'openclaw'] };
-    if (!dryRun) await addMcpServer(env, exe, server);
-    return { description: `add the ${MCP_NAME} MCP server to OpenClaw (kept on; other servers stay parked)`, changes: [`openclaw config patch: mcp.servers.${MCP_NAME}`, 'openclaw mcp reload'], applied: !dryRun };
+    if (!dryRun) await setOurServer(env, exe, on ? { command: cli.command, args: [...cli.args, 'mcp', '--as', 'openclaw'] } : null);
+    return { description: on ? `add the ${MCP_NAME} MCP server to OpenClaw (kept on; other servers stay parked)` : `remove the ${MCP_NAME} MCP server from OpenClaw`,
+      changes: [`openclaw config patch: mcp.servers.${MCP_NAME}${on ? '' : ' = null'}`, 'openclaw mcp reload'], applied: !dryRun };
   },
   async switches(env, det) {
     const exe = openclawExe(det);

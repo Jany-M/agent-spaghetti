@@ -122,14 +122,23 @@ export const handlers: Handlers = {
     if (!s.ledger.get(num(i.id, 0))) throw new Error(`no run ${i.id}`);
     s.ledger.update(num(i.id, 0), { verdict: i.value }); return { ok: true };
   },
-  connect: async (i, s) => {   // every environment where the last scan found it, until one connects (e.g. a Windows companion app vs the WSL CLI)
-    const envIds = i.envId ? [i.envId] : [...new Set(snapshot(s)?.detections.filter(d => d.integration === need(i.integration, 'integration')).map(d => d.envId))];
-    if (!envIds.length) throw new Error(`${i.integration} was not found by the last scan`);
+  connect: async (i, s) => {   // where the last scan found it as a client (else every env it was found in), until one works
+    const id = need(i.integration, 'integration'), on = i.on !== false;
+    const found = snapshot(s)?.detections.filter(d => d.integration === id && (!i.envId || d.envId === i.envId)) ?? [];
+    const envIds = [...new Set([...found.filter(d => d.connected !== undefined), ...found].map(d => d.envId))];
+    if (!envIds.length) throw new Error(`${id} was not found by the last scan`);
     const errors: string[] = [];
     for (const envId of envIds) {
       const cli = s.cli(envId);
-      const [r] = cli ? await s.onEnvs('connect', [i.integration, JSON.stringify(cli), i.dryRun ? 'dry-run' : ''], [envId]) : [{ envId, error: 'agent-spaghetti cannot run there (see: status)' }];
-      if (r?.result) return r.result;
+      const [r] = cli ? await s.onEnvs('connect', [id, JSON.stringify(cli), on ? 'on' : 'off', i.dryRun ? 'dry-run' : ''], [envId]) : [{ envId, error: 'agent-spaghetti cannot run there (see: status)' }];
+      if (r?.result) {
+        if (r.result.applied) {   // the panel updates at once: patch the saved scan, tell everyone
+          const snap = snapshot(s);
+          if (snap) s.store.saveSnapshot('scan', { ...snap, detections: snap.detections.map(d => d.integration === id && d.envId === envId ? { ...d, connected: on } : d) });
+          s.bus.emit({ ts: Date.now(), type: 'client.connected', envId, source: id, data: { integration: id, on } });
+        }
+        return r.result;
+      }
       errors.push(`${envId}: ${r?.error ?? 'not running'}`);
     }
     throw new Error(errors.join('; '));

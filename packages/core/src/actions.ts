@@ -1,7 +1,7 @@
 // Per-environment commands. The SAME function answers in the daemon (host env) and in the env bundle (inside distros),
 // so a command is added once here and works everywhere (core/dispatch.ts routes it).
 import type { ConnectResult, Environment, Grant, Integration, RunEvent, RunRequest, Switch, TestResult } from '@agent-spaghetti/sdk';
-import { connectIntegration } from './connect.ts';
+import { setConnection } from './connect.ts';
 import { inspectAs } from './engine/observe.ts';
 import { testIntegration } from './engine/test.ts';
 import { scanEnv, type EnvScan } from './scan.ts';
@@ -33,11 +33,11 @@ export async function runEnvCommand<C extends EnvCommand>(env: Environment, inte
         }
         throw new Error(`unknown switch ${id} in ${env.id}`);
       }
-      case 'connect': {          // args: integration id, Cli JSON, 'dry-run' or ''
+      case 'connect': {          // args: integration id, Cli JSON, 'on' | 'off', 'dry-run' or ''
         const i = integrations.find(i => i.manifest.id === args[0]);
         const r = i && await inspectAs(i, env, await env.inventory(i.manifest.detect?.env ?? []), grants);
         if (!i || !r) throw new Error(`${args[0]} is not installed in ${env.id}`);
-        return { integration: i.manifest.id, envId: env.id, ...await connectIntegration(env, i, r.detection, JSON.parse(args[1]), args[2] === 'dry-run') };
+        return { integration: i.manifest.id, envId: env.id, ...await setConnection(env, i, r.detection, JSON.parse(args[1]), args[2] !== 'off', args[3] === 'dry-run') };
       }
       case 'test': {
         const i = integrations.find(i => i.manifest.id === args[0]);

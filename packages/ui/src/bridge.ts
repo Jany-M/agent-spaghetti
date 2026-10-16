@@ -1,10 +1,10 @@
 // What a renderer may ask the daemon, through the Electron preload (the renderer never holds the token).
-// The one allowlist: the main process refuses every other op.
-import type { OpIO, StoredEvent } from '@agent-spaghetti/sdk/web';
+// The allowlist is derived from OPS[*].gui (ADR 0009): every op a panel or the tray menu offers; `machine` ops never.
+import { OPS, type OpId, type OpIO, type StoredEvent } from '@agent-spaghetti/sdk/web';
 
-export const BRIDGE_OPS = ['status', 'scan', 'consent', 'switches', 'switch'] as const;
-export type BridgeOp = (typeof BRIDGE_OPS)[number];
-export const isBridgeOp = (op: unknown): op is BridgeOp => (BRIDGE_OPS as readonly unknown[]).includes(op);
+export const BRIDGE_OPS = (Object.keys(OPS) as OpId[]).filter((id): id is BridgeOp => OPS[id].gui !== 'machine');
+export type BridgeOp = { [K in OpId]: (typeof OPS)[K]['gui'] extends 'machine' ? never : K }[OpId];
+export const isBridgeOp = (op: unknown): op is BridgeOp => (BRIDGE_OPS as unknown[]).includes(op);
 /** Hub events, plus the connection state the main process sees. */
 export type BridgeEvent = StoredEvent | { type: 'hub.up' | 'hub.down' };
 export interface Bridge {

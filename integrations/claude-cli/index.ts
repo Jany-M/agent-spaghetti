@@ -24,17 +24,19 @@ export function toEvents(line: string): RunEvent[] {
 }
 const exeOf = (det: { installs: Array<{ via: string; path?: string }> }) => det.installs.find(i => (i.via === 'bin' || i.via === 'path') && i.path)?.path;
 export const claudeCliModule: IntegrationModule = {
-  /** `claude mcp add --scope user` is the documented way (https://code.claude.com/docs/en/mcp, checked 2026-10-16). */
-  async connect(env, det, cli, dryRun) {
+  /** `claude mcp add|remove --scope user` is the documented way (https://code.claude.com/docs/en/mcp, checked 2026-10-16). */
+  async connect(env, det, cli, on, dryRun) {
     const exe = exeOf(det);
     if (!exe) throw new Error('Claude Code CLI not found');
+    const remove = ['mcp', 'remove', '--scope', 'user', 'agent-spaghetti'];
     const add = ['mcp', 'add', '--scope', 'user', 'agent-spaghetti', '--', cli.command, ...cli.args, 'mcp', '--as', 'claude-cli'];
     if (!dryRun) {
-      await env.exec(exe, ['mcp', 'remove', '--scope', 'user', 'agent-spaghetti'], { timeoutMs: 30000 });   // replace an older entry
-      const r = await env.exec(exe, add, { timeoutMs: 30000 });
+      await env.exec(exe, remove, { timeoutMs: 30000 });   // also replaces an older entry
+      const r = on ? await env.exec(exe, add, { timeoutMs: 30000 }) : { code: 0, stdout: '', stderr: '' };
       if (r.code !== 0) throw new Error(`claude mcp add failed: ${(r.stderr || r.stdout).trim().slice(-300)}`);
     }
-    return { description: 'add the agent-spaghetti MCP server to Claude Code (user scope)', changes: [`claude ${add.join(' ')}`], applied: !dryRun };
+    return { description: `${on ? 'add' : 'remove'} the agent-spaghetti MCP server ${on ? 'to' : 'from'} Claude Code (user scope)`,
+      changes: [`claude ${(on ? add : remove).join(' ')}`], applied: !dryRun };
   },
   async *run(env, det, req, ctx) {
     const exe = exeOf(det);

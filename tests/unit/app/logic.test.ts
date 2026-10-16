@@ -1,7 +1,7 @@
 // Tray decisions (pure): menu, tooltip, placement, notifications, daemon start, launchers.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import type { HubClient } from '@agent-spaghetti/sdk';
+import { OPS, type HubClient, type OpId } from '@agent-spaghetti/sdk';
 import { BRIDGE_OPS, isBridgeOp } from '@agent-spaghetti/ui/bridge';
 import { ensureDaemon, newQuestions, placeNear, pngToIco, shortcutPaths, tooltip, trayMenu } from '../../../packages/app/src/logic.ts';
 
@@ -26,9 +26,9 @@ test('notify each question once', () => {
   const seen = new Set(['a']);
   assert.deepEqual(newQuestions(seen, ['a', 'b']), ['b']);
 });
-test('bridge allowlist: only the ops the popover needs', () => {
-  assert.deepEqual([...BRIDGE_OPS], ['status', 'scan', 'consent', 'switches', 'switch']);
-  assert.equal(isBridgeOp('shutdown'), false); assert.equal(isBridgeOp('grant'), false); assert.equal(isBridgeOp('status'), true);
+test('bridge allowlist: every op a panel or the tray menu offers, never machine-only ones', () => {
+  assert.deepEqual([...BRIDGE_OPS], (Object.keys(OPS) as OpId[]).filter(id => OPS[id].gui !== 'machine'), 'derived from OPS[*].gui');
+  assert.equal(isBridgeOp('hook'), false); assert.equal(isBridgeOp('nope'), false); assert.equal(isBridgeOp('grant'), true); assert.equal(isBridgeOp('shutdown'), true);
 });
 test('ensureDaemon: reuses a running daemon; starts one once and waits; gives up with a clear error', async () => {
   const fake = {} as HubClient;

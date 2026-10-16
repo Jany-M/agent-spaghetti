@@ -3,7 +3,6 @@ import type { Environment, Grant, Integration, TestResult, TestStep } from '@age
 import { asSubject } from '../permissions.ts';
 import { parseJson, pick } from '@agent-spaghetti/sdk';
 import { inspectAs } from './observe.ts';
-import { isConnected } from './inspect.ts';
 
 export async function testIntegration(host: Environment, i: Integration, grants: Grant[] = []): Promise<TestResult> {
   const steps: TestStep[] = [];
@@ -34,8 +33,8 @@ export async function testIntegration(host: Environment, i: Integration, grants:
       return [ok, ok ? `${model} answered` : `HTTP ${res?.status ?? 'no answer'}`];
     });
   }
-  if (m.speaks?.mcpClient || m.speaks?.agentPlugins) await step('connected', async () =>
-    (await isConnected(env, m)) ? [true, 'agent-spaghetti is available in this client'] : [false, `not connected (run: agent-spaghetti connect ${m.id})`]);
+  if (r.detection.connected !== undefined) await step('connected', async () =>
+    r.detection.connected ? [true, 'agent-spaghetti is available in this client'] : [false, `not connected (Tools → Connect, or: agent-spaghetti connect ${m.id})`]);
   if (i.module?.test) steps.push(...await i.module.test(env, r.detection, { signal: AbortSignal.timeout(60000), inventory }));
   return { ok: steps.every(s => s.ok), steps };
 }
