@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HubClient, DaemonDown, emptyLive, liveState, type Integration, type Snapshot, type Switch } from '@agent-spaghetti/sdk';
 import { Settings } from '../../packages/core/src/settings.ts';
+import { fakeEnv } from '@agent-spaghetti/sdk/testing';
 import { Consent } from '../../packages/core/src/consent.ts';
 import { Store } from '../../packages/core/src/store.ts';
 import { Bus } from '../../packages/core/src/bus.ts';
@@ -18,6 +19,8 @@ const SNAP: Snapshot = { ts: 1, envs: [{ id: 'windows', state: 'running' }], age
   detections: [{ integration: 'lmstudio', name: 'LM Studio', envId: 'windows', installs: [], levels: ['detect', 'observe'], cost: 'free', connectable: 'yes', why: '1 model(s) loaded' }],
   backends: [{ id: 'lmstudio:m', integration: 'lmstudio', model: 'm', envId: 'windows', endpoint: 'http://127.0.0.1:1234', contextLength: 200192, reachableFrom: ['windows'] }] };
 
+/** The daemon tests never touch the real machine: one fake local environment. */
+const fakeMachine = async () => [{ status: { id: 'windows', state: 'running' as const }, env: fakeEnv() }];
 const THIRD: Integration = { source: 'user', hash: 'h', manifest: { manifest: 1, id: 'acme', name: 'Acme', roles: ['backend'], detect: { bin: ['acme'], http: { port: 9, path: '/v' } } } };
 async function boot(scan: () => Promise<Snapshot> = async () => SNAP) {
   const store = new Store(':memory:'); const bus = new Bus(store);
@@ -126,8 +129,9 @@ test('CLI 1b: switches, on (env resolved, switch.changed → live), test, permis
 test('runDaemon wiring: real settings, grants and host-env commands; no scan or observers unless asked', async () => {
   const { runDaemon } = await import('../../packages/core/src/main.ts');
   const dir = mkdtempSync(join(tmpdir(), 'as-'));
-  const d = await runDaemon({ AGENT_SPAGHETTI_DATA_DIR: dir }, { scanOnStart: false, observe: false });
+  const d = await runDaemon({ AGENT_SPAGHETTI_DATA_DIR: dir }, { scanOnStart: false, observe: false, discover: fakeMachine });
   const c = HubClient.fromDiscovery({ AGENT_SPAGHETTI_DATA_DIR: dir });
+  try {
   assert.equal((await c.call('status')).snapshot, null);
   assert.equal((await c.call('settings'))['events.retentionDays'].value, 14);
   await c.call('setting', { key: 'disabled', value: 'cursor' });
@@ -135,7 +139,7 @@ test('runDaemon wiring: real settings, grants and host-env commands; no scan or 
   const sw = await c.call('switches');
   assert.ok(Array.isArray(sw.switches));
   assert.deepEqual((await c.call('permissions')).subjects, []);
-  await d.close();
+  } finally { await d.close(); }
 });
 
 test('CLI 2: questions show in status with their id; answer allow resolves the asker; status --short; shutdown', async () => {
@@ -160,8 +164,9 @@ test('runDaemon: a third-party drop-in asks once per action; allowing stores a g
   const dir = mkdtempSync(join(tmpdir(), 'as-'));
   mkdirSync(join(dir, 'integrations'));
   writeFileSync(join(dir, 'integrations', 'acme-tool.json'), JSON.stringify({ manifest: 1, id: 'acme-tool', name: 'Acme', roles: ['tool'], detect: { bin: ['acme-tool-xyz'] } }));
-  const d = await runDaemon({ AGENT_SPAGHETTI_DATA_DIR: dir }, { scanOnStart: false, observe: false });
+  const d = await runDaemon({ AGENT_SPAGHETTI_DATA_DIR: dir }, { scanOnStart: false, observe: false, discover: fakeMachine });
   const c = HubClient.fromDiscovery({ AGENT_SPAGHETTI_DATA_DIR: dir });
+  try {
   await c.call('scan');
   const [q] = (await c.call('status')).consents;
   assert.deepEqual([q.subject, q.action, q.resource, q.why], ['acme-tool', 'read', 'PATH:acme-tool-xyz', 'look for the "acme-tool-xyz" program on PATH']);
@@ -173,5 +178,5 @@ test('runDaemon: a third-party drop-in asks once per action; allowing stores a g
   await new Promise(res => setTimeout(res, 3500));
   assert.ok((await c.call('events', { since: 0 })).filter(e => e.type === 'scan.completed').length > before, 'rescanned');
   assert.equal((await c.call('status')).consents.length, 0);
-  await d.close();
+  } finally { await d.close(); }
 });

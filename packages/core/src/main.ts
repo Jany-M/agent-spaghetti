@@ -18,8 +18,13 @@ import { Consent } from './consent.ts';
 import { handlers, type Services } from './ops.ts';
 
 const DAY = 86400000;
-/** scanOnStart (default on) runs the first scan, which also starts live observation. */
-export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: { observe?: boolean; scanOnStart?: boolean } = {}) {
+export interface DaemonOpts {
+  observe?: boolean; scanOnStart?: boolean;                                   // both on by default
+  discover?: (extraHosts: string[]) => Promise<EnvEntry[]>;                  // tests replace the machine
+}
+/** The first scan (on by default) also starts live observation. */
+export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonOpts = {}) {
+  const discover = o.discover ?? ((extraHosts: string[]) => discoverEnvironments({ extraHosts }));
   const dir = dataDir(env);
   const store = new Store(join(dir, 'store.db'));
   const bus = new Bus(store);
@@ -60,7 +65,7 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: { obser
     async scan(): Promise<Snapshot> {
       loaded = await load();                                   // drop-ins are re-read on every scan
       const c = await ctx();
-      entries = await discoverEnvironments({ extraHosts: c.extraHosts });
+      entries = await discover(c.extraHosts);
       const snap = await runScan(entries, c.integrations, bus, { ...c, rejected: loaded.rejected });
       ask(snap.pending);
       if (o.observe !== false) {
@@ -71,7 +76,7 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: { obser
       return snap;
     },
     async onEnvs(cmd, args, envIds) {
-      if (!entries.length) entries = await discoverEnvironments({ extraHosts: (await ctx()).extraHosts });
+      if (!entries.length) entries = await discover((await ctx()).extraHosts);
       const c = await ctx();
       const targets = envIds ? envIds.map(id => entries.find(e => e.status.id === id) ?? { status: { id, state: 'error' as const, why: 'unknown environment' } })
         : entries.filter(e => e.status.state === 'running');
