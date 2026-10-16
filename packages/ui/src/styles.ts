@@ -51,6 +51,8 @@ details.group > .card { margin-top:6px; }
 .form label.setting { padding:6px 0; border-bottom:1px solid var(--line); } .form label.setting .name { color:var(--fg); font-weight:600; }
 input, select, textarea { font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:4px 6px; width:100%; }
 textarea { resize:vertical; }
+.row select { width:auto; }
+.tool .row button, .tool .row select { font-size:12px; padding:2px 8px; }
 .runs .line { display:block; width:100%; text-align:left; border:0; border-bottom:1px solid var(--line); border-radius:0; background:none; padding:4px 0;
   font:11px/1.4 ui-monospace,"Cascadia Mono",Consolas,monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .list .me { font-weight:600; }
