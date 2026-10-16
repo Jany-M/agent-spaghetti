@@ -11,7 +11,7 @@ import { ICON, ensureDaemon, newQuestions, placeNear, shortcutPaths, tooltip, tr
 const DIR = __dirname;                                     // dist/app (bundle) — assets and the popover live next to it
 const ROOT = join(DIR, '..', '..');
 const asset = (f: string) => join(DIR, f);
-const SIZE = { width: 380, height: 520 };
+const SIZE = { width: 420, height: 600 };
 const APP_ID = 'com.agent-spaghetti.tray';
 
 let tray: Tray | null = null, pop: BrowserWindow | null = null, client: HubClient | null = null, up = false, quitting = false;

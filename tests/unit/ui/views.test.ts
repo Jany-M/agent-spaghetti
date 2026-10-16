@@ -39,3 +39,57 @@ test('popover: daemon down; running sessions with agent names; questions first; 
   const idle = html(h(PopoverView, { view: { up: true, status: { snapshot, live: emptyLive(), consents: [] } }, now: 0, onAnswer: noop, onScan: noop, scanning: false }));
   assert.match(idle, /dot idle/); assert.match(idle, /Nothing running\./); assert.ok(!idle.includes('Waiting for you'));
 });
+
+test('popover frame: one tab per panel (current marked, others off while the daemon is down); a panel replaces Home', async () => {
+  const { PANELS } = await import('@agent-spaghetti/sdk');
+  const up = { up: true, status: { snapshot: null, live: emptyLive(), consents: [ask] } };
+  const a = html(h(PopoverView, { view: up, now: 0, onAnswer: noop, onScan: noop, scanning: false, panel: 'runs' }, h('p', null, 'RUNS-PANEL')));
+  assert.deepEqual([...a.matchAll(/<nav[^]*?<\/nav>/g)][0][0].match(/<button[^>]*>([A-Za-z]+)/g)!.map(b => b.replace(/<button[^>]*>/, '')), ['Home', 'Tools', 'Runs', 'Settings', 'Activity']);
+  assert.equal(PANELS.length, 5);
+  assert.match(a, /aria-current="page"[^>]*>Runs/);
+  assert.match(a, /RUNS-PANEL/); assert.ok(!a.includes('Waiting for you'));
+  assert.match(a, />Home<span class="count">1<\/span>/, 'questions counted on the Home tab');
+  const down = html(h(PopoverView, { view: { up: false, status: null }, now: 0, onAnswer: noop, onScan: noop, scanning: false, panel: 'tools' }));
+  assert.match(down, /<button disabled="">Tools<\/button>/); assert.match(down, /Start the daemon/);
+});
+test('tools panel: blocks by type with counts, found first, missing folded; client row: connection, connect button, preference; asking opens its block', async () => {
+  const { ToolsView, preferenceLists } = await import('@agent-spaghetti/ui');
+  const row = (id: string, o: Record<string, unknown>) => ({ id, name: id.toUpperCase(), group: 'apps', source: 'builtin', levels: [], envs: ['windows'], state: 'installed', why: 'w', asks: 0, ...o }) as never;
+  const props = { busy: null, error: null, closed: new Set(['apps', 'models']), tests: { ed: ['OK    detect'] }, details: {},
+    onToggleGroup: noop, onExpand: noop, onConnect: noop, onPreference: noop, onTest: noop, onSkip: noop, onSwitch: noop, onGrant: noop,
+    rows: [row('ed', { connection: 'not connected', preference: 'ask', asks: 1 }), row('cur', { connection: 'connected', preference: 'always' }),
+      row('lms', { group: 'models', state: 'ready' }), row('gone', { state: 'not found' })] };
+  const a = html(h(ToolsView, props));
+  assert.match(a, /<details class="group" open="">.*?Editors &amp; apps · 2.*?1 in use/s, 'a waiting question opens a closed block');
+  assert.match(a, /<details class="group"><summary><h2>Model servers · 1/, 'closed stays closed');
+  assert.match(a, /<details class="group"><summary><h2>Not found on this machine · 1/);
+  assert.match(a, /ED<\/span>.*?installed.*?not connected.*?<button class="allow">Connect<\/button>/s);
+  assert.match(a, /CUR<\/span>.*?<button class="">Disconnect<\/button>.*?<option value="always" selected="">Always connect/s);
+  assert.match(a, /<pre>OK {4}detect<\/pre>/);
+  assert.deepEqual(preferenceLists(['a', 'x'], ['x'], 'x', 'never'), { 'connect.auto': ['a'], 'connect.never': ['x'] });
+  assert.deepEqual(preferenceLists(['a'], ['x'], 'x', 'always'), { 'connect.auto': ['a', 'x'], 'connect.never': [] });
+  assert.deepEqual(preferenceLists(['x'], [], 'x', 'ask'), { 'connect.auto': [], 'connect.never': [] });
+});
+test('runs panel: form fields → delegate input; list lines; selected run shows chain, result, verdict and cancel', async () => {
+  const { RunsView, delegateInput } = await import('@agent-spaghetti/ui');
+  assert.deepEqual(delegateInput({ target: 'oc', task: ' do it ', kind: 'docs', reason: '', model: 'worker' }), { target: 'oc', task: 'do it', kind: 'docs', model: 'worker', source: 'tray', waitMs: 0 });
+  const r = (id: number, o: Record<string, unknown> = {}) => ({ id, ts: 0, source: 'tray', target: 'oc', kind: 'other', taskHash: 'h', outcome: 'done', ...o }) as never;
+  const base = { busy: null, error: null, onSelect: noop, onVerdict: noop, onCancel: noop, onTarget: noop, onSend: noop, runs: [r(2), r(1)],
+    targets: [{ id: 'oc', name: 'OpenClaw', kind: 'agent', cost: 'unknown', envId: 'wsl:T', models: ['main', 'worker'] }] as never, target: 'oc' };
+  const form = html(h(RunsView, { ...base, chain: null, selected: null }));
+  assert.match(form, /<option value="oc"[^>]*>OpenClaw \(unknown\)<\/option>/); assert.match(form, /Agent<select name="model">/);
+  assert.match(form, /<textarea name="task"[^>]*required=""/);
+  assert.equal([...form.matchAll(/class="line"/g)].length, 2);
+  const one = html(h(RunsView, { ...base, chain: [r(1), r(2, { parentRunId: 1, outcome: 'running' })], selected: 2, result: 'partial <b>' }));
+  assert.match(one, /← All runs/); assert.match(one, /<div class="me">/); assert.match(one, /<pre>partial &lt;b&gt;<\/pre>/);
+  assert.match(one, />Cancel<\/button>/); assert.ok(!one.includes('New task'));
+});
+test('settings and activity panels: typed fields from the settings op; newest event first', async () => {
+  const { SettingsView, ActivityView, settingText } = await import('@agent-spaghetti/ui');
+  const s = html(h(SettingsView, { settings: { llmHosts: { value: ['192.0.2.1', '192.0.2.2'], help: 'hosts' }, 'scan.everyMin': { value: 10, help: 'minutes' } }, busy: null, error: null, onSave: noop, onReport: noop }));
+  assert.match(s, /type="text" name="llmHosts" value="192.0.2.1, 192.0.2.2"/); assert.match(s, /type="number" name="scan.everyMin" value="10"/);
+  assert.equal(settingText([]), ''); assert.match(s, /Save report…/);
+  const ev = (id: number, type: string) => ({ id, ts: 0, type, envId: 'hub', source: 's', data: {} }) as never;
+  const a = html(h(ActivityView, { events: [ev(1, 'scan.completed'), ev(2, 'tool.changed')] }));
+  assert.ok(a.indexOf('tool.changed') < a.indexOf('scan.completed'));
+});

@@ -126,7 +126,7 @@ test('CLI 1b: switches, on (env resolved, switch.changed → live), test, permis
   r = await cli('set', 'llmHosts', '192.0.2.5, 192.0.2.6'); assert.match(r.out, /llmHosts\s+192\.0\.2\.5,192\.0\.2\.6/);
   r = await cli('set', 'nope', '1'); assert.equal(r.code, 1); assert.match(r.err, /unknown setting nope/);
   r = await cli('disable', 'acme'); assert.match(r.out, /disabled: acme/);
-  r = await cli('integrations'); assert.match(r.out, /acme\s+Acme\s+user\s+\S+\s+disabled/);
+  r = await cli('integrations'); assert.match(r.out, /^Model servers:\n/m); assert.match(r.out, /acme\s+Acme\s+skipped\s+-\s+-\s+skipped in scans/);
   r = await cli('enable', 'acme'); assert.match(r.out, /disabled: none/);
   r = await cli('report'); assert.equal(r.code, 1); assert.match(r.err, /no scan yet/);
   await cli('scan');
@@ -146,7 +146,7 @@ test('runDaemon wiring: real settings, grants and host-env commands; no scan or 
   assert.equal((await c.call('status')).snapshot, null);
   assert.equal((await c.call('settings'))['events.retentionDays'].value, 14);
   await c.call('setting', { key: 'disabled', value: 'cursor' });
-  assert.equal((await c.call('integrations')).loaded.find(i => i.id === 'cursor')!.disabled, true);
+  assert.equal((await c.call('integrations')).rows.find(i => i.id === 'cursor')!.state, 'skipped');
   const sw = await c.call('switches');
   assert.ok(Array.isArray(sw.switches));
   assert.deepEqual((await c.call('permissions')).subjects, []);

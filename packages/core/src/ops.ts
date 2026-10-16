@@ -1,6 +1,6 @@
 // Handlers for the operations declared once in sdk/ops.ts. Per-environment work goes through Services.onEnvs (core/dispatch).
-import type { EnvResult, Grant, LiveState, OpId, OpIO, Snapshot } from '@agent-spaghetti/sdk';
-import { OPS, declaredActions, levelsOf, renderConfigReport, withGrants, withoutGrants } from '@agent-spaghetti/sdk';
+import type { EnvResult, Grant, LiveState, OpId, OpIO, Snapshot, Target } from '@agent-spaghetti/sdk';
+import { OPS, declaredActions, levelsOf, renderConfigReport, toolRows, withGrants, withoutGrants } from '@agent-spaghetti/sdk';
 import type { Store } from './store.ts';
 import type { Bus } from './bus.ts';
 import type { Loaded } from './registry.ts';
@@ -46,7 +46,10 @@ export const handlers: Handlers = {
   events: (i, s) => s.store.eventsSince(num(i.since, 0), num(i.limit, 500)),
   integrations: (_i, s) => {
     const l = s.loaded(), off = s.settings.get('disabled');
-    return { loaded: l.integrations.map(i => ({ id: i.manifest.id, name: i.manifest.name, source: i.source, levels: levelsOf(i, ENGINES), disabled: off.includes(i.manifest.id) })), rejected: l.rejected };
+    return { rows: toolRows({ snapshot: snapshot(s), live: s.live(), targets: handlers.targets({}, s) as Target[], consents: s.consent.pending(),
+      prefs: { auto: s.settings.get('connect.auto'), never: s.settings.get('connect.never') },
+      loaded: l.integrations.map(i => ({ id: i.manifest.id, name: i.manifest.name, source: i.source, roles: i.manifest.roles, levels: levelsOf(i, ENGINES), disabled: off.includes(i.manifest.id) })) }),
+      rejected: l.rejected };
   },
   switches: async (_i, s) => {
     const r = await s.onEnvs('switches', []);

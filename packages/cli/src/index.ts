@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // `agent-spaghetti` CLI: thin. Every command is an op through HubClient, rendered by sdk/format. No logic of its own.
 import { writeFileSync } from 'node:fs';
-import { DaemonDown, HubClient, OPS, SCOPE_LABEL, detectionRows, describeRun, permissionRows, renderStats, renderTable, renderTree, serveMcpStdio, switchRows, testLines,
-  type Action, type ConsentRequest, type ConsentScope, type OpId, type RunRow, type StoredEvent, type TaskKind } from '@agent-spaghetti/sdk';
+import { DaemonDown, HubClient, OPS, SCOPE_LABEL, detectionRows, describeRun, eventLine, permissionRows, runLine, renderStats, renderTable, renderToolRows, renderTree, serveMcpStdio, switchRows, testLines,
+  type Action, type ConsentRequest, type ConsentScope, type OpId, type TaskKind } from '@agent-spaghetti/sdk';
 import { planHook } from './hook.ts';
 
 export interface IO { out(s: string): void; err(s: string): void }
@@ -12,12 +12,8 @@ export const usage = () => ['Usage: agent-spaghetti <command> [--json]', '',
   `  ${'daemon'.padEnd(44)}Start the daemon (foreground)`,
   `  ${'mcp --as <client>'.padEnd(44)}MCP server for a client (stdio; started by the client)`,
   ...Object.values(OPS).map(o => `  ${o.usage.padEnd(44)}${o.summary}`)].join('\n');
-const time = (ts: number) => new Date(ts).toTimeString().slice(0, 8);
-const eventLine = (e: StoredEvent) => `${time(e.ts)}  ${e.type}  ${e.source}  ${e.envId}`;
 /** CLI verbs that are not op names (from the usage strings in OPS). */
 const VERB: Record<string, OpId> = { on: 'switch', off: 'switch', allow: 'grant', deny: 'grant', set: 'setting', answer: 'consent', disconnect: 'connect' };
-const runLine = (r: RunRow) => `${String(r.id).padStart(4)}  ${new Date(r.ts).toLocaleString()}  ${r.source} → ${r.target}${r.model ? ` (${r.model})` : ''}  ${r.kind}  ${r.outcome}`
-  + `${r.durationMs ? ` ${Math.round(r.durationMs / 1000)}s` : ''}${r.costUsd ? ` $${r.costUsd.toFixed(4)}` : ''}${r.verdict ? ` [${r.verdict}]` : ''}${r.reason ? `  · ${r.reason}` : ''}`;
 const readStdin = async () => { let s = ''; for await (const c of process.stdin) s += c; return s; };
 const consentLine = (c: ConsentRequest) => `? ${c.id}  ${c.subject} wants ${c.action} ${c.resource} (${c.why}) → answer ${c.id} allow|deny${c.scopes.length > 1 ? ` [${c.scopes.join('|')}]` : ''}`;
 /** Reads "--name value" and removes it from args. */
@@ -79,8 +75,7 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
         break;
       case 'integrations': {
         const r = await c.call('integrations');
-        print(r, () => [renderTable([['Id', 'Name', 'Source', 'Levels', 'State'], ...r.loaded.map(i => [i.id, i.name, i.source, i.levels.join(','), i.disabled ? 'disabled' : 'on'])]),
-          ...r.rejected.map(x => `rejected ${x.id}: ${x.why}`)].join('\n'));
+        print(r, () => [renderToolRows(r.rows), ...r.rejected.map(x => `rejected ${x.id}: ${x.why}`)].join('\n'));
         break;
       }
       case 'switches': {

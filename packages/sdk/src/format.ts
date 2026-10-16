@@ -1,5 +1,5 @@
 // The one place that turns data into text (CLI, tray tooltip, app). Names always come from manifests.
-import type { AgentInfo, BackendInfo, Snapshot, Switch, TestResult } from './types.ts';
+import type { AgentInfo, BackendInfo, Level, Role, RunRow, Snapshot, StoredEvent, Switch, Target, TestResult } from './types.ts';
 import type { LiveState } from './state.ts';
 import type { ConsentRequest, DeclaredAction, Grant } from './permissions.ts';
 
@@ -88,4 +88,56 @@ export function renderStats(up: boolean, snap: Snapshot | null, live: LiveState,
   if (runs) lines.push(`${plural(runs, 'delegated task')} running`);
   if (pending.length) lines.push(`${plural(pending.length, 'approval')} waiting`);
   return lines;
+}
+
+/** One run as a line (CLI `runs`, the Runs panel). */
+export const runLine = (r: RunRow) => `${String(r.id).padStart(4)}  ${new Date(r.ts).toLocaleString()}  ${r.source} → ${r.target}${r.model ? ` (${r.model})` : ''}  ${r.kind}  ${r.outcome}`
+  + `${r.durationMs ? ` ${Math.round(r.durationMs / 1000)}s` : ''}${r.costUsd ? ` $${r.costUsd.toFixed(4)}` : ''}${r.verdict ? ` [${r.verdict}]` : ''}${r.reason ? `  · ${r.reason}` : ''}`;
+/** One event as a line (CLI `events`, the Activity panel). */
+export const eventLine = (e: StoredEvent) => `${new Date(e.ts).toTimeString().slice(0, 8)}  ${e.type}  ${e.source}  ${e.envId}`;
+
+/** Tool blocks in the Tools panel and `agent-spaghetti integrations`: first role in this order wins (no manifest field needed). */
+export const TOOL_GROUPS = [
+  { id: 'agents', role: 'agent', label: 'Agents' }, { id: 'models', role: 'backend', label: 'Model servers' },
+  { id: 'apps', role: 'client', label: 'Editors & apps' }, { id: 'tools', role: 'tool', label: 'Other tools' },
+] as const satisfies ReadonlyArray<{ id: string; role: Role; label: string }>;
+export type ToolGroup = (typeof TOOL_GROUPS)[number]['id'];
+export type ToolState = 'ready' | 'running' | 'stopped' | 'installed' | 'not found' | 'skipped';
+export interface ToolRow {
+  id: string; name: string; group: ToolGroup; source: 'builtin' | 'user'; levels: Level[]; envs: string[]; version?: string;
+  state: ToolState; why: string;
+  connection?: 'connected' | 'not connected';               // clients only
+  preference?: 'always' | 'never' | 'ask';                  // clients only (ADR 0009)
+  asks: number;                                             // questions about this tool waiting for the user
+}
+export interface ToolInput {
+  loaded: Array<{ id: string; name: string; source: 'builtin' | 'user'; roles: Role[]; levels: Level[]; disabled: boolean }>;
+  snapshot: Snapshot | null; live: LiveState; targets: Target[]; prefs: { auto: string[]; never: string[] }; consents: Array<{ subject: string }>;
+}
+/** The one row model behind the Tools panel and the CLI (ADR 0009). */
+export function toolRows(x: ToolInput): ToolRow[] {
+  return x.loaded.map((i): ToolRow => {
+    const dets = x.snapshot?.detections.filter(d => d.integration === i.id) ?? [];
+    const live = Object.values(x.live.tools).filter(t => t.integration === i.id);
+    const client = dets.filter(d => d.connected !== undefined);
+    const state: ToolState = i.disabled ? 'skipped' : !dets.length ? 'not found' : x.targets.some(t => t.id === i.id) ? 'ready'
+      : live.some(t => t.running) ? 'running' : live.length || dets.every(d => d.connectable === 'needs-setup') ? 'stopped'
+      : dets.some(d => d.installs.some(n => n.via === 'process')) ? 'running' : 'installed';
+    return {
+      id: i.id, name: i.name, group: TOOL_GROUPS.find(g => i.roles.includes(g.role))?.id ?? 'tools', source: i.source, levels: i.levels,
+      envs: [...new Set(dets.map(d => d.envId))], version: dets.find(d => d.version)?.version, state,
+      why: i.disabled ? 'skipped in scans' : (client[0] ?? dets[0])?.why ?? 'not found on this machine',
+      ...(client.length ? { connection: client.some(d => d.connected) ? 'connected' as const : 'not connected' as const,
+        preference: x.prefs.auto.includes(i.id) ? 'always' as const : x.prefs.never.includes(i.id) ? 'never' as const : 'ask' as const } : {}),
+      asks: x.consents.filter(c => c.subject === i.id).length,
+    };
+  });
+}
+/** The CLI's view of the same rows: one block per group, found tools first. */
+export function renderToolRows(rows: ToolRow[]): string {
+  return TOOL_GROUPS.map(g => {
+    const r = rows.filter(x => x.group === g.id).sort((a, b) => Number(a.state === 'not found') - Number(b.state === 'not found'));
+    return r.length ? [`${g.label}:`, renderTable([['Id', 'Name', 'State', 'Connection', 'Envs', 'Why'],
+      ...r.map(x => [x.id, x.name, x.state, x.connection ? `${x.connection}${x.preference !== 'ask' ? ` (${x.preference})` : ''}` : '-', x.envs.join(',') || '-', x.why])])].join('\n') : '';
+  }).filter(Boolean).join('\n\n');
 }

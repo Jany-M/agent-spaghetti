@@ -1,6 +1,10 @@
-// Tray popover views. Plain React.createElement (no JSX): the same files run in tests under node and in the bundle.
+// Tray popover: frame, Home, the panel host (ADR 0009). Plain React.createElement (no JSX): the same files run in tests under node and in the bundle.
 import { createElement as h, useEffect, useState, type ReactNode } from 'react';
-import { ACTION_LABEL, SCOPE_LABEL, emptyLive, renderStats, trayState, type ConsentRequest, type ConsentScope, type OpIO } from '@agent-spaghetti/sdk/web';
+import { ACTION_LABEL, PANELS, SCOPE_LABEL, emptyLive, renderStats, trayState, type ConsentRequest, type ConsentScope, type OpIO, type Panel } from '@agent-spaghetti/sdk/web';
+import { ToolsPanel } from './tools.ts';
+import { RunsPanel } from './runs.ts';
+import { SettingsPanel } from './settings.ts';
+import { ActivityPanel } from './activity.ts';
 import type { Bridge } from './bridge.ts';
 
 export type Status = OpIO['status']['out'];
@@ -31,20 +35,27 @@ function sessions(s: Status) {
 }
 const section = (title: string, ...children: ReactNode[]) => h('section', null, h('h2', null, title), ...children);
 
-export function PopoverView({ view, now, onAnswer, onScan, scanning }: { view: HubView; now: number; onAnswer: Answer; onScan(): void; scanning: boolean }) {
+const PANEL_LABEL: Record<Panel, string> = { home: 'Home', tools: 'Tools', runs: 'Runs', settings: 'Settings', activity: 'Activity' };
+export interface PopoverProps { view: HubView; now: number; onAnswer: Answer; onScan(): void; scanning: boolean; panel?: Panel; onPanel?(p: Panel): void; children?: ReactNode }
+/** The popover frame: status header, one tab per panel, the panel (Home: questions + what runs), rescan footer. */
+export function PopoverView({ view, now, onAnswer, onScan, scanning, panel = 'home', onPanel, children }: PopoverProps) {
   const s = view.status;
   const consents = s?.consents ?? [];
   const live = s?.live ?? emptyLive(), snap = s?.snapshot ?? null;
   const state = trayState(view.up, snap, live, consents), lines = renderStats(view.up, snap, live, consents);
   const names = new Map(s?.snapshot?.detections.map(d => [d.integration, d.name]) ?? []);
   const running = s ? sessions(s) : [];
+  const shown: Panel = view.up ? panel : 'home';
+  const home = [
+    consents.length ? section('Waiting for you', ...consents.map(c => h(ApprovalCard, { key: c.id, req: c, names, now, onAnswer }))) : null,
+    section('Running', running.length ? h('div', { className: 'card list' }, ...running.map((r, i) => h('div', { key: i }, r))) : h('div', { className: 'empty' }, view.up ? 'Nothing running.' : 'Start the daemon from the tray menu.'))];
   return h('div', { className: 'pop' },
     h('header', { className: 'head' }, h('img', { src: 'icon.png', alt: '' }),
       h('div', { className: 'lines' }, h('div', null, h('span', { className: `dot ${state}`, 'aria-label': state }), lines[0]),
         ...lines.slice(1).map(l => h('div', { key: l }, l)))),
-    h('main', { className: 'body' },
-      consents.length ? section('Waiting for you', ...consents.map(c => h(ApprovalCard, { key: c.id, req: c, names, now, onAnswer }))) : null,
-      section('Running', running.length ? h('div', { className: 'card list' }, ...running.map((r, i) => h('div', { key: i }, r))) : h('div', { className: 'empty' }, view.up ? 'Nothing running.' : 'Start the daemon from the tray menu.'))),
+    h('nav', { className: 'tabs', 'aria-label': 'Panels' }, ...PANELS.map(p => h('button', { key: p, 'aria-current': p === shown ? 'page' : undefined,
+      disabled: !view.up && p !== 'home', onClick: () => onPanel?.(p) }, PANEL_LABEL[p], p === 'home' && consents.length ? h('span', { className: 'count' }, String(consents.length)) : null))),
+    h('main', { className: 'body' }, ...(shown === 'home' ? home : [children])),
     h('footer', { className: 'foot' },
       h('span', null, s?.snapshot ? `last scan ${new Date(s.snapshot.ts).toLocaleTimeString()}` : ''),
       h('button', { onClick: onScan, disabled: !view.up || scanning }, scanning ? 'Scanning…' : 'Rescan')));
@@ -63,12 +74,15 @@ export function useHub(bridge: Bridge): HubView & { refresh(): Promise<void> } {
   return { ...view, refresh };
 }
 
+const PANEL_COMPONENT: Record<Exclude<Panel, 'home'>, (p: { bridge: Bridge }) => ReactNode> = { tools: ToolsPanel, runs: RunsPanel, settings: SettingsPanel, activity: ActivityPanel };
 export function Popover({ bridge }: { bridge: Bridge }) {
   const hub = useHub(bridge);
   const [now, setNow] = useState(Date.now());
   const [scanning, setScanning] = useState(false);
+  const [panel, setPanel] = useState<Panel>('home');
   useEffect(() => { const i = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(i); }, []);
   const onAnswer: Answer = (id, allow, scope) => void bridge.call('consent', { id, allow, scope }).catch(() => {}).finally(hub.refresh);
   const onScan = () => { setScanning(true); void bridge.call('scan').catch(() => {}).finally(() => { setScanning(false); void hub.refresh(); }); };
-  return h(PopoverView, { view: hub, now, onAnswer, onScan, scanning });
+  return h(PopoverView, { view: hub, now, onAnswer, onScan, scanning, panel, onPanel: setPanel },
+    panel === 'home' ? null : h(PANEL_COMPONENT[panel], { bridge }));
 }

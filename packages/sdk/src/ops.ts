@@ -1,5 +1,6 @@
 // The one list of operations: REST routes, CLI usage text and the MCP tools (`mcp`) are all generated from it.
-import type { Snapshot, StoredEvent, Level, RunRequest, RunRow, Switch, Target, TestResult } from './types.ts';
+import type { Snapshot, StoredEvent, RunRequest, RunRow, Switch, Target, TestResult } from './types.ts';
+import type { ToolRow } from './format.ts';
 import { TASK_KINDS } from './types.ts';
 import type { Action, ConsentRequest, ConsentScope, DeclaredAction, Grant, Mode } from './permissions.ts';
 import type { LiveState } from './state.ts';
@@ -15,7 +16,7 @@ export const OPS = {
   status:       { method: 'GET',  path: '/v1/status', gui: 'home',       usage: 'status [--short]',         summary: 'Last scan, live state and questions waiting for you' },
   scan:         { method: 'POST', path: '/v1/scan', gui: 'home',         usage: 'scan',                     summary: 'Scan every environment now' },
   events:       { method: 'GET',  path: '/v1/events', gui: 'activity',       usage: 'events [--follow]',        summary: 'Stored events (or follow new ones)' },
-  integrations: { method: 'GET',  path: '/v1/integrations', gui: 'tools', usage: 'integrations',             summary: 'Loaded and rejected integrations' },
+  integrations: { method: 'GET',  path: '/v1/integrations', gui: 'tools', usage: 'integrations',             summary: 'Every supported tool by type: found where, state, connection' },
   switches:     { method: 'GET',  path: '/v1/switches', gui: 'tools',     usage: 'switches',                 summary: 'On/off switches in every environment' },
   switch:       { method: 'POST', path: '/v1/switch', gui: 'tools',       usage: 'on|off <switch> [--env <id>]', summary: 'Turn a switch on or off' },
   test:         { method: 'POST', path: '/v1/test', gui: 'tools',         usage: 'test <integration> [--env <id>]', summary: 'Check an integration end to end' },
@@ -53,7 +54,7 @@ export interface OpIO {
   status: { in: {}; out: { snapshot: Snapshot | null; live: LiveState; consents: ConsentRequest[] } };
   scan: { in: {}; out: { snapshot: Snapshot } };
   events: { in: { since?: number; limit?: number }; out: StoredEvent[] };
-  integrations: { in: {}; out: { loaded: Array<{ id: string; name: string; source: string; levels: Level[]; disabled: boolean }>; rejected: Array<{ id: string; why: string }> } };
+  integrations: { in: {}; out: { rows: ToolRow[]; rejected: Array<{ id: string; why: string }> } };
   switches: { in: {}; out: { switches: Switch[]; errors: Array<{ envId: string; error: string }> } };
   switch: { in: { id: string; on: boolean; envId?: string }; out: Switch };
   test: { in: { integration: string; envId?: string }; out: Array<EnvResult<TestResult>> };
