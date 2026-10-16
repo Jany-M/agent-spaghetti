@@ -29,7 +29,15 @@ By default (`auto`) the setup keeps the model OpenClaw already uses while it ans
 
 ## The daemon, the tray and delegation
 
+<div align="center">
 <img width="380" height="520" alt="taskbar_dark" src="https://github.com/user-attachments/assets/345fcd88-737a-4870-94dc-856b6ffc28cd" />
+<img width="380" height="520" alt="preview" src="https://github.com/user-attachments/assets/0ae9022f-b21b-433b-82f4-7bc498c24006" />
+<img width="380" height="520" alt="preview (3)" src="https://github.com/user-attachments/assets/04cef01e-a242-4faf-96bc-526c13eaab41" />
+<img width="380" height="520" alt="preview (4)" src="https://github.com/user-attachments/assets/8d2be3b2-9f36-4d49-afd1-bec7fbae0096" />
+<img width="380" height="520" alt="preview (6)" src="https://github.com/user-attachments/assets/29905432-99db-410f-b455-c4959d369de3" />
+</div>
+
+
 
 `npm install`, then (Node.js 24 on Windows):
 
