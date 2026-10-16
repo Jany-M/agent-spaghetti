@@ -79,6 +79,7 @@ else {
     app.setAppUserModelId('com.agent-spaghetti.tray');
     tray = new Tray(nativeImage.createFromPath(asset(ICON.problem)));
     tray.on('click', () => (pop?.isVisible() ? pop.hide() : showPopover()));
+    client = await ensureDaemon({ connect, start: startDaemon }).catch(e => { console.error(e); return null; });   // before the page asks for status
     pop = new BrowserWindow({ ...SIZE, show: false, frame: false, resizable: false, skipTaskbar: true, alwaysOnTop: true, icon: asset('icon.png'),
       webPreferences: { preload: asset('preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
     pop.on('blur', () => pop?.hide());
@@ -91,7 +92,6 @@ else {
     });
     await pop.loadFile(asset('popover.html'));
     setMenu();
-    await ensureDaemon({ connect, start: startDaemon }).catch(e => console.error(e));
     void follow();
   });
 }
