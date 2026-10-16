@@ -1,5 +1,6 @@
 // WSL distros (ADR 0002 as amended 2026-10-16): list them without side effects, and run the env bundle inside
 // RUNNING distros over stdio. wsl.exe is only used to list, to copy the bundle (when its hash changed) and to run it.
+// Always `--exec` (no shell): with `--`, wsl.exe re-parses the command line through a shell and drops/mangles arguments.
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -44,7 +45,7 @@ export type DistroRun = { ok: true; stdout: string } | { ok: false; why: string 
 export async function runInDistro(distro: string, bundle: Bundle | null, args: string[], input: string, spawn: Spawn = spawnFile,
   timeoutMs = 120000): Promise<DistroRun> {
   if (!bundle) return { ok: false, why: 'env bundle not built (run: npm run build)' };
-  const wsl = (a: string[], o: { input?: string | Buffer; timeoutMs?: number } = {}) => spawn('wsl.exe', ['-d', distro, '--', ...a], { timeoutMs: 30000, ...o });
+  const wsl = (a: string[], o: { input?: string | Buffer; timeoutMs?: number } = {}) => spawn('wsl.exe', ['-d', distro, '--exec', ...a], { timeoutMs: 30000, ...o });
   const probe = await wsl(['sh', '-c', PROBE, 'sh', bundle.sha256]);
   const kv = Object.fromEntries(probe.stdout.toString('utf8').split('\n').map(l => l.trim().split(/=(.*)/s).slice(0, 2)).filter(p => p.length === 2));
   if (probe.code !== 0 || !kv.dir) return { ok: false, why: `distro not reachable (wsl exit ${probe.code})` };

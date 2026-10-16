@@ -98,7 +98,7 @@ test('runInDistro: no node → reason; stale bundle copied once; fresh bundle no
   assert.deepEqual(r, { ok: true, stdout: '{"ok":1}' });
   assert.equal(calls.length, 3);
   assert.ok(Buffer.isBuffer(calls[1].input));
-  assert.deepEqual(calls[2].a, ['-d', 'T', '--', '/usr/bin/node', '/d/agent-spaghetti-env.mjs', 'inspect', '--x']);
+  assert.deepEqual(calls[2].a, ['-d', 'T', '--exec', '/usr/bin/node', '/d/agent-spaghetti-env.mjs', 'inspect', '--x']);
   calls.length = 0;
   await runInDistro('T', bundle, ['inspect'], '{}', mk('dir=/d\nnode=/usr/bin/node\nfresh=1\n'));
   assert.equal(calls.length, 2);

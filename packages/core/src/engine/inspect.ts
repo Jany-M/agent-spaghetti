@@ -20,8 +20,10 @@ async function findInstalls(env: Environment, d: Detect, inv: Inventory): Promis
   };
   for (const a of inv.installed) if (d.installed?.some(p => wildcard(p, a.name))) add({ path: a.location, version: a.version, via: 'installed' });
   for (const p of inv.processes) if (d.process?.some(n => wildcard(exeName(n), p.name))) add({ path: p.path, via: 'process', pid: p.pid });
-  for (const b of d.bin ?? []) add({ path: (await env.which(b)) ?? undefined, via: 'bin' });
-  for (const g of pathsFor(d.paths, env.kind)) add({ path: (await env.glob(g)) ?? undefined, via: 'path' });
+  // bin names and default paths are alternatives for ONE install: the first hit counts (several installs come from the OS list)
+  for (const b of d.bin ?? []) { const p = await env.which(b); if (p) { add({ path: p, via: 'bin' }); break; } }
+  if (!out.some(i => i.via === 'bin'))
+    for (const g of pathsFor(d.paths, env.kind)) { const p = await env.glob(g); if (p) { add({ path: p, via: 'path' }); break; } }
   return out;
 }
 export function endpointsToTry(d: Detect, inv: Inventory, installs: Install[], hosts: string[]): string[] {
@@ -46,10 +48,11 @@ async function reach(env: Environment, d: Detect, inv: Inventory, installs: Inst
   return null;
 }
 async function readVersion(env: Environment, v: Detect['version'], installs: Install[], body?: string) {
-  if (!v) return undefined;
-  if ('from' in v) return installs.find(i => i.version)?.version;
+  return (v && !('from' in v) ? await readDeclaredVersion(env, v, installs, body) : undefined) ?? installs.find(i => i.version)?.version;
+}
+async function readDeclaredVersion(env: Environment, v: Exclude<Detect['version'], undefined | { from: 'installed' }>, installs: Install[], body?: string) {
   if ('args' in v) {
-    const exe = installs.find(i => i.path && i.via !== 'installed')?.path;   // an executable, never an install folder
+    const exe = installs.find(i => i.path && (i.via === 'bin' || i.via === 'path'))?.path;   // only declared binaries (ADR 0004 trust)
     if (!exe) return undefined;
     const r = await env.exec(exe, v.args, { timeoutMs: EXEC_MS });
     return r.code === 0 ? new RegExp(v.regex ?? DEFAULT_VERSION.source).exec(r.stdout + r.stderr)?.[1] : undefined;

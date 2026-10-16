@@ -74,6 +74,14 @@ test('version from args runs the found executable, never an install folder; proc
   const c = await run({ detect: { process: ['t.exe'] } }, { inventory: { processes: [{ name: 'T', pid: 9 }] } });
   assert.equal(c.r!.detection.why, 'running');
 });
+test('alternative bin names are ONE install; a running GUI process is never executed for --version; installer version is the fallback', async () => {
+  const a = await run({ detect: { bin: ['tool-mcp', 'tool'] } }, { bins: { 'tool-mcp': '/b/tool-mcp', tool: '/b/tool' } });
+  assert.equal(a.r!.detection.installs.length, 1);
+  const b = await run({ detect: { installed: ['App'], process: ['App'], version: { args: ['--version'] } } },
+    { inventory: { installed: [{ name: 'App', version: '9.9', location: 'C:/App', source: 'uninstall' }], processes: [{ name: 'App', pid: 3, path: 'C:/App/App.exe' }] } });
+  assert.deepEqual(b.env.calls, []);
+  assert.equal(b.r!.detection.version, '9.9');
+});
 test('a module enriches the base result', async () => {
   const { r } = await run({ detect: { bin: ['t'] } }, { bins: { t: '/t' } }, { async inspect(env, base) { return { ...base, agents: [{ id: 'x:a', integration: 'x', name: 'a', envId: env.id }] }; } });
   assert.equal(r!.agents[0].name, 'a');
