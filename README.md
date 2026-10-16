@@ -39,7 +39,7 @@ Other modes (`keep`, `manual`) are described in `packs/openclaw/config/overrides
 `npm install`, then (Node.js 24 on Windows):
 
 ```powershell
-npm run tray                          # tray icon: status on hover, questions to answer; starts the daemon if needed
+npm run tray  # tray icon: status on hover, questions to answer; starts the daemon if needed
 node packages/cli/src/index.ts help   # or the CLI (the daemon: `... daemon`)
 ```
 
@@ -52,4 +52,4 @@ Limits: Cursor can't use a local model as its own model (its servers can't reach
 
 ## License
 
-[Business Source License 1.1](LICENSE): free for personal and internal use, not for selling or hosting as a service. Each version becomes Apache-2.0 on 2029-10-16 or four years after its release, whichever comes first.
+[Business Source License 1.1](LICENSE): free for personal and internal use, not for selling or hosting as a service. Each version becomes Apache-2.0 2 years after its release.
