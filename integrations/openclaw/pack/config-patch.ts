@@ -1,5 +1,6 @@
 // Port of scripts/lib/orch_config.py: the machine-specific part of the OpenClaw config patch. Modes (PROVIDER_MODE):
-//   auto (default) keep the current primary model while its endpoint answers (or has none to probe); else re-detect
+//   auto (default) keep the current primary model while its endpoint answers (or has none to probe); else re-detect,
+//                  and if nothing is found keep it anyway with a warning (the server may just not be started yet)
 //   keep           never touch provider/model;  follow  always use what a local server has loaded right now
 //   manual         PROVIDER_ID / BASE_URL / MODEL_ID (+ CONTEXT_WINDOW, MAX_TOKENS, API_KEY)
 // Detection is the engine's (injected): loaded models only. Reads only non-secret config paths via `openclaw config get`.
@@ -68,13 +69,15 @@ export async function buildPatch(d: PatchDeps): Promise<Record<string, any>> {
   } else {
     const cur = splitModelRef(primary, Object.keys(prov));
     const needDetect = mode === 'follow' || (mode === 'auto' && (!primary || !(await endpointOk(d, prov[cur.provider!]))));
-    if (mode === 'keep' || !needDetect) {
+    const det = needDetect ? await d.detect() : null;
+    const keepCurrent = mode === 'keep' || !needDetect || (mode === 'auto' && !det && !!primary && !!prov[cur.provider!]);
+    if (needDetect && !det && keepCurrent) d.say(`WARNING: the endpoint of ${primary} does not answer and no other local LLM server with a loaded model was found; keeping it (start your LLM server, or set LLM_HOSTS / PROVIDER_MODE)`);
+    if (keepCurrent) {
       if (primary && cur.provider && prov[cur.provider]) {
-        d.say(`keeping current primary model ${primary} (${prov[cur.provider].baseUrl ? 'endpoint answers' : 'no local endpoint to probe'})`);
+        if (!needDetect) d.say(`keeping current primary model ${primary} (${prov[cur.provider].baseUrl ? 'endpoint answers' : 'no local endpoint to probe'})`);
         choice = { pid: cur.provider, model: cur.model, p: { timeoutSeconds: timeout } };
       } else if (!primary) d.say('no primary model configured and PROVIDER_MODE=keep: nothing to set');
     } else {
-      const det = await d.detect();
       if (!det) throw new Error('no local LLM server with a loaded model found (LM Studio, Ollama, llama.cpp, vLLM; default ports, running processes, LLM_HOSTS). '
         + 'Start one and load a model, set LLM_HOSTS, or use PROVIDER_MODE=manual.');
       const pid = providerIdFor(det.integration);

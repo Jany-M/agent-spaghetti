@@ -25,8 +25,12 @@ export interface PackDeps {
 export const USAGE = 'usage: openclaw patch [--dry-run] | info | block <AGENTS.md> <block.md> | mcp <command> … | health';
 
 export async function packMain(args: string[], env: Environment, deps: PackDeps): Promise<number> {
-  const [cmd, ...a] = args;
   const say = deps.say ?? ((s: string) => process.stdout.write(s + '\n'));
+  try { return await run(args, env, deps, say); }
+  catch (e) { say(`ERROR: ${(e as Error).message}`); return 1; }   // a clear message, never a stack trace
+}
+async function run(args: string[], env: Environment, deps: PackDeps, say: (s: string) => void): Promise<number> {
+  const [cmd, ...a] = args;
   const vars = deps.vars ?? process.env;
   if (cmd === 'block') {
     if (a.length !== 2) { say(USAGE); return 1; }

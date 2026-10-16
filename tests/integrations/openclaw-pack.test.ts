@@ -78,13 +78,21 @@ test('patch auto: endpoint down → re-detect, new provider gets api + default k
   assert.deepEqual(p.models.providers['local-ollama'].models, [{ id: 'test-model', name: 'test-model', contextWindow: 16384, maxTokens: 8192 }]);
 });
 
+test('patch auto: endpoint down and nothing found → keep the current model with a warning', async () => {
+  const env = fakeEnv({ kind: 'linux', exec: cfg({ 'models.providers': { lmstudio: {} }, 'models.providers.lmstudio': { baseUrl: 'http://192.0.2.99:1234/v1' }, 'agents.defaults.model': 'lmstudio/m1' }) });
+  const said: string[] = [];
+  const p = await buildPatch({ env, exe: OC, vars: {}, say: s => said.push(s), detect: async () => null });
+  assert.deepEqual(p, { models: { providers: { lmstudio: { timeoutSeconds: 900 } } } });
+  assert.match(said.join('\n'), /WARNING: the endpoint of lmstudio\/m1 does not answer/);
+});
 test('patch follow updates a declared context window; manual needs all three vars; nothing found → clear error', async () => {
   const env = fakeEnv({ kind: 'linux', exec: cfg({ 'models.providers': { lmstudio: {} }, 'models.providers.lmstudio': { baseUrl: LMS.base, models: [{ id: 'test-model', contextWindow: 4096 }] } }) });
   const p = await buildPatch({ env, exe: OC, vars: { PROVIDER_MODE: 'follow' }, say, detect: async () => LMS });
   assert.equal(p.models.providers.lmstudio.models[0].contextWindow, 16384);
   assert.equal(p.models.providers.lmstudio.apiKey, undefined, 'existing provider keeps its own key');
   await assert.rejects(buildPatch({ env, exe: OC, vars: { PROVIDER_MODE: 'manual', PROVIDER_ID: 'x' }, say, detect: async () => null }), /MANUAL|manual/);
-  await assert.rejects(buildPatch({ env, exe: OC, vars: {}, say, detect: async () => null }), /no local LLM server/);
+  await assert.rejects(buildPatch({ env, exe: OC, vars: { PROVIDER_MODE: 'follow' }, say, detect: async () => null }), /no local LLM server/);
+  await assert.rejects(buildPatch({ env: fakeEnv({ kind: 'linux', exec: cfg({ 'models.providers': {} }) }), exe: OC, vars: {}, say, detect: async () => null }), /no local LLM server/);
   assert.deepEqual(stripProvider({ models: {}, agents: { defaults: {} }, mcp: { servers: {} } }), { mcp: { servers: {} } });
 });
 
@@ -101,6 +109,9 @@ test('packMain: openclaw missing → exit 1; mcp list/on and block go through th
   assert.equal(await packMain(['mcp', 'list'], env, deps), 0);
   assert.deepEqual(lines, ['off  github                     MCP server', 'ON   zz                         remote MCP server at h.example.com']);
   assert.equal(await packMain(['mcp', 'on', 'nope'], env, deps), 1);
+  lines.length = 0;
+  assert.equal(await packMain(['patch'], fakeEnv({ kind: 'linux' }), { ...deps, vars: { PROVIDER_MODE: 'manual' } }), 1);
+  assert.match(lines.join('\n'), /^ERROR: PROVIDER_MODE=manual needs/m);
   assert.equal(await packMain(['mcp', 'on', 'github'], env, deps), 0);
   assert.deepEqual(JSON.parse(env.inputs[`${OC} config patch --stdin`]), { mcp: { servers: { github: { enabled: true } } } });
   assert.ok(env.calls.includes(`exec ${OC} mcp reload`));
