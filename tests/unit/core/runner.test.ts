@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { runDecision, type Grant, type Integration, type Manifest, type RunEvent, type Snapshot } from '@agent-spaghetti/sdk';
+import { runDecision, type Detection, type Grant, type Integration, type Manifest, type RunEvent, type Snapshot } from '@agent-spaghetti/sdk';
 import { fakeEnv } from '@agent-spaghetti/sdk/testing';
 import { BUILTINS } from '@agent-spaghetti/integrations';
 import { Store } from '../../../packages/core/src/store.ts';
@@ -47,23 +47,30 @@ const lms = BUILTINS.find(i => i.manifest.id === 'lmstudio')!;
 const agentEvents: RunEvent[] = [{ type: 'tool', name: 'Read', summary: '{}' }, { type: 'text', text: 'partial ' }, { type: 'usage', inputTokens: 5, outputTokens: 7, costUsd: 0.25 }, { type: 'done', result: 'final answer' }];
 const agent: Integration = { source: 'builtin', manifest: { manifest: 1, id: 'paid-agent', name: 'Paid Agent', roles: ['agent'], cost: 'metered' } as Manifest,
   module: { async *run(_e, _d, req, ctx) { if (req.task === 'boom') throw new Error('kaput'); if (req.task === 'slow') { await new Promise((_, rej) => ctx.signal.addEventListener('abort', () => rej(new Error('stop')))); } yield* agentEvents; } } };
-const det = (integration: string, cost: 'free' | 'metered') => ({ integration, name: integration, envId: 'windows', installs: [], levels: [], cost, connectable: 'yes' as const, why: '' });
-const snap: Snapshot = { ts: 1, envs: [], agents: [], rejected: [], detections: [det('lmstudio', 'free'), det('paid-agent', 'metered')],
+const det = (integration: string, cost: 'free' | 'metered', envId = 'windows', installs: Detection['installs'] = [{ path: '/b/x', via: 'bin' }]) =>
+  ({ integration, name: integration, envId, installs, levels: [], cost, connectable: 'yes' as const, why: '' });
+const snap: Snapshot = { ts: 1, envs: [{ id: 'windows', state: 'running' }], agents: [], rejected: [], detections: [det('lmstudio', 'free'), det('paid-agent', 'metered')],
   backends: [{ id: 'b', integration: 'lmstudio', model: 'm', envId: 'windows', endpoint: 'http://127.0.0.1:1234', reachableFrom: ['windows'] }] };
 function setup() {
   const store = new Store(':memory:'), bus = new Bus(store), consent = new Consent(bus), settings = new Settings(store), ledger = new Ledger(store);
   const host = fakeEnv({ lines: { 'POST http://127.0.0.1:1234/v1/chat/completions': ['data: {"choices":[{"delta":{"content":"He"}}]}', 'data: {"choices":[{"delta":{"content":"llo"}}]}', 'data: [DONE]'] } });
   const resultsDir = mkdtempSync(join(tmpdir(), 'as-res-'));
-  const runner = new Runner({ bus, consent, ledger, settings, resultsDir, host: () => host, snapshot: () => snap, integrations: () => [lms, agent] });
+  const runner = new Runner({ bus, consent, ledger, settings, resultsDir, host: () => host, snapshot: () => snap, integrations: () => [lms, agent],
+    runOn: (envId, id, req, o) => agent.module!.run!(host, det(id, 'metered', envId), req, { ...o, inventory: { installed: [], processes: [], listening: [], env: {}, partial: [] } }) });
   return { store, bus, consent, settings, ledger, runner, resultsDir, host };
 }
 const firstQuestion = async (c: Consent) => { for (let i = 0; i < 50 && !c.pending().length; i++) await new Promise(r => setTimeout(r, 5)); return c.pending()[0]; };
 const answerNext = async (c: Consent, allow: boolean, scope?: 'once' | 'job' | 'always') => { c.respond((await firstQuestion(c)).id, allow, scope); };
 
-test('targets: loaded models of OpenAI servers and agents with run(), from the host only', () => {
+test('targets: loaded models the host reaches; agents with run() where their program was found, in a running env (host first), listing their agents', () => {
   const s = setup();
-  assert.deepEqual(targets({ host: () => s.host, snapshot: () => snap, integrations: () => [lms, agent] }).map(t => [t.id, t.kind, t.cost, t.models.join()]),
-    [['lmstudio', 'model', 'free', 'm'], ['paid-agent', 'agent', 'metered', '']]);
+  const t = (sn: Snapshot) => targets({ host: () => s.host, snapshot: () => sn, integrations: () => [lms, agent] }).map(x => [x.id, x.kind, x.cost, x.envId, x.models.join()]);
+  assert.deepEqual(t(snap), [['lmstudio', 'model', 'free', 'windows', 'm'], ['paid-agent', 'agent', 'metered', 'windows', '']]);
+  const wsl: Snapshot = { ...snap, envs: [...snap.envs, { id: 'wsl:T', state: 'running' }],
+    detections: [det('lmstudio', 'free'), det('paid-agent', 'metered', 'windows', [{ path: 'C:/Apps/Agent', via: 'installed' }]), det('paid-agent', 'metered', 'wsl:T')],
+    agents: [{ id: 'paid-agent:main', integration: 'paid-agent', name: 'Main', envId: 'wsl:T' }, { id: 'paid-agent:other', integration: 'paid-agent', name: 'O', envId: 'windows' }] };
+  assert.deepEqual(t(wsl), [['lmstudio', 'model', 'free', 'windows', 'm'], ['paid-agent', 'agent', 'metered', 'wsl:T', 'main']], 'an app without its program cannot run tasks');
+  assert.deepEqual(t({ ...wsl, envs: snap.envs }), [['lmstudio', 'model', 'free', 'windows', 'm']], 'stopped env: no target');
 });
 test('runner: free model runs at once; result file + sha; the prompt never reaches the database', async () => {
   const s = setup();

@@ -24,7 +24,8 @@
   "speaks": {
     "mcpClient": {
       "config": "%APPDATA%/Code/User/mcp.json",
-      "key": "servers"
+      "key": "servers",
+      "type": true
     }
   }
 }

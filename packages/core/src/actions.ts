@@ -1,6 +1,6 @@
 // Per-environment commands. The SAME function answers in the daemon (host env) and in the env bundle (inside distros),
 // so a command is added once here and works everywhere (core/dispatch.ts routes it).
-import type { ConnectResult, Environment, Grant, Integration, Switch, TestResult } from '@agent-spaghetti/sdk';
+import type { ConnectResult, Environment, Grant, Integration, RunEvent, RunRequest, Switch, TestResult } from '@agent-spaghetti/sdk';
 import { connectIntegration } from './connect.ts';
 import { inspectAs } from './engine/observe.ts';
 import { testIntegration } from './engine/test.ts';
@@ -48,4 +48,14 @@ export async function runEnvCommand<C extends EnvCommand>(env: Environment, inte
     throw new Error(`unknown command ${cmd}`);
   };
   return r() as Promise<EnvResults[C]>;
+}
+
+/** A delegated task in this environment (the same code in the daemon and in the env bundle's `run`): fresh detection, then the module's run. */
+export async function* runHere(env: Environment, integrations: Integration[], id: string, req: RunRequest, grants: Grant[],
+  o: { signal?: AbortSignal; runId?: number } = {}): AsyncIterable<RunEvent> {
+  const i = integrations.find(x => x.manifest.id === id);
+  const inventory = await env.inventory(i?.manifest.detect?.env ?? []);
+  const r = i?.module?.run ? await inspectAs(i, env, inventory, grants) : null;
+  if (!i || !r) throw new Error(`${id} cannot run tasks in ${env.id}`);
+  yield* i.module!.run!(env, r.detection, req, { signal: o.signal ?? new AbortController().signal, inventory, runId: o.runId });
 }

@@ -12,7 +12,7 @@ import { testIntegration } from '../../../packages/core/src/engine/test.ts';
 import { runEnvCommand } from '../../../packages/core/src/actions.ts';
 import { onEnv } from '../../../packages/core/src/dispatch.ts';
 import { decodePayload, type Spawn } from '../../../packages/core/src/env/wsl.ts';
-import { diffSessions, toAgents } from '../../../integrations/openclaw/index.ts';
+import { agentResult, diffSessions, toAgents } from '../../../integrations/openclaw/index.ts';
 
 const user = (m: Partial<Manifest>): Integration => ({ source: 'user', manifest: { manifest: 1, id: 'acme', name: 'Acme', roles: ['backend'], ...m } as Manifest });
 const allow = (action: Grant['action'], resource: string): Grant => ({ subject: 'acme', action, resource, mode: 'allow', by: 'user', ts: 1 });
@@ -140,4 +140,12 @@ test('OpenClaw: agents from CLI JSON (endpoint without credentials); sessions di
   assert.deepEqual(diffSessions(prev, [{ key: 'a', status: 'running', secret: 'S' }, { key: 'b', status: 'done' }], false), []);
   const next = diffSessions(prev, [{ key: 'a', status: 'done' }, { key: 'c', status: 'running' }], false);
   assert.deepEqual(next.map(e => [e.type, e.data.key, e.data.status]), [['session.ended', 'a', 'done'], ['session.started', 'c', 'running'], ['session.ended', 'b', 'gone']]);
+});
+
+test('OpenClaw run: agent --json → usage + text; failures carry the reason', () => {
+  const ok = JSON.stringify({ runId: 'r', status: 'ok', summary: 'completed', result: { payloads: [{ text: 'a' }, { text: 'b', mediaUrl: null }],
+    meta: { agentMeta: { usage: { input: 3, output: 4 }, costUsd: 0 } } } });
+  assert.deepEqual(agentResult(ok), [{ type: 'usage', inputTokens: 3, outputTokens: 4, costUsd: 0 }, { type: 'done', result: 'a\n\nb' }]);
+  assert.deepEqual(agentResult('{"ok":false,"error":{"type":"cli_error","message":"Unknown agent id \\"x\\""}}'), [{ type: 'error', message: 'Unknown agent id "x"' }]);
+  assert.deepEqual(agentResult('noise'), [{ type: 'error', message: 'openclaw agent returned no JSON' }]);
 });

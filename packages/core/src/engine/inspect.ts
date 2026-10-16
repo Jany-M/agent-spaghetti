@@ -93,7 +93,7 @@ function explain(m: Manifest, installs: Install[], hit: unknown, backends: Backe
   if (m.models) return { connectable: 'yes', why: backends.length ? `${backends.length} model(s) loaded` : 'server up, no model loaded' };
   if (m.speaks?.mcpClient || m.speaks?.agentPlugins) return connected ? { connectable: 'yes', why: 'connected to agent-spaghetti' }
     : { connectable: 'needs-setup', why: `not connected yet (run: agent-spaghetti connect ${m.id})` };
-  return { connectable: 'yes', why: installs.length > 1 ? `${installs.length} installs` : installs.some(i => i.via === 'process') ? 'running' : 'installed' };
+  return { connectable: 'yes', why: installs.length > 1 ? `${installs.length} installs` : hit || installs.some(i => i.via === 'process') ? 'running' : 'installed' };
 }
 
 /** Cheap liveness for the live observer: a matching process, or the tool's server answering (+ its models). No version, no module code.

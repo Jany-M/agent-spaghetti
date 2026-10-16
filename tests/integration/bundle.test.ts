@@ -29,6 +29,12 @@ test('bundle: version, inspect JSON, unknown command → usage + exit 1', async 
   assert.equal(bad.code, 1);
   assert.match(bad.stderr.toString(), /usage: agent-spaghetti-env\.mjs/);
 });
+test('bundle run: request on stdin, one RunEvent per line; a tool that cannot run here → an error event', async () => {
+  const r = await spawnFile(process.execPath, [out, 'run', encodePayload({ envId: 'linux', extraHosts: [], user: [], grants: [] }), 'nope'],
+    { timeoutMs: 60000, input: JSON.stringify({ req: { target: 'nope', task: 'x' } }) });
+  assert.equal(r.code, 0, r.stderr.toString());
+  assert.deepEqual(JSON.parse(r.stdout.toString()), { type: 'error', message: 'nope cannot run tasks in linux' });
+});
 test('tray bundles: preload needs only electron, the renderer no Node at all, the page has a strict CSP', () => {
   const app = (f: string) => readFileSync(join(dir, 'app', f), 'utf8');
   assert.deepEqual([...new Set([...app('preload.cjs').matchAll(/require\("([^"]+)"\)/g)].map(m => m[1]))], ['electron']);

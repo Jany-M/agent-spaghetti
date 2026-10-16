@@ -35,7 +35,8 @@ async function boot(scan: () => Promise<Snapshot> = async () => SNAP) {
   const host = fakeEnv({ lines: { 'POST http://127.0.0.1:1234/v1/chat/completions': ['data: {"choices":[{"delta":{"content":"Hi"}}]}', 'data: {"choices":[],"usage":{"prompt_tokens":3,"completion_tokens":1}}', 'data: [DONE]'] } });
   const integrations = [THIRD, BUILTINS.find(b => b.manifest.id === 'lmstudio')!];
   const resultsDir = mkdtempSync(join(tmpdir(), 'as-results-'));
-  const runner = new Runner({ bus, consent, ledger, settings, resultsDir, host: () => host, snapshot: () => store.loadSnapshot('scan'), integrations: () => integrations });
+  const runner = new Runner({ bus, consent, ledger, settings, resultsDir, host: () => host, snapshot: () => store.loadSnapshot('scan'), integrations: () => integrations,
+    runOn: () => { throw new Error('no agents in this test'); } });
   const services: Services = { store, bus, settings, consent, ledger, runner, host: () => host, cli: () => ({ command: 'node', args: ['/x/cli.ts'] }),
     shutdown: () => { stopped++; }, live: () => live, scan: async () => { const snap = await scan(); store.saveSnapshot('scan', snap); return snap; },
     loaded: () => ({ integrations, rejected: [] }),

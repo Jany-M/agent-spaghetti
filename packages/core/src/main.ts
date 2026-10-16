@@ -12,7 +12,7 @@ import { runScan } from './scan.ts';
 import { startDaemon } from './daemon.ts';
 import { loadOrCreateToken, writeDiscovery } from './config.ts';
 import { Settings } from './settings.ts';
-import { onEnv } from './dispatch.ts';
+import { onEnv, runOnEnv } from './dispatch.ts';
 import { startObservers } from './observers.ts';
 import { Consent } from './consent.ts';
 import type { Services } from './ops.ts';
@@ -70,7 +70,12 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
   };
   const host = () => entries.find(e => e.env)?.env ?? null;
   const runner = new Runner({ bus, consent, ledger, settings, resultsDir: join(dir, 'results'), host, snapshot: () => store.loadSnapshot<Snapshot>('scan'),
-    integrations: () => loaded.integrations.filter(i => !settings.get('disabled').includes(i.manifest.id)) });
+    integrations: () => loaded.integrations.filter(i => !settings.get('disabled').includes(i.manifest.id)),
+    async *runOn(envId, id, req, ro) {
+      const e = entries.find(x => x.status.id === envId);
+      if (!e) throw new Error(`environment ${envId} is gone (rescan)`);
+      yield* runOnEnv(e, await ctx(), id, req, ro);
+    } });
   const hubFiles = new Map<string, string>();
   /** Running distros reach the daemon on the Windows side of their network: listen there and tell them where (hub.json, user-only). */
   const shareWithDistros = async () => {

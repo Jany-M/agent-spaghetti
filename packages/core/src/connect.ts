@@ -39,7 +39,7 @@ async function mergeMcp(env: Environment, spec: NonNullable<NonNullable<Manifest
   const json = text === null ? {} : parseJson(text);
   if (!json || typeof json !== 'object' || Array.isArray(json)) throw new Error(`${spec.config} is not a JSON object; not changed`);
   const doc = json as Record<string, Record<string, unknown>>;
-  doc[spec.key] = { ...(doc[spec.key] ?? {}), [SERVER_NAME]: mcpEntry(cli, client) };
+  doc[spec.key] = { ...(doc[spec.key] ?? {}), [SERVER_NAME]: { ...(spec.type ? { type: 'stdio' } : {}), ...mcpEntry(cli, client) } };
   const files: Record<string, string> = { ...(text === null ? {} : { [`${spec.config}.bak`]: text }), [spec.config]: JSON.stringify(doc, null, 2) };
   return write(env, files, dryRun).then(changes => ({ description: `add the ${SERVER_NAME} MCP server to ${spec.config} (restart the client to load it)`, changes }));
 }

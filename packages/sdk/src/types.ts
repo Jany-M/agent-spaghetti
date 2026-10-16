@@ -57,7 +57,7 @@ export interface Manifest {
     openai?: { port: number; base: string };
     mcpServer?: { command: string[] };
     acp?: { command: string[] };
-    mcpClient?: { config: string; key: string };
+    mcpClient?: { config: string; key: string; type?: boolean };   // type: entries carry "type": "stdio" (VS Code requires it)
     agentPlugins?: { dir: string; variant?: 'agent-plugins' | 'cursor' };
   };
 }

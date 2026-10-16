@@ -129,7 +129,7 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
         print(v, () => d.content[0].text);
         return 'isError' in d ? 1 : 0;
       }
-      case 'targets': { const r = await c.call('targets'); print(r, () => r.length ? renderTable([['Target', 'Name', 'Kind', 'Cost', 'Models'], ...r.map(t => [t.id, t.name, t.kind, t.cost, t.models.join(', ') || '-'])]) : 'Nothing to delegate to yet (scan first; start a local model server or install an agent).'); break; }
+      case 'targets': { const r = await c.call('targets'); print(r, () => r.length ? renderTable([['Target', 'Name', 'Kind', 'Cost', 'Models / agents'], ...r.map(t => [t.id, t.name, t.kind, t.cost, t.models.join(', ') || '-'])]) : 'Nothing to delegate to yet (scan first; start a local model server or install an agent).'); break; }
       case 'runs': {
         const r = await c.call('runs', a1 ? { id: Number(a1) } : {});
         print(r, () => [...r.runs.map(runLine), ...(r.result ? ['', r.result] : [])].join('\n') || 'No runs yet.');

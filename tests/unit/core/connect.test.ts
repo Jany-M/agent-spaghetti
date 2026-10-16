@@ -36,6 +36,10 @@ test('connect: plugin into the client folder; MCP merge keeps other servers and 
   assert.equal(doc.keep, 1);
   assert.equal(await merged.readFile(`${conf}.bak`), '{"mcpServers":{"other":{"command":"x"}},"keep":1}');
   await assert.rejects(connectIntegration(fakeEnv({ files: { [conf]: '{oops' } }), integ({ mcpClient: { config: conf, key: 'mcpServers' } }), det, cli, false), /not a JSON object; not changed/);
+  assert.equal(doc.mcpServers['agent-spaghetti'].type, undefined);
+  const typed = fakeEnv();
+  await connectIntegration(typed, integ({ mcpClient: { config: conf, key: 'servers', type: true } }), det, cli, false);
+  assert.equal(JSON.parse((await typed.readFile(conf))!).servers['agent-spaghetti'].type, 'stdio', 'VS Code needs "type"');
   const dry = fakeEnv();
   const d = await connectIntegration(dry, integ({ mcpClient: { config: conf, key: 'servers' } }), det, cli, true);
   assert.deepEqual([d.applied, d.changes], [false, [`write ${conf}`]]);

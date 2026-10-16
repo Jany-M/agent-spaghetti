@@ -30,7 +30,7 @@ export const OPS = {
       input: { type: 'object', additionalProperties: false, required: ['target', 'task'], properties: {
         target: { type: 'string', description: 'Target id from `targets`' }, task: { type: 'string', description: 'The full task, self-contained' },
         kind: { type: 'string', enum: [...TASK_KINDS] }, reason: { type: 'string', description: 'One line: why this is handed off' },
-        model: { type: 'string', description: 'A loaded model of a model target (default: the first one)' },
+        model: { type: 'string', description: 'A loaded model of a model target, or an agent of an agent target (see `targets`; default: the first model / the default agent)' },
         cwd: { type: 'string', description: 'Working folder for agents that edit files' } } } } },
   targets:      { method: 'GET',  path: '/v1/targets',      usage: 'targets',                  summary: 'What tasks can be handed to right now',
     mcp: { name: 'targets', description: 'List the local models and agents `delegate` can use now, with their cost class (free / metered).', input: { type: 'object', additionalProperties: false, properties: {} } } },

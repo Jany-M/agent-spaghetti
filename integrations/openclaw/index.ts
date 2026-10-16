@@ -3,9 +3,12 @@
 //   openclaw config get models.providers --json          → { <providerId>: { baseUrl, … } }   (only baseUrl is kept)
 //   openclaw sessions --all-agents --active <min> --json → { sessions: [{ key, agentId, kind, status, model, … }] }
 //   openclaw config get mcp.servers --json / config patch --stdin / mcp reload   (switches, shared with the pack)
+//   openclaw agent --agent <id> --session-id <id> --message-file /dev/stdin --json → { status, result: { payloads: [{ text }],
+//     meta: { agentMeta: { usage: { input, output }, costUsd, model } } } } or { ok: false, error: { message } }, exit 1 (checked live 2026.9.5)
 //   gateway GET /healthz → {"ok":true,"status":"live"}, no auth (manifest detect.http; docs/gateway/health.md, checked 2026-10-16)
 // The config file itself is never opened by the hub.
-import type { AgentInfo, IntegrationModule } from '@agent-spaghetti/sdk';
+import type { AgentInfo, IntegrationModule, RunEvent } from '@agent-spaghetti/sdk';
+import { parseJsonLoose } from '@agent-spaghetti/sdk';
 import { MCP_NAME, addMcpServer, mcpServers, setMcpEnabled } from './pack/mcp.ts';
 import { openclawExe, openclawJson } from './cli.ts';
 export { openclawExe, openclawJson };
@@ -44,6 +47,16 @@ export function diffSessions(prev: Map<string, string>, list: unknown, seed: boo
   return events;
 }
 
+/** `openclaw agent --json` output → run events. */
+export function agentResult(stdout: string): RunEvent[] {
+  const j = parseJsonLoose(stdout) as any;
+  if (!j || typeof j !== 'object') return [{ type: 'error', message: 'openclaw agent returned no JSON' }];
+  if (j.ok === false || j.status !== 'ok') return [{ type: 'error', message: String(j.error?.message ?? j.summary ?? j.status ?? 'failed') }];
+  const m = j.result?.meta?.agentMeta ?? {};
+  return [{ type: 'usage', inputTokens: m.usage?.input, outputTokens: m.usage?.output, costUsd: m.costUsd },
+    { type: 'done', result: (j.result?.payloads ?? []).map((p: any) => p?.text).filter((t: unknown) => typeof t === 'string').join('\n\n') }];
+}
+
 export const openclawModule: IntegrationModule = {
   async inspect(env, base) {
     const exe = openclawExe(base.detection);
@@ -66,6 +79,20 @@ export const openclawModule: IntegrationModule = {
     void tick();
     const timer = setInterval(tick, ctx.pollMs ?? 2000);
     return { dispose: () => clearInterval(timer) };
+  },
+  /** One turn of an OpenClaw agent (req.model = agent id, else the default agent) in its own session per run. */
+  async *run(env, det, req, ctx) {
+    const exe = openclawExe(det);
+    if (!exe) throw new Error('openclaw not found');
+    if (!det.endpoint) throw new Error('the OpenClaw gateway is not running');
+    if (env.kind === 'windows') throw new Error('OpenClaw tasks run where its CLI reads the task from /dev/stdin (Linux, macOS, WSL)');
+    const agent = req.model ?? toAgents(await openclawJson(env, exe, ['agents', 'list']), {}, env.id).find(a => a.isDefault)?.id.slice('openclaw:'.length) ?? 'main';
+    const lines: string[] = [];
+    try {
+      for await (const l of env.execLines(exe, ['agent', '--agent', agent, '--session-id', `agent-spaghetti-${ctx.runId ?? Date.now()}`, '--message-file', '/dev/stdin', '--json'],
+        { input: req.task, cwd: req.cwd, signal: ctx.signal })) lines.push(l);
+    } catch (e) { if (ctx.signal.aborted || !lines.length) throw e; }   // exit 1 still prints the JSON reason
+    yield* agentResult(lines.join('\n'));
   },
   async connect(env, det, cli, dryRun) {
     const exe = openclawExe(det);

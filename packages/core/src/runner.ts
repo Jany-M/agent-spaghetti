@@ -14,21 +14,25 @@ import { openaiRun } from './engine/openai.ts';
 export interface RunnerDeps {
   bus: Bus; consent: Consent; ledger: Ledger; settings: Settings; resultsDir: string;
   host(): Environment | null; snapshot(): Snapshot | null; integrations(): Integration[];
+  /** An agent's run in the environment where it was found (core/dispatch.ts runOnEnv). */
+  runOn(envId: string, id: string, req: RunRequest, o: { signal: AbortSignal; runId: number }): AsyncIterable<RunEvent>;
 }
-const EMPTY_INV = { installed: [], processes: [], listening: [], env: {}, partial: [] };
-
-/** What `delegate` can use right now on this machine (from the last scan; the host environment runs it). */
+/** What `delegate` can use right now on this machine (from the last scan). Models: servers the host reaches. Agents: tools with a
+ *  run hook, in a running environment where their own program was found (the host first); `models` lists their agents. */
 export function targets(d: Pick<RunnerDeps, 'host' | 'snapshot' | 'integrations'>): Target[] {
   const snap = d.snapshot(), hostId = d.host()?.id;
   if (!snap || !hostId) return [];
   const byId = new Map(d.integrations().map(i => [i.manifest.id, i]));
+  const running = new Set(snap.envs.filter(e => e.state === 'running').map(e => e.id));
   const out: Target[] = [];
-  for (const det of snap.detections) {
+  for (const det of [...snap.detections].sort((a, b) => Number(b.envId === hostId) - Number(a.envId === hostId))) {
     const i = byId.get(det.integration);
     if (!i || out.some(t => t.id === det.integration)) continue;
     const models = snap.backends.filter(b => b.integration === det.integration && b.reachableFrom.includes(hostId)).map(b => b.model);
     if (i.manifest.speaks?.openai && models.length) out.push({ id: det.integration, name: det.name, kind: 'model', cost: det.cost, envId: hostId, models });
-    else if (i.module?.run && det.envId === hostId) out.push({ id: det.integration, name: det.name, kind: 'agent', cost: det.cost, envId: hostId, models: [] });
+    else if (i.module?.run && running.has(det.envId) && det.installs.some(x => x.via === 'bin' || x.via === 'path'))
+      out.push({ id: det.integration, name: det.name, kind: 'agent', cost: det.cost, envId: det.envId,
+        models: snap.agents.filter(a => a.integration === det.integration && a.envId === det.envId).map(a => a.id.slice(det.integration.length + 1)) });
   }
   return out;
 }
@@ -43,7 +47,8 @@ export class Runner {
   start(source: string, req: RunRequest): { id: number; done: Promise<RunRow> } {
     const t = targets(this.d).find(x => x.id === req.target);
     if (!t) throw new Error(`unknown or unavailable target ${req.target} (see: targets)`);
-    if (req.model && t.kind === 'model' && !t.models.includes(req.model)) throw new Error(`${t.name} has no loaded model ${req.model} (loaded: ${t.models.join(', ')})`);
+    if (req.model && t.models.length && !t.models.includes(req.model))
+      throw new Error(`${t.name} has no ${t.kind === 'model' ? 'loaded model' : 'agent'} ${req.model} (${t.kind === 'model' ? 'loaded' : 'agents'}: ${t.models.join(', ')})`);
     const kind = req.kind && (TASK_KINDS as readonly string[]).includes(req.kind) ? req.kind : 'other';
     const row: Omit<RunRow, 'id'> = { ts: Date.now(), source, target: t.id, kind, reason: req.reason, parentRunId: req.parentRunId, jobId: req.jobId,
       taskHash: createHash('sha256').update(req.task).digest('hex'), outcome: 'running' };
@@ -93,17 +98,16 @@ export class Runner {
   }
 
   private engine(id: number, t: Target, req: RunRequest, signal: AbortSignal, onModel: (m: string) => void): AsyncIterable<RunEvent> {
-    const host = this.d.host(), i = this.d.integrations().find(x => x.manifest.id === t.id);
-    if (!host || !i) throw new Error(`${t.id} is not available`);
     if (t.kind === 'model') {
+      const host = this.d.host(), i = this.d.integrations().find(x => x.manifest.id === t.id);
+      if (!host || !i) throw new Error(`${t.id} is not available`);
       const model = req.model ?? t.models[0];
       const b = this.d.snapshot()!.backends.find(x => x.integration === t.id && x.model === model)!;
       onModel(model);
       return openaiRun(host, { endpoint: b.endpoint, base: i.manifest.speaks!.openai!.base, model, concurrency: this.d.settings.get('backend.concurrency') }, req,
         { signal, onQueue: (waiting, running) => this.d.bus.emit({ ts: Date.now(), type: 'backend.queue', envId: host.id, source: t.id, data: { endpoint: b.endpoint, waiting, running } }) });
     }
-    const det = this.d.snapshot()!.detections.find(x => x.integration === t.id && x.envId === host.id)!;
-    return i.module!.run!(host, det, req, { signal, inventory: EMPTY_INV, runId: id });
+    return this.d.runOn(t.envId, t.id, req, { signal, runId: id });
   }
   /** `<data>/results/<id>.md`, plus a copy in the caller's folder when asked (e.g. the Cursor workspace). */
   private writeResult(id: number, req: RunRequest, result: string, error?: string): Partial<RunRow> {
