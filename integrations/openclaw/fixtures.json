@@ -1,0 +1,97 @@
+[
+  {
+    "name": "agents from the CLI, providers matched by longest id, credentials dropped",
+    "env": {
+      "kind": "wsl",
+      "id": "wsl:TestDistro",
+      "bins": {
+        "openclaw": "/usr/local/bin/openclaw"
+      },
+      "exec": {
+        "/usr/local/bin/openclaw --version": {
+          "code": 0,
+          "stdout": "OpenClaw 2026.9.5 (abc)\n",
+          "stderr": ""
+        },
+        "/usr/local/bin/openclaw agents list --json": {
+          "code": 0,
+          "stdout": "[{\"id\": \"main\", \"name\": \"Main\", \"model\": \"lmstudio/vendor/model-a\", \"isDefault\": true}, {\"id\": \"worker\", \"model\": \"my/proxy/x/y\"}, {\"id\": \"cloud\", \"name\": \"Cloud\", \"model\": \"anthropic/claude-x\"}]",
+          "stderr": ""
+        },
+        "/usr/local/bin/openclaw config get models.providers --json": {
+          "code": 0,
+          "stdout": "{\"lmstudio\": {\"baseUrl\": \"http://u:pw@192.0.2.10:1234/v1\", \"apiKey\": \"sk_aaaaaaaaaaaaaaaaaaaaaaaa\"}, \"my/proxy\": {\"baseUrl\": \"http://127.0.0.1:9000/v1\"}}",
+          "stderr": ""
+        }
+      }
+    },
+    "expect": {
+      "version": "2026.9.5",
+      "agents": [
+        [
+          "Main",
+          "lmstudio",
+          "vendor/model-a"
+        ],
+        [
+          "worker",
+          "my/proxy",
+          "x/y"
+        ],
+        [
+          "Cloud",
+          "anthropic",
+          "claude-x"
+        ]
+      ],
+      "endpoints": [
+        "http://192.0.2.10:1234",
+        "http://127.0.0.1:9000",
+        null
+      ],
+      "absent": [
+        "pw@",
+        "sk_",
+        "apiKey"
+      ]
+    }
+  },
+  {
+    "name": "installed but agents listing fails",
+    "env": {
+      "kind": "wsl",
+      "bins": {
+        "openclaw": "/usr/local/bin/openclaw"
+      }
+    },
+    "expect": {
+      "connectable": "needs-setup",
+      "why": "agents list",
+      "agents": []
+    }
+  },
+  {
+    "name": "Windows companion app only (no CLI on Windows)",
+    "env": {
+      "inventory": {
+        "installed": [
+          {
+            "name": "OpenClaw Companion version 2026.9.4",
+            "version": "2026.9.4",
+            "location": "C:/Users/u/AppData/Local/OpenClaw",
+            "source": "uninstall"
+          }
+        ]
+      }
+    },
+    "expect": {
+      "agents": [],
+      "installs": 1
+    }
+  },
+  {
+    "name": "absent",
+    "env": {},
+    "expect": null
+  }
+]

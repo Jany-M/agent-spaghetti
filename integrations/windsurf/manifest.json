@@ -1,0 +1,30 @@
+{
+  "$schema": "../../packages/sdk/manifest.schema.json",
+  "manifest": 1,
+  "id": "windsurf",
+  "name": "Windsurf",
+  "roles": [
+    "client"
+  ],
+  "cost": "metered",
+  "detect": {
+    "installed": [
+      "Windsurf*"
+    ],
+    "process": [
+      "Windsurf"
+    ],
+    "bin": [
+      "windsurf"
+    ],
+    "version": {
+      "from": "installed"
+    }
+  },
+  "speaks": {
+    "mcpClient": {
+      "config": "~/.codeium/windsurf/mcp_config.json",
+      "key": "mcpServers"
+    }
+  }
+}

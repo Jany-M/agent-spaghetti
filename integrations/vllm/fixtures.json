@@ -1,0 +1,26 @@
+[
+  {
+    "name": "server up",
+    "env": {
+      "http": {
+        "http://127.0.0.1:8000/v1/models": {
+          "status": 200,
+          "body": "{\"data\":[{\"id\":\"m\",\"max_model_len\":32768}]}"
+        }
+      }
+    },
+    "expect": {
+      "backends": [
+        [
+          "m",
+          32768
+        ]
+      ]
+    }
+  },
+  {
+    "name": "absent",
+    "env": {},
+    "expect": null
+  }
+]

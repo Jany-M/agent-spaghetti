@@ -1,0 +1,118 @@
+[
+  {
+    "name": "loaded model on loopback; embeddings and unloaded models ignored",
+    "env": {
+      "http": {
+        "http://127.0.0.1:1234/api/v0/models": {
+          "status": 200,
+          "body": "{\"data\": [{\"id\": \"vendor/model-a\", \"type\": \"llm\", \"state\": \"loaded\", \"loaded_context_length\": 200192}, {\"id\": \"embed-x\", \"type\": \"embeddings\", \"state\": \"loaded\"}, {\"id\": \"other\", \"type\": \"llm\", \"state\": \"not-loaded\"}]}"
+        }
+      }
+    },
+    "expect": {
+      "endpoint": "http://127.0.0.1:1234",
+      "backends": [
+        [
+          "vendor/model-a",
+          200192
+        ]
+      ],
+      "levels": [
+        "detect",
+        "observe"
+      ]
+    }
+  },
+  {
+    "name": "reached via the second host (WSL gateway), nothing loaded",
+    "env": {
+      "kind": "wsl",
+      "id": "wsl:TestDistro",
+      "hosts": [
+        "127.0.0.1",
+        "192.0.2.10"
+      ],
+      "http": {
+        "http://192.0.2.10:1234/api/v0/models": {
+          "status": 200,
+          "body": "{\"data\":[]}"
+        }
+      }
+    },
+    "expect": {
+      "endpoint": "http://192.0.2.10:1234",
+      "why": "no model loaded",
+      "backends": []
+    }
+  },
+  {
+    "name": "installed, server off",
+    "env": {
+      "bins": {
+        "lms": "C:/Users/u/.lmstudio/bin/lms.exe"
+      }
+    },
+    "expect": {
+      "why": "server not running",
+      "connectable": "needs-setup",
+      "backends": []
+    }
+  },
+  {
+    "name": "custom install dir via installed apps, server on a non-default port",
+    "env": {
+      "inventory": {
+        "installed": [
+          {
+            "name": "LM Studio 0.4.26",
+            "version": "0.4.26",
+            "location": "D:/Apps/LM Studio",
+            "source": "uninstall"
+          }
+        ],
+        "processes": [
+          {
+            "name": "LM Studio",
+            "pid": 42,
+            "path": "D:/Apps/LM Studio/LM Studio.exe"
+          }
+        ],
+        "listening": [
+          {
+            "port": 4321,
+            "address": "127.0.0.1",
+            "pid": 42
+          }
+        ]
+      },
+      "http": {
+        "http://127.0.0.1:4321/api/v0/models": {
+          "status": 200,
+          "body": "{\"data\":[]}"
+        }
+      }
+    },
+    "expect": {
+      "version": "0.4.26",
+      "endpoint": "http://127.0.0.1:4321",
+      "installs": 2
+    }
+  },
+  {
+    "name": "html instead of json, nothing installed",
+    "env": {
+      "http": {
+        "http://127.0.0.1:1234/api/v0/models": {
+          "status": 200,
+          "body": "<html>"
+        }
+      }
+    },
+    "expect": null
+  },
+  {
+    "name": "absent",
+    "env": {},
+    "expect": null
+  }
+]

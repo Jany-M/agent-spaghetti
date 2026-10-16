@@ -1,0 +1,41 @@
+[
+  {
+    "name": "MSIX package",
+    "env": {
+      "inventory": {
+        "installed": [
+          {
+            "name": "Claude",
+            "version": "2.1.0.0",
+            "location": "C:/Program Files/WindowsApps/Claude_2.1.0.0_x64__abc",
+            "source": "msix"
+          }
+        ]
+      }
+    },
+    "expect": {
+      "version": "2.1.0.0",
+      "installs": 1
+    }
+  },
+  {
+    "name": "not on linux even if a same-named entry exists",
+    "env": {
+      "kind": "linux",
+      "inventory": {
+        "installed": [
+          {
+            "name": "Claude",
+            "source": "desktop"
+          }
+        ]
+      }
+    },
+    "expect": null
+  },
+  {
+    "name": "absent",
+    "env": {},
+    "expect": null
+  }
+]

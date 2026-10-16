@@ -1,0 +1,34 @@
+{
+  "$schema": "../../packages/sdk/manifest.schema.json",
+  "manifest": 1,
+  "id": "openclaw",
+  "name": "OpenClaw",
+  "roles": [
+    "agent",
+    "client"
+  ],
+  "cost": "unknown",
+  "detect": {
+    "installed": [
+      "OpenClaw*"
+    ],
+    "bin": [
+      "openclaw"
+    ],
+    "paths": {
+      "linux": [
+        "~/.local/bin/openclaw",
+        "~/.openclaw/tools/node/bin/openclaw"
+      ],
+      "macos": [
+        "~/.local/bin/openclaw"
+      ]
+    },
+    "version": {
+      "args": [
+        "--version"
+      ],
+      "regex": "(\\d{4}\\.\\d+\\.\\d+)"
+    }
+  }
+}

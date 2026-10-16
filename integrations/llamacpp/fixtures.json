@@ -1,0 +1,26 @@
+[
+  {
+    "name": "server up",
+    "env": {
+      "http": {
+        "http://127.0.0.1:8080/v1/models": {
+          "status": 200,
+          "body": "{\"data\":[{\"id\":\"model.gguf\"}]}"
+        }
+      }
+    },
+    "expect": {
+      "backends": [
+        [
+          "model.gguf",
+          null
+        ]
+      ]
+    }
+  },
+  {
+    "name": "absent",
+    "env": {},
+    "expect": null
+  }
+]

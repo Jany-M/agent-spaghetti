@@ -1,0 +1,32 @@
+[
+  {
+    "name": "per-user and system installs",
+    "env": {
+      "inventory": {
+        "installed": [
+          {
+            "name": "Microsoft Visual Studio Code (User)",
+            "version": "1.142.0",
+            "location": "C:/Users/u/AppData/Local/Programs/Microsoft VS Code",
+            "source": "uninstall"
+          },
+          {
+            "name": "Microsoft Visual Studio Code Insiders",
+            "version": "1.143.0",
+            "location": "C:/Program Files/Microsoft VS Code Insiders",
+            "source": "uninstall"
+          }
+        ]
+      }
+    },
+    "expect": {
+      "version": "1.142.0",
+      "installs": 2
+    }
+  },
+  {
+    "name": "absent",
+    "env": {},
+    "expect": null
+  }
+]

@@ -1,0 +1,30 @@
+{
+  "$schema": "../../packages/sdk/manifest.schema.json",
+  "manifest": 1,
+  "id": "vscode",
+  "name": "VS Code",
+  "roles": [
+    "client"
+  ],
+  "cost": "unknown",
+  "detect": {
+    "installed": [
+      "Microsoft Visual Studio Code*"
+    ],
+    "process": [
+      "Code"
+    ],
+    "bin": [
+      "code"
+    ],
+    "version": {
+      "from": "installed"
+    }
+  },
+  "speaks": {
+    "mcpClient": {
+      "config": "%APPDATA%/Code/User/mcp.json",
+      "key": "servers"
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "$schema": "../../packages/sdk/manifest.schema.json",
+  "manifest": 1,
+  "id": "ollama",
+  "name": "Ollama",
+  "roles": [
+    "backend"
+  ],
+  "cost": "free",
+  "detect": {
+    "installed": [
+      "Ollama*"
+    ],
+    "process": [
+      "ollama",
+      "ollama app"
+    ],
+    "bin": [
+      "ollama"
+    ],
+    "env": [
+      "OLLAMA_HOST"
+    ],
+    "http": {
+      "port": 11434,
+      "path": "/api/version"
+    },
+    "version": {
+      "json": "version"
+    }
+  },
+  "models": {
+    "path": "/api/ps",
+    "list": "models",
+    "id": "model",
+    "context": [
+      "context_length"
+    ]
+  },
+  "speaks": {
+    "openai": {
+      "port": 11434,
+      "base": "/v1"
+    }
+  }
+}

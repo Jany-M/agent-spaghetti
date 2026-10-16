@@ -1,0 +1,22 @@
+{
+  "$schema": "../../packages/sdk/manifest.schema.json",
+  "manifest": 1,
+  "id": "roo",
+  "name": "Roo Code",
+  "roles": [
+    "client"
+  ],
+  "cost": "unknown",
+  "detect": {
+    "paths": [
+      "~/.vscode/extensions/rooveterinaryinc.roo-cline-*",
+      "~/.vscode-insiders/extensions/rooveterinaryinc.roo-cline-*",
+      "~/.cursor/extensions/rooveterinaryinc.roo-cline-*",
+      "~/.windsurf/extensions/rooveterinaryinc.roo-cline-*"
+    ],
+    "version": {
+      "file": "~/.vscode/extensions/rooveterinaryinc.roo-cline-*/package.json",
+      "json": "version"
+    }
+  }
+}

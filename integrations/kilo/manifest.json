@@ -1,0 +1,22 @@
+{
+  "$schema": "../../packages/sdk/manifest.schema.json",
+  "manifest": 1,
+  "id": "kilo",
+  "name": "Kilo Code",
+  "roles": [
+    "client"
+  ],
+  "cost": "unknown",
+  "detect": {
+    "paths": [
+      "~/.vscode/extensions/kilocode.kilo-code-*",
+      "~/.vscode-insiders/extensions/kilocode.kilo-code-*",
+      "~/.cursor/extensions/kilocode.kilo-code-*",
+      "~/.windsurf/extensions/kilocode.kilo-code-*"
+    ],
+    "version": {
+      "file": "~/.vscode/extensions/kilocode.kilo-code-*/package.json",
+      "json": "version"
+    }
+  }
+}

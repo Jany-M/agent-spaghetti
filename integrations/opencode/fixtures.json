@@ -1,0 +1,27 @@
+[
+  {
+    "name": "found",
+    "env": {
+      "kind": "linux",
+      "bins": {
+        "opencode": "/home/u/.local/bin/opencode"
+      },
+      "exec": {
+        "/home/u/.local/bin/opencode --version": {
+          "code": 0,
+          "stdout": "1.4.2\n",
+          "stderr": ""
+        }
+      }
+    },
+    "expect": {
+      "installs": 1,
+      "version": "1.4.2"
+    }
+  },
+  {
+    "name": "absent",
+    "env": {},
+    "expect": null
+  }
+]

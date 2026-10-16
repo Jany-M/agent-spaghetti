@@ -1,0 +1,69 @@
+[
+  {
+    "name": "version and running models",
+    "env": {
+      "kind": "wsl",
+      "id": "wsl:TestDistro",
+      "http": {
+        "http://127.0.0.1:11434/api/version": {
+          "status": 200,
+          "body": "{\"version\":\"0.12.3\"}"
+        },
+        "http://127.0.0.1:11434/api/ps": {
+          "status": 200,
+          "body": "{\"models\":[{\"name\":\"m:8b\",\"model\":\"m:8b\",\"context_length\":8192}]}"
+        }
+      }
+    },
+    "expect": {
+      "version": "0.12.3",
+      "backends": [
+        [
+          "m:8b",
+          8192
+        ]
+      ]
+    }
+  },
+  {
+    "name": "OLLAMA_HOST override with bind-all address",
+    "env": {
+      "hosts": [
+        "127.0.0.1"
+      ],
+      "inventory": {
+        "env": {
+          "OLLAMA_HOST": "0.0.0.0:5555"
+        }
+      },
+      "http": {
+        "http://127.0.0.1:5555/api/version": {
+          "status": 200,
+          "body": "{\"version\":\"1.0.0\"}"
+        },
+        "http://127.0.0.1:5555/api/ps": {
+          "status": 200,
+          "body": "{\"models\":[]}"
+        }
+      }
+    },
+    "expect": {
+      "endpoint": "http://127.0.0.1:5555",
+      "why": "no model loaded"
+    }
+  },
+  {
+    "name": "a leftover data folder is not an install",
+    "env": {
+      "files": {
+        "~/.ollama": ""
+      }
+    },
+    "expect": null
+  },
+  {
+    "name": "absent",
+    "env": {},
+    "expect": null
+  }
+]

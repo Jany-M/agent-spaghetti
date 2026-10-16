@@ -1,0 +1,23 @@
+{
+  "$schema": "../../packages/sdk/manifest.schema.json",
+  "manifest": 1,
+  "id": "chatgpt-desktop",
+  "name": "ChatGPT Desktop",
+  "roles": [
+    "client"
+  ],
+  "cost": "metered",
+  "platforms": [
+    "windows",
+    "macos"
+  ],
+  "detect": {
+    "installed": [
+      "OpenAI.ChatGPT-Desktop",
+      "ChatGPT*"
+    ],
+    "version": {
+      "from": "installed"
+    }
+  }
+}

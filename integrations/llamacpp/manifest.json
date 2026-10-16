@@ -1,0 +1,32 @@
+{
+  "$schema": "../../packages/sdk/manifest.schema.json",
+  "manifest": 1,
+  "id": "llamacpp",
+  "name": "llama.cpp server",
+  "roles": [
+    "backend"
+  ],
+  "cost": "free",
+  "detect": {
+    "process": [
+      "llama-server"
+    ],
+    "bin": [
+      "llama-server"
+    ],
+    "http": {
+      "port": 8080,
+      "path": "/v1/models"
+    }
+  },
+  "models": {
+    "list": "data",
+    "id": "id"
+  },
+  "speaks": {
+    "openai": {
+      "port": 8080,
+      "base": "/v1"
+    }
+  }
+}

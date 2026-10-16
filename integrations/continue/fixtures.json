@@ -1,0 +1,20 @@
+[
+  {
+    "name": "found",
+    "env": {
+      "files": {
+        "~/.vscode/extensions/continue.continue-*": "",
+        "~/.vscode/extensions/continue.continue-*/package.json": "{\"version\":\"3.1.0\"}"
+      }
+    },
+    "expect": {
+      "installs": 1,
+      "version": "3.1.0"
+    }
+  },
+  {
+    "name": "absent",
+    "env": {},
+    "expect": null
+  }
+]

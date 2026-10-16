@@ -1,0 +1,22 @@
+{
+  "$schema": "../../packages/sdk/manifest.schema.json",
+  "manifest": 1,
+  "id": "continue",
+  "name": "Continue",
+  "roles": [
+    "client"
+  ],
+  "cost": "unknown",
+  "detect": {
+    "paths": [
+      "~/.vscode/extensions/continue.continue-*",
+      "~/.vscode-insiders/extensions/continue.continue-*",
+      "~/.cursor/extensions/continue.continue-*",
+      "~/.windsurf/extensions/continue.continue-*"
+    ],
+    "version": {
+      "file": "~/.vscode/extensions/continue.continue-*/package.json",
+      "json": "version"
+    }
+  }
+}

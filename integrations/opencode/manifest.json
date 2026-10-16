@@ -1,0 +1,24 @@
+{
+  "$schema": "../../packages/sdk/manifest.schema.json",
+  "manifest": 1,
+  "id": "opencode",
+  "name": "OpenCode",
+  "roles": [
+    "agent",
+    "client"
+  ],
+  "cost": "unknown",
+  "detect": {
+    "bin": [
+      "opencode"
+    ],
+    "process": [
+      "opencode"
+    ],
+    "version": {
+      "args": [
+        "--version"
+      ]
+    }
+  }
+}

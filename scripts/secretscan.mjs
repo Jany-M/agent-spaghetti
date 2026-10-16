@@ -4,7 +4,7 @@ import { join, relative } from 'node:path';
 import { scanText } from '../packages/sdk/src/secrets.ts';
 
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', '_dev']);
-const ALLOW = [/^tests\//, /^packages\/sdk\/src\/secrets\.ts$/];   // tests carry fake secrets on purpose
+const ALLOW = [/^tests\//, /^integrations\/[^/]+\/fixtures\.json$/, /^packages\/sdk\/src\/secrets\.ts$/];   // tests carry fake secrets on purpose
 function* walk(dir) {
   for (const n of readdirSync(dir)) {
     if (SKIP_DIRS.has(n)) continue;

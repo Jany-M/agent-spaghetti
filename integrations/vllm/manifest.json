@@ -1,0 +1,35 @@
+{
+  "$schema": "../../packages/sdk/manifest.schema.json",
+  "manifest": 1,
+  "id": "vllm",
+  "name": "vLLM",
+  "roles": [
+    "backend"
+  ],
+  "cost": "free",
+  "detect": {
+    "process": [
+      "vllm"
+    ],
+    "bin": [
+      "vllm"
+    ],
+    "http": {
+      "port": 8000,
+      "path": "/v1/models"
+    }
+  },
+  "models": {
+    "list": "data",
+    "id": "id",
+    "context": [
+      "max_model_len"
+    ]
+  },
+  "speaks": {
+    "openai": {
+      "port": 8000,
+      "base": "/v1"
+    }
+  }
+}

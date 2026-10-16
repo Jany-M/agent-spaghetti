@@ -1,0 +1,26 @@
+[
+  {
+    "name": "found",
+    "env": {
+      "inventory": {
+        "installed": [
+          {
+            "name": "OpenAI.Codex",
+            "version": "26.1.0.0",
+            "location": "C:/Program Files/WindowsApps/OpenAI.Codex",
+            "source": "msix"
+          }
+        ]
+      }
+    },
+    "expect": {
+      "installs": 1,
+      "version": "26.1.0.0"
+    }
+  },
+  {
+    "name": "absent",
+    "env": {},
+    "expect": null
+  }
+]

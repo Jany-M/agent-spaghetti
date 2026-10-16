@@ -1,0 +1,23 @@
+{
+  "$schema": "../../packages/sdk/manifest.schema.json",
+  "manifest": 1,
+  "id": "codex",
+  "name": "Codex",
+  "roles": [
+    "agent",
+    "client"
+  ],
+  "cost": "metered",
+  "detect": {
+    "installed": [
+      "OpenAI.Codex",
+      "Codex*"
+    ],
+    "bin": [
+      "codex"
+    ],
+    "version": {
+      "from": "installed"
+    }
+  }
+}

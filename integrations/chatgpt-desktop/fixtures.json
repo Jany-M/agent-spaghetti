@@ -1,0 +1,26 @@
+[
+  {
+    "name": "found",
+    "env": {
+      "inventory": {
+        "installed": [
+          {
+            "name": "OpenAI.ChatGPT-Desktop",
+            "version": "1.2026.1.0",
+            "location": "C:/Program Files/WindowsApps/OpenAI.ChatGPT",
+            "source": "msix"
+          }
+        ]
+      }
+    },
+    "expect": {
+      "installs": 1,
+      "version": "1.2026.1.0"
+    }
+  },
+  {
+    "name": "absent",
+    "env": {},
+    "expect": null
+  }
+]

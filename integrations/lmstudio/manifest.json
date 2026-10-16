@@ -1,0 +1,69 @@
+{
+  "$schema": "../../packages/sdk/manifest.schema.json",
+  "manifest": 1,
+  "id": "lmstudio",
+  "name": "LM Studio",
+  "roles": [
+    "backend"
+  ],
+  "cost": "free",
+  "detect": {
+    "installed": [
+      "LM Studio*"
+    ],
+    "process": [
+      "LM Studio",
+      "lms"
+    ],
+    "bin": [
+      "lms"
+    ],
+    "paths": {
+      "windows": [
+        "~/.lmstudio/bin/lms.exe"
+      ],
+      "linux": [
+        "~/.lmstudio/bin/lms"
+      ],
+      "macos": [
+        "~/.lmstudio/bin/lms"
+      ]
+    },
+    "version": {
+      "from": "installed"
+    },
+    "http": {
+      "port": 1234,
+      "path": "/api/v0/models"
+    }
+  },
+  "models": {
+    "list": "data",
+    "id": "id",
+    "filter": [
+      {
+        "field": "state",
+        "in": [
+          "loaded"
+        ]
+      },
+      {
+        "field": "type",
+        "in": [
+          "llm",
+          "vlm"
+        ]
+      }
+    ],
+    "context": [
+      "loaded_context_length",
+      "max_context_length"
+    ]
+  },
+  "speaks": {
+    "openai": {
+      "port": 1234,
+      "base": "/v1"
+    }
+  }
+}

@@ -1,0 +1,30 @@
+[
+  {
+    "name": "on PATH with version",
+    "env": {
+      "bins": {
+        "claude": "C:/Users/u/.local/bin/claude.exe"
+      },
+      "exec": {
+        "C:/Users/u/.local/bin/claude.exe --version": {
+          "code": 0,
+          "stdout": "2.1.205 (Claude Code)\n",
+          "stderr": ""
+        }
+      }
+    },
+    "expect": {
+      "version": "2.1.205",
+      "levels": [
+        "detect",
+        "client"
+      ],
+      "connectable": "needs-setup"
+    }
+  },
+  {
+    "name": "absent",
+    "env": {},
+    "expect": null
+  }
+]

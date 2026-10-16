@@ -1,0 +1,38 @@
+{
+  "$schema": "../../packages/sdk/manifest.schema.json",
+  "manifest": 1,
+  "id": "claude-cli",
+  "name": "Claude Code CLI",
+  "roles": [
+    "agent",
+    "client"
+  ],
+  "cost": "metered",
+  "detect": {
+    "bin": [
+      "claude"
+    ],
+    "paths": {
+      "windows": [
+        "~/.local/bin/claude.exe"
+      ],
+      "linux": [
+        "~/.local/bin/claude"
+      ],
+      "macos": [
+        "~/.local/bin/claude"
+      ]
+    },
+    "version": {
+      "args": [
+        "--version"
+      ]
+    }
+  },
+  "speaks": {
+    "mcpClient": {
+      "config": "~/.claude.json",
+      "key": "mcpServers"
+    }
+  }
+}

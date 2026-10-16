@@ -1,0 +1,22 @@
+{
+  "$schema": "../../packages/sdk/manifest.schema.json",
+  "manifest": 1,
+  "id": "cline",
+  "name": "Cline",
+  "roles": [
+    "client"
+  ],
+  "cost": "unknown",
+  "detect": {
+    "paths": [
+      "~/.vscode/extensions/saoudrizwan.claude-dev-*",
+      "~/.vscode-insiders/extensions/saoudrizwan.claude-dev-*",
+      "~/.cursor/extensions/saoudrizwan.claude-dev-*",
+      "~/.windsurf/extensions/saoudrizwan.claude-dev-*"
+    ],
+    "version": {
+      "file": "~/.vscode/extensions/saoudrizwan.claude-dev-*/package.json",
+      "json": "version"
+    }
+  }
+}

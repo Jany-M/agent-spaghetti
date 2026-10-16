@@ -1,0 +1,26 @@
+[
+  {
+    "name": "found",
+    "env": {
+      "inventory": {
+        "installed": [
+          {
+            "name": "Cursor (User)",
+            "version": "3.22.12",
+            "location": "C:/Users/u/AppData/Local/Programs/cursor",
+            "source": "uninstall"
+          }
+        ]
+      }
+    },
+    "expect": {
+      "installs": 1,
+      "version": "3.22.12"
+    }
+  },
+  {
+    "name": "absent",
+    "env": {},
+    "expect": null
+  }
+]

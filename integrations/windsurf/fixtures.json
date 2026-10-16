@@ -1,0 +1,26 @@
+[
+  {
+    "name": "found",
+    "env": {
+      "inventory": {
+        "installed": [
+          {
+            "name": "Windsurf (User)",
+            "version": "1.0.0",
+            "location": "D:/Tools/Windsurf",
+            "source": "uninstall"
+          }
+        ]
+      }
+    },
+    "expect": {
+      "installs": 1,
+      "version": "1.0.0"
+    }
+  },
+  {
+    "name": "absent",
+    "env": {},
+    "expect": null
+  }
+]

@@ -1,0 +1,34 @@
+{
+  "$schema": "../../packages/sdk/manifest.schema.json",
+  "manifest": 1,
+  "id": "mempalace",
+  "name": "MemPalace",
+  "roles": [
+    "tool"
+  ],
+  "cost": "free",
+  "detect": {
+    "bin": [
+      "mempalace-mcp",
+      "mempalace"
+    ],
+    "paths": {
+      "windows": [
+        "~/.local/bin/mempalace-mcp.exe"
+      ],
+      "linux": [
+        "~/.local/bin/mempalace-mcp"
+      ],
+      "macos": [
+        "~/.local/bin/mempalace-mcp"
+      ]
+    }
+  },
+  "speaks": {
+    "mcpServer": {
+      "command": [
+        "mempalace-mcp"
+      ]
+    }
+  }
+}
