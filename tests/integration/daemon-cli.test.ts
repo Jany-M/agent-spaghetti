@@ -41,8 +41,9 @@ async function boot(scan: () => Promise<Snapshot> = async () => SNAP) {
     loaded: () => ({ integrations, rejected: [] }),
     onEnvs: async (cmd, args, envIds) => {
       calls.push([cmd, ...args, ...(envIds ?? ['*'])].join(' '));
-      const r: Record<string, unknown> = { switches: sw, switch: { ...sw[0], on: args[1] === 'on' }, test: { ok: true, steps: [{ name: 'detect', ok: true, detail: 'found', ms: 1 }] } };
-      return (envIds ?? ['windows', 'wsl:TestDistro']).map(envId => envId === 'windows' && cmd === 'switches' ? { envId, error: 'boom' } : { envId, result: r[cmd] as never });
+      const r: Record<string, unknown> = { switches: sw, switch: { ...sw[0], on: args[1] === 'on' }, test: { ok: true, steps: [{ name: 'detect', ok: true, detail: 'found', ms: 1 }] },
+        connect: { integration: args[0], envId: envIds?.[0], description: 'add it', changes: ['x'], applied: args[2] !== 'dry-run' } };
+      return (envIds ?? ['windows', 'wsl:TestDistro']).map(envId => envId === 'windows' && (cmd === 'switches' || cmd === 'connect') ? { envId, error: 'boom' } : { envId, result: r[cmd] as never });
     } };
   const dir = mkdtempSync(join(tmpdir(), 'as-'));
   const token = loadOrCreateToken(dir);
@@ -203,6 +204,10 @@ test('CLI 3: targets, delegate to a free local model (result printed), runs, run
     r = await cli('verdict', '1', 'meh'); assert.equal(r.code, 1);
     r = await cli('cancel', '1'); assert.match(r.out, /run 1 is not running/);
     r = await cli('delegate', 'nope', 'x'); assert.equal(r.code, 1); assert.match(r.err, /unknown or unavailable target nope/);
+    b.services.store.saveSnapshot('scan', { ...SNAP, detections: [...SNAP.detections, ...['windows', 'wsl:TestDistro'].map(envId => ({ ...SNAP.detections[0], integration: 'openclaw', name: 'OpenClaw', envId }))] });
+    r = await cli('connect', 'openclaw', '--dry-run'); assert.equal(r.code, 0, r.err); assert.match(r.out, /^Would: add it \(wsl:TestDistro\)\n  x$/);
+    assert.ok(b.calls.includes('connect openclaw {"command":"node","args":["/x/cli.ts"]} dry-run windows'), 'tried the Windows install first');
+    r = await cli('connect', 'ghost'); assert.equal(r.code, 1); assert.match(r.err, /ghost was not found by the last scan/);
     const types = (await b.client.call('events', { since: 0 })).map(e => e.type);
     for (const t of ['run.started', 'run.finished', 'backend.queue']) assert.ok(types.includes(t as never), t);
   } finally { await b.close(); }

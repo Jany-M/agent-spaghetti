@@ -21,7 +21,7 @@ export function renderTree(s: Snapshot, live?: LiveState): string {
     else lines.push(a.provider ? `${left} → ${a.provider} · ${a.model} (not observed)` : `${left} → (model unknown)`);
     const local = a.id.slice(a.integration.length + 1);
     for (const x of Object.values(live?.sessions ?? {}).filter(x => x.envId === a.envId && x.agentId === local))
-      lines.push(`  └ ${x.kind ?? 'session'} ${x.status ?? ''}${x.model ? ` · ${x.model}` : ''}`.trimEnd());
+      lines.push(`  └ ${[x.kind ?? 'session', x.status].filter(Boolean).join(' ')}${x.model ? ` · ${x.model}` : ''}`);
   }
   for (const b of s.backends) if (!used.has(b.id + b.endpoint)) lines.push(`${nice(b.integration)} · ${b.model}${ctxLabel(b.contextLength)} (no agent attached)`);
   for (const e of s.envs) {

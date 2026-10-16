@@ -8,6 +8,7 @@ import { planHook } from './hook.ts';
 export interface IO { out(s: string): void; err(s: string): void }
 const DOWN = 'agent-spaghetti daemon is not running. Start it with: agent-spaghetti daemon';
 export const usage = () => ['Usage: agent-spaghetti <command> [--json]', '',
+  `  ${'help'.padEnd(44)}This list`,
   `  ${'daemon'.padEnd(44)}Start the daemon (foreground)`,
   `  ${'mcp --as <client>'.padEnd(44)}MCP server for a client (stdio; started by the client)`,
   ...Object.values(OPS).map(o => `  ${o.usage.padEnd(44)}${o.summary}`)].join('\n');
@@ -33,6 +34,7 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
     await d.close();
     return 0;
   }
+  if (cmd === 'help' || cmd === '--help') { io.out(usage()); return 0; }
   if (cmd === 'mcp') {          // stdio MCP server for a client; parent run id comes from a delegated agent's environment
     const as = flag([...args], '--as') ?? 'mcp';
     await serveMcpStdio(HubClient.fromDiscovery(env), { source: as, parentRunId: Number(env.AGENT_SPAGHETTI_PARENT_RUN) || undefined });

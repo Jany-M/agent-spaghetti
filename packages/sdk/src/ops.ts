@@ -24,7 +24,7 @@ export const OPS = {
   report:       { method: 'GET',  path: '/v1/report',       usage: 'report [--out <file>]',    summary: 'Machine configuration report (Markdown)' },
   consent:      { method: 'POST', path: '/v1/consent',      usage: 'answer <id> allow|deny [once|job|always]', summary: 'Answer a question waiting for you (ids: status)' },
   shutdown:     { method: 'POST', path: '/v1/shutdown',     usage: 'shutdown',                 summary: 'Stop the daemon' },
-  delegate:     { method: 'POST', path: '/v1/delegate',     usage: 'delegate <target> <task…> [--kind k] [--reason r] [--model m]', summary: 'Hand a task to a local model or another agent',
+  delegate:     { method: 'POST', path: '/v1/delegate',     usage: 'delegate <target> <task> [options]', summary: 'Hand a task to a local model or agent (--kind, --reason, --model)',
     mcp: { name: 'delegate', description: 'Hand a task to a local model or another agent on this machine (see `targets`). Free local models run at once; '
       + 'targets that may cost money ask the user first. Returns the result, or a run id to check with `run_status` if it takes long.',
       input: { type: 'object', additionalProperties: false, required: ['target', 'task'], properties: {

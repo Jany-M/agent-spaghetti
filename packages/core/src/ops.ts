@@ -121,14 +121,17 @@ export const handlers: Handlers = {
     if (!s.ledger.get(num(i.id, 0))) throw new Error(`no run ${i.id}`);
     s.ledger.update(num(i.id, 0), { verdict: i.value }); return { ok: true };
   },
-  connect: async (i, s) => {
-    const envId = i.envId ?? snapshot(s)?.detections.find(d => d.integration === need(i.integration, 'integration'))?.envId;
-    if (!envId) throw new Error(`${i.integration} was not found by the last scan`);
-    const cli = s.cli(envId);
-    if (!cli) throw new Error(`cannot run agent-spaghetti in ${envId} (see: status)`);
-    const [r] = await s.onEnvs('connect', [i.integration, JSON.stringify(cli), i.dryRun ? 'dry-run' : ''], [envId]);
-    if (!r?.result) throw new Error(r?.error ?? `${envId} is not running`);
-    return r.result;
+  connect: async (i, s) => {   // every environment where the last scan found it, until one connects (e.g. a Windows companion app vs the WSL CLI)
+    const envIds = i.envId ? [i.envId] : [...new Set(snapshot(s)?.detections.filter(d => d.integration === need(i.integration, 'integration')).map(d => d.envId))];
+    if (!envIds.length) throw new Error(`${i.integration} was not found by the last scan`);
+    const errors: string[] = [];
+    for (const envId of envIds) {
+      const cli = s.cli(envId);
+      const [r] = cli ? await s.onEnvs('connect', [i.integration, JSON.stringify(cli), i.dryRun ? 'dry-run' : ''], [envId]) : [{ envId, error: 'agent-spaghetti cannot run there (see: status)' }];
+      if (r?.result) return r.result;
+      errors.push(`${envId}: ${r?.error ?? 'not running'}`);
+    }
+    throw new Error(errors.join('; '));
   },
   hook: (i, s) => {   // metadata only: the hook command already dropped prompts, responses and file contents
     const d = i.data ?? {};

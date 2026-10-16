@@ -34,9 +34,21 @@ By default it keeps the model OpenClaw already uses. Re-point it with:
 
 Other modes (`keep`, `manual`) are described in `packs/openclaw/config/overrides.env.example`.
 
-## Coming next
+## The daemon, the tray and delegation
 
-A desktop app and tray icon to see, connect and test your AI tools and models in one place, and to pick which LLM does which job.
+`npm install`, then (Node.js 24 on Windows):
+
+```powershell
+npm run tray                          # tray icon: status on hover, questions to answer; starts the daemon if needed
+node packages/cli/src/index.ts help   # or the CLI (the daemon: `... daemon`)
+```
+
+- **See:** `scan` finds AI tools, local model servers and agents on Windows and in running WSL distros; `status` shows what is running now.
+- **Delegate:** `delegate <target> <task>` hands a task to a local model (LM Studio, Ollama, llama.cpp, vLLM) or to Claude Code. Free local models run at once, one request at a time per server; anything that may cost money asks you first (tray or `answer <id> allow|deny`). `targets` lists what is available, `runs` keeps the record (who, what kind, why, outcome, cost, result file).
+- **Connect clients:** `connect openclaw | claude-cli | cursor` gives a tool the `agent-spaghetti` MCP server (`delegate`, `targets`, `run_status`). In Cursor, a prompt starting with `>>target ` goes straight to that target without using Cursor's model; the result lands in `.agent-spaghetti/results/` in the workspace.
+- **Third-party integrations** (JSON files in the data folder's `integrations/`) do nothing until you allow each action (`permissions`, `allow`, `deny`).
+
+Limits: Cursor can't use a local model as its own model (its servers can't reach your machine), so Cursor works through MCP and the `>>` hook instead.
 
 ## License
 

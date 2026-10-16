@@ -27,7 +27,7 @@ function sessions(s: Status) {
   const names = new Map(s.snapshot?.detections.map(d => [d.integration, d.name]) ?? []);
   const runs = Object.values(s.live.runs).map(r => `${names.get(r.source) ?? r.source} → ${names.get(r.target) ?? r.target} (run ${r.id})`);
   return [...runs, ...Object.values(s.live.sessions).map(x =>
-    `${agents.get(`${x.envId}|${x.agentId}`) ?? x.agentId ?? 'agent'} · ${x.kind ?? 'session'} ${x.status ?? ''}${x.model ? ` · ${x.model}` : ''}`.trim())];
+    `${agents.get(`${x.envId}|${x.agentId}`) ?? x.agentId ?? 'agent'} · ${[x.kind ?? 'session', x.status].filter(Boolean).join(' ')}${x.model ? ` · ${x.model}` : ''}`)];
 }
 const section = (title: string, ...children: ReactNode[]) => h('section', null, h('h2', null, title), ...children);
 
