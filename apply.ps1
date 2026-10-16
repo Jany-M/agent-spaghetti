@@ -19,16 +19,10 @@ param(
 $ErrorActionPreference = 'Stop'
 $repo = $PSScriptRoot
 
-function Get-Distros { (wsl.exe -l -q) -replace "`0", '' | ForEach-Object { $_.Trim() } | Where-Object { $_ } }
+. "$repo\packs\openclaw\scripts\wsl-distros.ps1"
 
 if (-not $Distro) {
-  $found = @(Get-Distros | Where-Object {
-      wsl.exe -d $_ -- bash -lc 'command -v openclaw >/dev/null 2>&1 || ls -d ~/.openclaw/openclaw.json >/dev/null 2>&1' 2>$null
-      $LASTEXITCODE -eq 0
-    })
-  if ($found.Count -eq 0) { throw "No WSL distro with OpenClaw found. Installed distros: $((Get-Distros) -join ', '). Pass -Distro." }
-  if ($found.Count -gt 1) { throw "Several distros have OpenClaw ($($found -join ', ')). Pass -Distro." }
-  $Distro = $found[0]
+  $Distro = Find-OpenClawDistro
 }
 Write-Host "Using WSL distro: $Distro"
 
