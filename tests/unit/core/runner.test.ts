@@ -106,13 +106,15 @@ test('runner: paid target asks; once / job / always; deny and expiry are recorde
   s.settings.setGrants([g({ subject: 'cursor', resource: 'paid-agent', mode: 'deny' })]);
   assert.equal((await s.runner.start('cursor', { target: 'paid-agent', task: 'x' }).done).outcome, 'denied');
 });
-test('runner: errors and cancellation end the run cleanly; unknown target and model are refused up front', async () => {
+test('runner: errors and cancellation end the run cleanly; nested delegations link to the running parent; unknown target and model are refused up front', async () => {
   const s = setup();
   s.settings.setGrants([g({ resource: 'paid-agent' })]);
   const boom = await s.runner.start('cursor', { target: 'paid-agent', task: 'boom' }).done;
   assert.deepEqual([boom.outcome, boom.error], ['error', 'kaput']);
   const slow = s.runner.start('cursor', { target: 'paid-agent', task: 'slow' });
   await new Promise(r => setTimeout(r, 20));
+  const nested = await s.runner.start('paid-agent', { target: 'lmstudio', task: 'sub-task' }).done;
+  assert.equal(nested.parentRunId, slow.id, 'a delegation from a running agent belongs to its task');
   assert.equal(s.runner.cancel(slow.id), true);
   assert.equal((await slow.done).outcome, 'cancelled');
   assert.throws(() => s.runner.start('cursor', { target: 'nope', task: 'x' }), /unknown or unavailable target nope/);

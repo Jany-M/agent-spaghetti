@@ -1,0 +1,52 @@
+[
+  {
+    "name": "desktop app from the uninstall list (no install folder, icon path only)",
+    "env": {
+      "inventory": {
+        "installed": [
+          {
+            "name": "AnythingLLM 1.2.3-r1",
+            "version": "1.2.3-r1",
+            "location": "C:/Users/u/AppData/Local/Programs/AnythingLLM",
+            "source": "uninstall"
+          }
+        ]
+      }
+    },
+    "expect": {
+      "version": "1.2.3-r1",
+      "installs": 1
+    }
+  },
+  {
+    "name": "running app",
+    "env": {
+      "inventory": {
+        "processes": [
+          {
+            "name": "AnythingLLM",
+            "pid": 7,
+            "path": "C:/Users/u/AppData/Local/Programs/AnythingLLM/AnythingLLM.exe"
+          }
+        ]
+      }
+    },
+    "expect": {
+      "installs": 1
+    }
+  },
+  {
+    "name": "another app with a similar process name is not AnythingLLM",
+    "env": {
+      "inventory": {
+        "processes": [
+          {
+            "name": "AnythingLLM-helper",
+            "pid": 8
+          }
+        ]
+      }
+    },
+    "expect": null
+  }
+]

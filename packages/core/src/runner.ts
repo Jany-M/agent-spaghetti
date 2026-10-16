@@ -40,7 +40,7 @@ export function targets(d: Pick<RunnerDeps, 'host' | 'snapshot' | 'integrations'
 const SCOPES = (jobId?: string): ConsentScope[] => (jobId ? ['once', 'job', 'always'] : ['once', 'always']);
 export class Runner {
   private d: RunnerDeps;
-  private running = new Map<number, { ac: AbortController; done: Promise<RunRow> }>();
+  private running = new Map<number, { ac: AbortController; done: Promise<RunRow>; target: string }>();
   constructor(d: RunnerDeps) { this.d = d; }
 
   /** Starts a run and returns its id at once; `done` settles with the final run record. */
@@ -50,13 +50,16 @@ export class Runner {
     if (req.model && t.models.length && !t.models.includes(req.model))
       throw new Error(`${t.name} has no ${t.kind === 'model' ? 'loaded model' : 'agent'} ${req.model} (${t.kind === 'model' ? 'loaded' : 'agents'}: ${t.models.join(', ')})`);
     const kind = req.kind && (TASK_KINDS as readonly string[]).includes(req.kind) ? req.kind : 'other';
+    // An agent that delegates while it runs a delegated task works on that task (one such run: it is the parent).
+    const busy = [...this.running].filter(([, r]) => r.target === source);
+    req = { ...req, parentRunId: req.parentRunId ?? (busy.length === 1 ? busy[0][0] : undefined) };
     const row: Omit<RunRow, 'id'> = { ts: Date.now(), source, target: t.id, kind, reason: req.reason, parentRunId: req.parentRunId, jobId: req.jobId,
       taskHash: createHash('sha256').update(req.task).digest('hex'), outcome: 'running' };
     const id = this.d.ledger.record(row);
     const ac = new AbortController();
     this.emit('run.started', id, { source, target: t.id, kind, reason: req.reason ?? null, parentRunId: req.parentRunId ?? null });
     const done = this.run(id, source, t, { ...req, kind }, ac).finally(() => this.running.delete(id));
-    this.running.set(id, { ac, done });
+    this.running.set(id, { ac, done, target: t.id });
     return { id, done };
   }
   cancel(id: number): boolean { const r = this.running.get(id); r?.ac.abort(new Error('cancelled')); return !!r; }

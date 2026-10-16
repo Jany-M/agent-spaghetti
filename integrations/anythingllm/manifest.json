@@ -1,0 +1,27 @@
+{
+  "$schema": "../../packages/sdk/manifest.schema.json",
+  "manifest": 1,
+  "id": "anythingllm",
+  "name": "AnythingLLM",
+  "roles": [
+    "client"
+  ],
+  "cost": "unknown",
+  "detect": {
+    "installed": [
+      "AnythingLLM*"
+    ],
+    "process": [
+      "AnythingLLM"
+    ],
+    "version": {
+      "from": "installed"
+    }
+  },
+  "speaks": {
+    "mcpClient": {
+      "config": "%APPDATA%/anythingllm-desktop/storage/plugins/anythingllm_mcp_servers.json",
+      "key": "mcpServers"
+    }
+  }
+}
