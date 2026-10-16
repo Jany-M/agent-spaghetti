@@ -3,6 +3,7 @@
 //   openclaw config get models.providers --json          → { <providerId>: { baseUrl, … } }   (only baseUrl is kept)
 //   openclaw sessions --all-agents --active <min> --json → { sessions: [{ key, agentId, kind, status, model, … }] }
 //   openclaw config get mcp.servers --json / config patch --stdin / mcp reload   (switches, shared with the pack)
+//   gateway GET /healthz → {"ok":true,"status":"live"}, no auth (manifest detect.http; docs/gateway/health.md, checked 2026-10-16)
 // The config file itself is never opened by the hub.
 import type { AgentInfo, IntegrationModule } from '@agent-spaghetti/sdk';
 import { MCP_NAME, addMcpServer, mcpServers, setMcpEnabled } from './pack/mcp.ts';
@@ -53,7 +54,7 @@ export const openclawModule: IntegrationModule = {
   },
   observe(env, det, emit, ctx) {
     const exe = openclawExe(det);
-    if (!exe) return { dispose() {} };
+    if (!exe || !det.endpoint) return { dispose() {} };    // gateway down: nothing runs (a rescan follows when it comes back)
     const prev = new Map<string, string>(); let seed = true, busy = false;
     const tick = async () => {
       if (busy) return; busy = true;

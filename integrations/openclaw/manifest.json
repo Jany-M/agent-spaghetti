@@ -29,6 +29,10 @@
         "--version"
       ],
       "regex": "(\\d{4}\\.\\d+\\.\\d+)"
+    },
+    "http": {
+      "port": 18789,
+      "path": "/healthz"
     }
   }
 }

@@ -37,7 +37,7 @@ async function boot(scan: () => Promise<Snapshot> = async () => SNAP) {
   const resultsDir = mkdtempSync(join(tmpdir(), 'as-results-'));
   const runner = new Runner({ bus, consent, ledger, settings, resultsDir, host: () => host, snapshot: () => store.loadSnapshot('scan'), integrations: () => integrations });
   const services: Services = { store, bus, settings, consent, ledger, runner, host: () => host, cli: () => ({ command: 'node', args: ['/x/cli.ts'] }),
-    shutdown: () => { stopped++; }, live: () => live, scan,
+    shutdown: () => { stopped++; }, live: () => live, scan: async () => { const snap = await scan(); store.saveSnapshot('scan', snap); return snap; },
     loaded: () => ({ integrations, rejected: [] }),
     onEnvs: async (cmd, args, envIds) => {
       calls.push([cmd, ...args, ...(envIds ?? ['*'])].join(' '));
@@ -191,6 +191,22 @@ test('runDaemon: a third-party drop-in asks once per action; allowing stores a g
   } finally { await d.close(); }
 });
 
+test('runDaemon: concurrent scans share one; a tool starting or stopping triggers one rescan', async () => {
+  const { runDaemon } = await import('../../packages/core/src/main.ts');
+  const dir = mkdtempSync(join(tmpdir(), 'as-'));
+  const d = await runDaemon({ AGENT_SPAGHETTI_DATA_DIR: dir }, { scanOnStart: false, observe: false, discover: fakeMachine });
+  const scans = () => d.services.store.eventsSince(0, 1000).filter(e => e.type === 'scan.completed').length;
+  try {
+    const [a, b] = [d.services.scan(), d.services.scan()];
+    assert.equal(a, b);
+    await a;
+    assert.ok(d.services.store.loadSnapshot('scan'), 'the scan saves its snapshot');
+    const emit = (changed: boolean) => d.services.bus.emit({ ts: Date.now(), type: 'tool.changed', envId: 'windows', source: 'lmstudio', data: { integration: 'lmstudio', running: false, ...(changed ? { changed } : {}) } });
+    emit(false); emit(true); emit(true);
+    await new Promise(res => setTimeout(res, 3500));
+    assert.equal(scans(), 2, 'first reports do not rescan; several changes → one rescan');
+  } finally { await d.close(); }
+});
 test('CLI 3: targets, delegate to a free local model (result printed), runs, runs <id>, verdict, cancel', async () => {
   const b = await boot();
   const cli = async (...a: string[]) => { const t = io(); const code = await run(a, t.io, b.env); return { code, out: t.o.join('\n'), err: t.e.join('\n') }; };

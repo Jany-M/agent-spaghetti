@@ -19,6 +19,7 @@ export interface Services {
   host(): import('@agent-spaghetti/sdk').Environment | null;
   /** How to run agent-spaghetti in an environment (clients start its MCP bridge with it). */
   cli(envId: string): import('@agent-spaghetti/sdk').Cli | null;
+  /** scan(): one full scan at a time (shared by concurrent callers); saves the snapshot. */
   loaded(): Loaded; scan(): Promise<Snapshot>; live(): LiveState;
   /** Run a command in the given (default: every running) environment(s); failures are per env. */
   onEnvs<C extends EnvCommand>(cmd: C, args: string[], envIds?: string[]): Promise<Array<EnvResult<EnvResults[C]>>>;
@@ -41,7 +42,7 @@ const toggle = (s: Services, id: string, off: boolean) => {
 
 export const handlers: Handlers = {
   status: (_i, s) => ({ snapshot: snapshot(s), live: s.live(), consents: s.consent.pending() }),
-  scan: async (_i, s) => { const snap = await s.scan(); s.store.saveSnapshot('scan', snap); return { snapshot: snap }; },
+  scan: async (_i, s) => ({ snapshot: await s.scan() }),
   events: (i, s) => s.store.eventsSince(num(i.since, 0), num(i.limit, 500)),
   integrations: (_i, s) => {
     const l = s.loaded(), off = s.settings.get('disabled');

@@ -1,23 +1,25 @@
 // Electron main process of the tray (Phase 2). Owns the one HubClient; renderers go through the preload bridge.
 // The daemon is independent: the tray starts it when missing and can leave it running on quit.
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, Notification, screen, Tray } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, Notification, screen, shell, Tray } from 'electron';
+import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DaemonDown, HubClient, dataDir, emptyLive, renderStats, trayState } from '@agent-spaghetti/sdk';
 import { spawnDetached } from '@agent-spaghetti/core/proc';
 import { CHANNEL, isBridgeOp, type BridgeEvent } from '@agent-spaghetti/ui/bridge';
-import { ICON, ensureDaemon, newQuestions, placeNear, tooltip, trayMenu } from './logic.ts';
+import { ICON, ensureDaemon, newQuestions, placeNear, shortcutPaths, tooltip, trayMenu } from './logic.ts';
 
 const DIR = __dirname;                                     // dist/app (bundle) — assets and the popover live next to it
 const ROOT = join(DIR, '..', '..');
 const asset = (f: string) => join(DIR, f);
 const SIZE = { width: 380, height: 520 };
+const APP_ID = 'com.agent-spaghetti.tray';
 
-let tray: Tray | null = null, pop: BrowserWindow | null = null, client: HubClient | null = null, up = false;
+let tray: Tray | null = null, pop: BrowserWindow | null = null, client: HubClient | null = null, up = false, quitting = false;
 const seen = new Set<string>();
 
 const connect = async () => { const c = HubClient.fromDiscovery(); await c.call('status'); return c; };
 const startDaemon = () => spawnDetached('node', [join(ROOT, 'packages', 'cli', 'src', 'index.ts'), 'daemon'], { logFile: join(dataDir(), 'daemon.log') });
-const send = (e: BridgeEvent) => pop?.webContents.send(CHANNEL.event, e);
+const send = (e: BridgeEvent) => { if (pop && !pop.isDestroyed()) pop.webContents.send(CHANNEL.event, e); };
 
 async function refresh() {
   if (!tray) return;
@@ -57,6 +59,14 @@ function showPopover() {
   pop.setBounds(placeNear(b, screen.getDisplayMatching(b).workArea, SIZE));
   pop.show(); pop.focus();
 }
+/** First run on Windows: a clickable launcher on the desktop and in the Start menu (deleted ones are not recreated). */
+function ensureShortcuts() {
+  const flag = join(app.getPath('userData'), 'shortcuts-created');
+  if (process.platform !== 'win32' || existsSync(flag)) return;
+  const link = { target: process.execPath, args: `"${app.getAppPath()}"`, icon: asset('icon.ico'), iconIndex: 0, appUserModelId: APP_ID, description: 'Agent Spaghetti tray' };
+  for (const p of shortcutPaths(app.getPath('desktop'), app.getPath('appData'), join)) shell.writeShortcutLink(p, 'create', link);
+  writeFileSync(flag, '');
+}
 function setMenu() {
   if (!tray) return;
   const act: Record<string, () => void> = {
@@ -75,14 +85,17 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', showPopover);
   app.on('window-all-closed', () => { /* tray app: stay alive */ });
+  app.on('before-quit', () => { quitting = true; });
   void app.whenReady().then(async () => {
-    app.setAppUserModelId('com.agent-spaghetti.tray');
+    app.setAppUserModelId(APP_ID);
+    ensureShortcuts();
     tray = new Tray(nativeImage.createFromPath(asset(ICON.problem)));
     tray.on('click', () => (pop?.isVisible() ? pop.hide() : showPopover()));
     client = await ensureDaemon({ connect, start: startDaemon }).catch(e => { console.error(e); return null; });   // before the page asks for status
     pop = new BrowserWindow({ ...SIZE, show: false, frame: false, resizable: false, skipTaskbar: true, alwaysOnTop: true, icon: asset('icon.png'),
       webPreferences: { preload: asset('preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
     pop.on('blur', () => pop?.hide());
+    pop.on('close', e => { if (!quitting) { e.preventDefault(); pop?.hide(); } });   // Alt+F4 hides: the popover lives as long as the tray
     pop.webContents.on('will-navigate', e => e.preventDefault());
     pop.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     ipcMain.handle(CHANNEL.call, (_e, op: unknown, input: Record<string, unknown>) => {   // before the page loads: it calls at once

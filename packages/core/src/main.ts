@@ -15,7 +15,7 @@ import { Settings } from './settings.ts';
 import { onEnv } from './dispatch.ts';
 import { startObservers } from './observers.ts';
 import { Consent } from './consent.ts';
-import { handlers, type Services } from './ops.ts';
+import type { Services } from './ops.ts';
 import { Ledger } from './ledger.ts';
 import { Runner } from './runner.ts';
 import { fileURLToPath } from 'node:url';
@@ -55,6 +55,7 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
     grants: settings.grants(), extraHosts: [...extraHostsFromEnv(env), ...settings.get('llmHosts')], bundle: await loadBundle(),
   });
   let rescan: NodeJS.Timeout | undefined;
+  const rescanSoon = () => { clearTimeout(rescan); rescan = setTimeout(() => void services.scan().catch(() => {}), 3000); };
   /** Third-party asks from a scan become questions; an answer is a lasting grant, then a rescan picks it up. */
   const ask = (pending: Snapshot['pending'] = []) => {
     for (const p of pending) {
@@ -63,7 +64,7 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
       void consent.request({ ...p, why, scopes: ['always'] }).then(a => {
         if (a.answer === 'expired') return;
         settings.setGrants(withGrants(settings.grants(), [{ ...p, mode: a.answer === 'granted' ? 'allow' : 'deny', by: 'user', ts: Date.now() }]));
-        clearTimeout(rescan); rescan = setTimeout(() => void handlers.scan({}, services), 2000);   // several answers → one rescan
+        rescanSoon();                                            // several answers → one rescan
       });
     }
   };
@@ -80,6 +81,22 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
       if (hubFiles.get(e.distro!) !== json && await writeDistroFile(e.distro!, 'hub.json', json)) hubFiles.set(e.distro!, json);
     }
   };
+  let scanning: Promise<Snapshot> | null = null;
+  async function fullScan(): Promise<Snapshot> {
+    loaded = await load();                                   // drop-ins are re-read on every scan
+    const c = await ctx();
+    entries = await discover(c.extraHosts);
+    const snap = await runScan(entries, c.integrations, bus, { ...c, rejected: loaded.rejected });
+    store.saveSnapshot('scan', snap);
+    ask(snap.pending);
+    await shareWithDistros();
+    if (o.observe !== false) {
+      observers?.dispose();
+      observers = startObservers(entries, c.integrations, { ...c, toolPollMs: settings.get('observe.toolPollMs'), sessionPollMs: settings.get('observe.sessionPollMs') },
+        (envId, e) => bus.emit({ ts: Date.now(), envId, ...e }));
+    }
+    return snap;
+  }
   const services: Services = {
     store, bus, settings, consent, ledger, runner, host, loaded: () => loaded, live: () => live,
     cli: envId => {
@@ -88,20 +105,7 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
       return e?.env ? HOST_CLI : p ? { command: p.node, args: [p.bundlePath] } : null;
     },
     shutdown: () => void close().then(() => process.exit(0)),
-    async scan(): Promise<Snapshot> {
-      loaded = await load();                                   // drop-ins are re-read on every scan
-      const c = await ctx();
-      entries = await discover(c.extraHosts);
-      const snap = await runScan(entries, c.integrations, bus, { ...c, rejected: loaded.rejected });
-      ask(snap.pending);
-      await shareWithDistros();
-      if (o.observe !== false) {
-        observers?.dispose();
-        observers = startObservers(entries, c.integrations, { ...c, backendPollMs: settings.get('observe.backendPollMs'), sessionPollMs: settings.get('observe.sessionPollMs') },
-          (envId, e) => bus.emit({ ts: Date.now(), envId, ...e }));
-      }
-      return snap;
-    },
+    scan: () => (scanning ??= fullScan().finally(() => { scanning = null; })),   // one scan at a time; callers share it
     async onEnvs(cmd, args, envIds) {
       if (!entries.length) entries = await discover((await ctx()).extraHosts);
       const c = await ctx();
@@ -116,7 +120,14 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
   const server = await startDaemon({ services, token, port: Number(env.AGENT_SPAGHETTI_PORT ?? 0) });
   const removeDiscovery = writeDiscovery(dir, server.port);
   ask(store.loadSnapshot<Snapshot>('scan')?.pending);
-  const close = async () => { clearTimeout(rescan); observers?.dispose(); clearInterval(pruneTimer); removeDiscovery(); await server.close(); store.close(); };
-  if (o.scanOnStart !== false) void Promise.resolve(handlers.scan({}, services)).catch(e => process.stderr.write(`first scan failed: ${(e as Error).message}\n`));
+  // Status stays current by itself: a tool starting or stopping triggers a rescan, and a full rescan runs every `scan.everyMin`.
+  bus.subscribe(e => { if (e.type === 'tool.changed' && e.data.changed) rescanSoon(); });
+  const autoScan = setInterval(() => {
+    const every = settings.get('scan.everyMin') * 60000, last = store.loadSnapshot<Snapshot>('scan')?.ts ?? 0;
+    if (every > 0 && Date.now() - last >= every) void services.scan().catch(() => {});
+  }, 60000);
+  autoScan.unref();
+  const close = async () => { clearTimeout(rescan); clearInterval(autoScan); observers?.dispose(); clearInterval(pruneTimer); removeDiscovery(); await server.close(); store.close(); };
+  if (o.scanOnStart !== false) void services.scan().catch(e => process.stderr.write(`first scan failed: ${(e as Error).message}\n`));
   return { port: server.port, dir, services, close };
 }

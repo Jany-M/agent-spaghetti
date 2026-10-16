@@ -34,5 +34,5 @@ test('tray bundles: preload needs only electron, the renderer no Node at all, th
   assert.deepEqual([...new Set([...app('preload.cjs').matchAll(/require\("([^"]+)"\)/g)].map(m => m[1]))], ['electron']);
   assert.ok(!/require\(|["']node:/.test(app('renderer.js')));
   assert.match(app('popover.html'), /default-src 'none'; script-src 'self'; style-src 'self'/);
-  for (const f of ['main.cjs', 'popover.css', 'icon.png', 'tray-idle.png', 'tray-problem@2x.png']) assert.ok(app(f).length > 0, f);
+  for (const f of ['main.cjs', 'popover.css', 'icon.png', 'icon.ico', 'tray-idle.png', 'tray-problem@2x.png']) assert.ok(app(f).length > 0, f);
 });

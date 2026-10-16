@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeEnv } from '@agent-spaghetti/sdk/testing';
-import type { Grant, HubEvent, Integration, Manifest } from '@agent-spaghetti/sdk';
+import { liveState, type Grant, type HubEvent, type Integration, type Manifest } from '@agent-spaghetti/sdk';
 import { asSubject, guardEnvironment } from '../../../packages/core/src/permissions.ts';
 import type { Pending } from '@agent-spaghetti/sdk';
 import { Settings } from '../../../packages/core/src/settings.ts';
@@ -46,8 +46,8 @@ test('settings: defaults, typed set, text parsing, unknown keys and bad values r
   assert.equal(s.get('events.retentionDays'), 14);
   s.setText('llmHosts', ' 192.0.2.1 ,,192.0.2.2'); assert.deepEqual(s.get('llmHosts'), ['192.0.2.1', '192.0.2.2']);
   s.setText('llmHosts', ''); assert.deepEqual(s.get('llmHosts'), []);
-  s.setText('observe.backendPollMs', '5000'); assert.equal(s.get('observe.backendPollMs'), 5000);
-  assert.throws(() => s.setText('observe.backendPollMs', 'soon'), /invalid value/);
+  s.setText('observe.toolPollMs', '5000'); assert.equal(s.get('observe.toolPollMs'), 5000);
+  assert.throws(() => s.setText('observe.toolPollMs', 'soon'), /invalid value/);
   assert.throws(() => s.setText('nope', '1'), /unknown setting nope/);
   s.setGrants([allow('net', 'GET /v')]); assert.equal(s.grants().length, 1);
   assert.equal(s.all()['events.retentionDays'].value, 14);
@@ -56,25 +56,36 @@ test('settings: defaults, typed set, text parsing, unknown keys and bad values r
 const lms: Integration = { source: 'builtin', manifest: { manifest: 1, id: 'lmstudio', name: 'LM Studio', roles: ['backend'], cost: 'free',
   detect: { http: { port: 1234, path: '/m' } }, models: { list: 'data', id: 'id' }, speaks: { openai: { port: 1234, base: '/v1' } } } as Manifest };
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
-test('observeEnv: a running backend is reported at start, then only on change; module observers get the detection', async () => {
+test('observeEnv: first poll reports only what runs; later polls report every change (marked changed); module observers get the detection', async () => {
   const http: Record<string, { status: number; body: string } | null> = { 'http://127.0.0.1:1234/m': { status: 200, body: '{"data":[{"id":"a"}]}' } };
-  const env = fakeEnv({ http });
+  const inv = { installed: [], processes: [{ name: 'Ed', pid: 7 }], listening: [], env: {}, partial: [] };
+  const env = { ...fakeEnv({ http }), inventory: async () => inv };
   const seen: Array<Pick<HubEvent, 'type' | 'data' | 'source'>> = [];
   let observedWith = '';
   const mod: Integration = { source: 'builtin', manifest: { manifest: 1, id: 'oc', name: 'OC', roles: ['agent'], detect: { http: { port: 1234, path: '/m' } } } as Manifest,
     module: { observe(_e, det, emit) { observedWith = det.integration; emit({ type: 'session.updated', data: { key: 'k' } }); return { dispose() {} }; } } };
-  const d = observeEnv(env, [lms, mod], e => seen.push(e), { backendPollMs: 20, sessionPollMs: 20 });
+  const ed: Integration = { source: 'builtin', manifest: { manifest: 1, id: 'ed', name: 'Ed', roles: ['client'], detect: { process: ['Ed'] } } as Manifest };
+  const off: Integration = { source: 'builtin', manifest: { manifest: 1, id: 'off', name: 'Off', roles: ['client'], detect: { process: ['Nope'] } } as Manifest };
+  const d = observeEnv(env, [lms, mod, ed, off], e => seen.push(e), { toolPollMs: 20, sessionPollMs: 20, inventoryRefreshMs: 20 });
   await wait(50);
-  assert.equal(seen.filter(e => e.type === 'backend.changed').length, 1);
-  assert.deepEqual(seen.find(e => e.type === 'backend.changed')!.data, { integration: 'lmstudio', up: true, endpoint: 'http://127.0.0.1:1234', models: [{ model: 'a', contextLength: null }] });
+  const of = (t: string) => seen.filter(e => e.type === t).map(e => e.data);
+  assert.deepEqual(of('backend.changed'), [{ integration: 'lmstudio', up: true, endpoint: 'http://127.0.0.1:1234', models: [{ model: 'a', contextLength: null }] }]);
+  assert.deepEqual(of('tool.changed').map(x => [x.integration, x.running]), [['lmstudio', true], ['oc', true], ['ed', true]], 'a tool that does not run is not reported at start');
   assert.equal(observedWith, 'oc');
   assert.ok(seen.some(e => e.type === 'session.updated' && e.source === 'oc'));
-  http['http://127.0.0.1:1234/m'] = null;
-  await wait(60);
+  http['http://127.0.0.1:1234/m'] = null; inv.processes = [];
+  await wait(80);
   d.dispose();
-  const changes = seen.filter(e => e.type === 'backend.changed');
-  assert.equal(changes.length, 2);
-  assert.deepEqual(changes[1].data, { integration: 'lmstudio', up: false });
+  assert.deepEqual(of('backend.changed').slice(1), [{ integration: 'lmstudio', up: false, changed: true }]);
+  assert.deepEqual(of('tool.changed').slice(3).map(x => [x.integration, x.running, x.changed]), [['lmstudio', false, true], ['oc', false, true], ['ed', false, true]]);
+});
+test('liveState: tools from tool.changed; a completed scan clears sessions, backends and tools (observers report again)', () => {
+  const ev = (id: number, type: HubEvent['type'], data: Record<string, unknown>) => ({ id, ts: id, type, envId: 'windows', source: 'x', data });
+  const l = liveState([ev(1, 'tool.changed', { integration: 'ed', running: true }), ev(2, 'session.updated', { key: 'k' }), ev(3, 'run.started', { id: 1, source: 'a', target: 'b' })]);
+  assert.deepEqual(l.tools['windows|ed'], { integration: 'ed', envId: 'windows', running: true, endpoint: undefined, ts: 1 });
+  const after = liveState([ev(4, 'scan.completed', {})], l);
+  assert.deepEqual([after.tools, after.sessions, after.backends], [{}, {}, {}]);
+  assert.equal(Object.keys(after.runs).length, 1, 'delegated runs are not observer state');
 });
 test('testIntegration: detect, reachable, models, 1-token completion (free only); not found stops early', async () => {
   const env = fakeEnv({ http: { 'http://127.0.0.1:1234/m': { status: 200, body: '{"data":[{"id":"a"}]}' },

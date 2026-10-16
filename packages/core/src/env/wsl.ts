@@ -78,7 +78,7 @@ export async function runInDistro(distro: string, bundle: Bundle | null, args: s
 /** What the host gives the env bundle for every command (argv, base64 JSON: no stdin needed, works for long-running observe). */
 export interface EnvPayload {
   envId: string; extraHosts: string[]; user: import('@agent-spaghetti/sdk').Manifest[]; grants: import('@agent-spaghetti/sdk').Grant[];
-  observe?: { backendPollMs: number; sessionPollMs: number };
+  observe?: { toolPollMs: number; sessionPollMs: number };
 }
 /** What a distro needs to run the same code as the host: user manifests, grants, hosts. */
 export function payloadFor(envId: string, o: { integrations: import('@agent-spaghetti/sdk').Integration[]; grants?: import('@agent-spaghetti/sdk').Grant[]; extraHosts?: string[] }, observe?: EnvPayload['observe']): EnvPayload {

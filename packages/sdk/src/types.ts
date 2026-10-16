@@ -78,7 +78,7 @@ export interface Snapshot { ts: number; envs: EnvStatus[]; detections: Detection
 /** The one list of event types. Later phases append here, nowhere else. */
 export const EVENT_TYPES = [
   'scan.completed', 'scan.integration_error', 'env.status', 'backend.detected', 'agent.detected',
-  'session.started', 'session.updated', 'session.ended', 'backend.changed', 'switch.changed', 'permission.pending',
+  'session.started', 'session.updated', 'session.ended', 'backend.changed', 'tool.changed', 'switch.changed', 'permission.pending',
   'consent.requested', 'consent.answered', 'consent.expired',
   'run.started', 'run.event', 'run.finished', 'backend.queue', 'client.hook',
 ] as const;

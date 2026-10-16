@@ -17,7 +17,7 @@ export function startObservers(entries: EnvEntry[], integrations: Integration[],
     const envId = e.status.id, distro = e.distro;
     void prepareDistro(distro, o.bundle).then(p => {
       if (!p.ok || disposed) return;
-      const payload = payloadFor(envId, { ...o, integrations }, { backendPollMs: o.backendPollMs, sessionPollMs: o.sessionPollMs });
+      const payload = payloadFor(envId, { ...o, integrations }, { toolPollMs: o.toolPollMs, sessionPollMs: o.sessionPollMs });
       const child = spawnLines('wsl.exe', wslArgs(distro, [p.node, p.bundlePath, 'observe', encodePayload(payload)]), line => {
         const ev = parseJson(line) as Pick<HubEvent, 'type' | 'data' | 'source'> | undefined;
         if (ev?.type) emit(envId, ev);

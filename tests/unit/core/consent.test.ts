@@ -54,6 +54,13 @@ test('renderStats: tools, live backends once per server, sessions, approvals; da
     { id: 2, ts: 1, type: 'backend.changed', envId: 'wsl:T', source: 'lmstudio', data: { integration: 'lmstudio', up: true, models: [{ model: 'm', contextLength: 8192 }] } },
     { id: 3, ts: 1, type: 'session.started', envId: 'wsl:T', source: 'openclaw', data: { key: 'k' } }]);
   assert.deepEqual(renderStats(true, s, live, pending), ['agent-spaghetti running · 1 tool', 'LM Studio · m · ctx 8k', '1 session running', '1 approval waiting']);
+  // Regression: a tool closed after the scan must not keep showing as running (the snapshot is older than the live state).
+  const withBackend = { ...s, backends: [{ id: 'lmstudio:m', integration: 'lmstudio', model: 'm', envId: 'windows', endpoint: 'http://h:1', reachableFrom: ['windows'] }] };
+  assert.deepEqual(renderStats(true, withBackend, emptyLive(), []).slice(1), ['LM Studio · m'], 'not reported yet: the snapshot');
+  const down = liveState([{ id: 4, ts: 2, type: 'backend.changed', envId: 'windows', source: 'lmstudio', data: { integration: 'lmstudio', up: false, changed: true } }], emptyLive());
+  assert.deepEqual(renderStats(true, withBackend, down, []).slice(1), ['LM Studio · server stopped']);
+  const closed = liveState([{ id: 5, ts: 3, type: 'tool.changed', envId: 'windows', source: 'lmstudio', data: { integration: 'lmstudio', running: false, changed: true } }], down);
+  assert.deepEqual(renderStats(true, withBackend, closed, []).slice(1), ['LM Studio stopped']);
   assert.deepEqual(renderStats(true, null, emptyLive(), []), ['agent-spaghetti running · no scan yet']);
   assert.deepEqual(renderStats(false, null, emptyLive(), []), ['agent-spaghetti is not running']);
 });

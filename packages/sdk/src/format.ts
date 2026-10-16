@@ -72,11 +72,16 @@ export function renderStats(up: boolean, snap: Snapshot | null, live: LiveState,
   if (!up) return ['agent-spaghetti is not running'];
   const name = new Map(snap?.detections.map(d => [d.integration, d.name]) ?? []);
   const lines = [`agent-spaghetti running · ${snap ? plural(new Set(snap.detections.map(d => d.integration)).size, 'tool') : 'no scan yet'}`];
-  const running = Object.values(live.backends).filter(b => b.up && b.models.length);
-  const backends = running.length ? running.map(b => ({ integration: b.integration, model: b.models[0].model, ctx: b.models[0].contextLength ?? undefined }))
-    : (snap?.backends ?? []).map(b => ({ integration: b.integration, model: b.model, ctx: b.contextLength }));
+  const nice = (id: string) => name.get(id) ?? id;
+  // What the observers see now; the snapshot only for servers no observer has reported since the scan.
+  const reported = new Set(Object.keys(live.backends));
+  const backends = [...Object.values(live.backends).filter(b => b.up && b.models.length).map(b => ({ integration: b.integration, model: b.models[0].model, ctx: b.models[0].contextLength ?? undefined })),
+    ...(snap?.backends ?? []).filter(b => !reported.has(`${b.envId}|${b.integration}`)).map(b => ({ integration: b.integration, model: b.model, ctx: b.contextLength }))];
   const queue = (id: string) => { const q = live.queues[id]; return q?.waiting ? ` · queue ${q.waiting}` : ''; };
-  for (const l of new Set(backends.map(b => `${name.get(b.integration) ?? b.integration} · ${b.model}${ctxLabel(b.ctx)}${queue(b.integration)}`))) lines.push(l);   // one line per server seen from several envs
+  const stopped = Object.values(live.tools).filter(t => !t.running).map(t => t.integration);
+  const serverDown = Object.values(live.backends).filter(b => !b.up && !stopped.includes(b.integration)).map(b => b.integration);
+  for (const l of new Set([...backends.map(b => `${nice(b.integration)} · ${b.model}${ctxLabel(b.ctx)}${queue(b.integration)}`),   // one line per server seen from several envs
+    ...stopped.map(i => `${nice(i)} stopped`), ...serverDown.map(i => `${nice(i)} · server stopped`)])) lines.push(l);
   const sessions = Object.keys(live.sessions).length;
   if (sessions) lines.push(`${plural(sessions, 'session')} running`);
   const runs = Object.keys(live.runs).length;

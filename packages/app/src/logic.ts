@@ -41,3 +41,16 @@ export async function ensureDaemon(d: { connect(): Promise<HubClient>; start(): 
   }
   throw new Error('the agent-spaghetti daemon did not start');
 }
+
+/** A Windows .ico holding one 256×256 PNG (ICO allows PNG entries since Vista): shortcuts need .ico, the repo keeps only PNGs. */
+export function pngToIco(png: Uint8Array): Uint8Array {
+  const ico = new Uint8Array(22 + png.length), v = new DataView(ico.buffer);
+  v.setUint16(2, 1, true); v.setUint16(4, 1, true);                       // type icon, 1 image
+  v.setUint16(10, 1, true); v.setUint16(12, 32, true);                     // width/height bytes 0 = 256; planes, bits
+  v.setUint32(14, png.length, true); v.setUint32(18, 22, true);            // size, offset
+  ico.set(png, 22);
+  return ico;
+}
+/** Where the clickable launchers go on Windows (desktop + Start menu), from Electron's known folders. */
+export const shortcutPaths = (desktop: string, appData: string, join: (...p: string[]) => string) =>
+  [join(desktop, 'Agent Spaghetti.lnk'), join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Agent Spaghetti.lnk')];

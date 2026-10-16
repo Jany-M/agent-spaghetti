@@ -36,7 +36,7 @@ export async function main(argv: string[]): Promise<number> {
   const ids = new Set(p.user.map(m => m.id));
   const integrations: Integration[] = [...BUILTINS.filter(b => !ids.has(b.manifest.id)), ...p.user.map(manifest => ({ manifest, source: 'user' as const }))];
   if (cmd === 'observe') {
-    observeEnv(env, integrations, e => out(e), { grants: p.grants, ...(p.observe ?? { backendPollMs: 3000, sessionPollMs: 2000 }) });
+    observeEnv(env, integrations, e => out(e), { grants: p.grants, ...(p.observe ?? { toolPollMs: 3000, sessionPollMs: 2000 }) });
     setInterval(() => { if (process.ppid === 1) process.exit(0); }, 5000);   // host side gone (wsl.exe killed) → stop
     process.stdout.on('error', () => process.exit(0));
     return new Promise<number>(() => {});

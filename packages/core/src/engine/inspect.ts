@@ -11,6 +11,8 @@ const pathsFor = (p: Detect['paths'], k: Environment['kind']) => (Array.isArray(
 const exeName = (n: string) => n.replace(/\.exe$/i, '');
 export const httpGet = (env: Environment, url: string) => env.http({ url, timeoutMs: PROBE_MS });
 
+const processInstalls = (d: Detect, inv: Inventory): Install[] =>
+  inv.processes.filter(p => d.process?.some(n => wildcard(exeName(n), p.name))).map((p): Install => ({ path: p.path, via: 'process', pid: p.pid }));
 async function findInstalls(env: Environment, d: Detect, inv: Inventory): Promise<Install[]> {
   const out: Install[] = [];
   const add = (x: Install) => {
@@ -19,7 +21,7 @@ async function findInstalls(env: Environment, d: Detect, inv: Inventory): Promis
     out.push(x);
   };
   for (const a of inv.installed) if (d.installed?.some(p => wildcard(p, a.name))) add({ path: a.location, version: a.version, via: 'installed' });
-  for (const p of inv.processes) if (d.process?.some(n => wildcard(exeName(n), p.name))) add({ path: p.path, via: 'process', pid: p.pid });
+  for (const x of processInstalls(d, inv)) add(x);
   // bin names and default paths are alternatives for ONE install: the first hit counts (several installs come from the OS list)
   for (const b of d.bin ?? []) { const p = await env.which(b); if (p) { add({ path: p, via: 'bin' }); break; } }
   if (!out.some(i => i.via === 'bin'))
@@ -91,6 +93,17 @@ function explain(m: Manifest, installs: Install[], hit: unknown, backends: Backe
   if (m.speaks?.mcpClient || m.speaks?.agentPlugins) return connected ? { connectable: 'yes', why: 'connected to agent-spaghetti' }
     : { connectable: 'needs-setup', why: `not connected yet (run: agent-spaghetti connect ${m.id})` };
   return { connectable: 'yes', why: installs.length > 1 ? `${installs.length} installs` : installs.some(i => i.via === 'process') ? 'running' : 'installed' };
+}
+
+/** Cheap liveness for the live observer: a matching process, or the tool's server answering (+ its models). No version, no module code.
+ *  null = nothing observable (no `process`, no `http` in the manifest). */
+export async function probeLive(env: Environment, m: Manifest, inv: Inventory): Promise<{ running: boolean; endpoint?: string; backends: BackendInfo[] } | null> {
+  const d = m.detect ?? {};
+  if (!d.http && !d.process?.length) return null;
+  if (m.platforms && !m.platforms.includes(platformOf(env.kind))) return null;
+  const procs = processInstalls(d, inv);
+  const hit = d.http ? await reach(env, d, inv, procs) : null;
+  return { running: !!hit || procs.length > 0, endpoint: hit?.endpoint, backends: m.models && hit ? await listModels(env, m, hit) : [] };
 }
 
 export async function inspect(i: Integration, env: Environment, ctx: Ctx): Promise<Inspection | null> {

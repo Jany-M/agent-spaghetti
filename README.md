@@ -49,6 +49,8 @@ npm run tray  # tray icon: status on hover, questions to answer; starts the daem
 node packages/cli/src/index.ts help   # or the CLI (the daemon: `... daemon`)
 ```
 
+The first `npm run tray` adds an **Agent Spaghetti** shortcut to the desktop and the Start menu: from then on, click it to start the tray (and the daemon). "Start tray at login" in the tray menu starts it with Windows. Status keeps itself current: running tools and model servers are re-checked every few seconds, a tool starting or stopping triggers a rescan, and a full rescan runs every 10 minutes (`setting scan.everyMin`).
+
 - **See:** `scan` finds AI tools, local model servers and agents on Windows and in running WSL distros; `status` shows what is running now.
 - **Delegate:** `delegate <target> <task>` hands a task to a local model (LM Studio, Ollama, llama.cpp, vLLM) or to Claude Code. Free local models run at once, one request at a time per server; anything that may cost money asks you first (tray or `answer <id> allow|deny`). `targets` lists what is available, `runs` keeps the record (who, what kind, why, outcome, cost, result file).
 - **Connect clients:** `connect openclaw | claude-cli | cursor` gives a tool the `agent-spaghetti` MCP server (`delegate`, `targets`, `run_status`). In Cursor, a prompt starting with `>>target ` goes straight to that target without using Cursor's model; the result lands in `.agent-spaghetti/results/` in the workspace.

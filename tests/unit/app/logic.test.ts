@@ -1,9 +1,9 @@
-// Tray decisions (pure): menu, tooltip, placement, notifications, daemon start.
+// Tray decisions (pure): menu, tooltip, placement, notifications, daemon start, launchers.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { HubClient } from '@agent-spaghetti/sdk';
 import { BRIDGE_OPS, isBridgeOp } from '@agent-spaghetti/ui/bridge';
-import { ensureDaemon, newQuestions, placeNear, tooltip, trayMenu } from '../../../packages/app/src/logic.ts';
+import { ensureDaemon, newQuestions, placeNear, pngToIco, shortcutPaths, tooltip, trayMenu } from '../../../packages/app/src/logic.ts';
 
 test('menu: Rescan when up, Start daemon when down; stop-daemon only when up', () => {
   const ids = (up: boolean) => trayMenu(up, false).filter(i => i.id).map(i => `${i.id}${i.enabled === false ? '(off)' : ''}`);
@@ -39,4 +39,11 @@ test('ensureDaemon: reuses a running daemon; starts one once and waits; gives up
   assert.equal(await ensureDaemon({ connect: async () => { if (++tries < 3) throw new Error('down'); return fake; }, start: () => starts++, pollMs: 1 }), fake);
   assert.equal(starts, 1);
   await assert.rejects(ensureDaemon({ connect: async () => { throw new Error('down'); }, start: () => starts++, pollMs: 1, timeoutMs: 20 }), /did not start/);
+});
+test('pngToIco: one PNG entry (256×256, 32 bit) right after the header; launchers on the desktop and in the Start menu', () => {
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+  const ico = pngToIco(png), v = new DataView(ico.buffer);
+  assert.deepEqual([v.getUint16(0, true), v.getUint16(2, true), v.getUint16(4, true), ico[6], ico[7], v.getUint16(12, true), v.getUint32(14, true), v.getUint32(18, true)], [0, 1, 1, 0, 0, 32, 7, 22]);
+  assert.deepEqual([...ico.slice(22)], [...png]);
+  assert.deepEqual(shortcutPaths('D', 'A', (...p) => p.join('/')), ['D/Agent Spaghetti.lnk', 'A/Microsoft/Windows/Start Menu/Programs/Agent Spaghetti.lnk']);
 });
