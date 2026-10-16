@@ -7,6 +7,7 @@
 import type { BackendInfo, Environment } from '@agent-spaghetti/sdk';
 import { openclawJson } from '../cli.ts';
 import { splitModelRef } from '../index.ts';
+import { MCP_NAME } from './mcp.ts';
 
 export interface Detected { integration: string; base: string; model: string; contextLength?: number }
 export interface ConfigDeps { env: Environment; exe: string }
@@ -90,7 +91,7 @@ export async function buildPatch(d: PatchDeps): Promise<Record<string, any>> {
     patch.models = { providers: { [choice.pid]: choice.p } };
     if (mode === 'follow' || mode === 'manual' || 'models' in choice.p || !primary) patch.agents = { defaults: { model: { primary: `${choice.pid}/${choice.model}` } } };
   }
-  const servers = Object.keys((await get(d, 'mcp.servers') as object) ?? {});   // names only: park every MCP server
+  const servers = Object.keys((await get(d, 'mcp.servers') as object) ?? {}).filter(n => n !== MCP_NAME);   // names only: park every MCP server but ours
   if (servers.length) patch.mcp = { servers: Object.fromEntries(servers.map(n => [n, { enabled: false }])) };
   return patch;
 }

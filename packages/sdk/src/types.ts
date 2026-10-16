@@ -1,5 +1,8 @@
 // Shared types. One definition for every package, the env bundle and third-party integrations.
 import type { Pending } from './permissions.ts';
+
+/** The one version number (env bundle, MCP server info, client plugin). */
+export const VERSION = '0.3.0';
 export type Role = 'agent' | 'backend' | 'client' | 'tool';   // tool = provides services to agents (e.g. an MCP server)
 export type Cost = 'free' | 'metered' | 'unknown';
 export type Level = 'detect' | 'observe' | 'drive' | 'client';
@@ -8,7 +11,8 @@ export type Platform = 'windows' | 'linux' | 'macos';
 
 export interface ExecResult { code: number; stdout: string; stderr: string }   // code 127 = not found, 124 = timeout
 export interface ExecOpts { timeoutMs?: number; input?: string | Buffer }
-export interface HttpRequest { method?: 'GET' | 'POST'; url: string; headers?: Record<string, string>; body?: string; timeoutMs?: number }
+export interface StreamOpts { input?: string; cwd?: string; env?: Record<string, string>; signal?: AbortSignal }
+export interface HttpRequest { method?: 'GET' | 'POST'; url: string; headers?: Record<string, string>; body?: string; timeoutMs?: number; signal?: AbortSignal }
 export interface HttpResult { status: number; body: string }
 
 /** What the OS itself reports (ADR 0008). Collected once per environment per scan. */
@@ -25,7 +29,11 @@ export interface Environment {
   kind: EnvKind;
   exec(cmd: string, args: string[], opts?: ExecOpts): Promise<ExecResult>;   // never throws
   http(req: HttpRequest): Promise<HttpResult | null>;                         // null = unreachable / timeout
+  // Streaming (runs): one item per output line; the iteration throws when the process exits non-zero / HTTP is not 2xx.
+  execLines(cmd: string, args: string[], opts?: StreamOpts): AsyncIterable<string>;
+  httpLines(req: HttpRequest): AsyncIterable<string>;
   readFile(path: string): Promise<string | null>;
+  writeFile(path: string, content: string): Promise<void>;   // creates folders; `connect` only (a `write` grant for third parties)
   which(bin: string): Promise<string | null>;            // absolute path on PATH
   glob(pattern: string): Promise<string | null>;         // first match; expands ~, %VAR% (windows), $VAR; '*' inside one segment
   hostCandidates(): Promise<string[]>;                   // where this env may reach local servers; re-resolved per call
@@ -72,6 +80,7 @@ export const EVENT_TYPES = [
   'scan.completed', 'scan.integration_error', 'env.status', 'backend.detected', 'agent.detected',
   'session.started', 'session.updated', 'session.ended', 'backend.changed', 'switch.changed', 'permission.pending',
   'consent.requested', 'consent.answered', 'consent.expired',
+  'run.started', 'run.event', 'run.finished', 'backend.queue', 'client.hook',
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 export interface HubEvent { ts: number; type: EventType; envId: string; source: string; data: Record<string, unknown> }
@@ -79,7 +88,28 @@ export type StoredEvent = HubEvent & { id: number };
 export type Emit = (e: Pick<HubEvent, 'type' | 'data'> & Partial<HubEvent>) => void;
 
 export interface Disposable { dispose(): void }
-export interface Ctx { signal: AbortSignal; inventory: Inventory; pollMs?: number }
+
+/** Delegation (ADR 0007): the one list of task kinds, and the run record. */
+export const TASK_KINDS = ['code-edit', 'tests', 'review', 'research', 'summarize', 'refactor', 'docs', 'other'] as const;
+export type TaskKind = (typeof TASK_KINDS)[number];
+export interface RunRequest {
+  target: string; task: string; kind?: TaskKind; reason?: string; model?: string;
+  cwd?: string; resultDir?: string; jobId?: string; parentRunId?: number; deadlineMs?: number;
+}
+export type RunEvent =
+  | { type: 'text'; text: string } | { type: 'tool'; name: string; summary: string }
+  | { type: 'usage'; inputTokens?: number; outputTokens?: number; costUsd?: number }
+  | { type: 'done'; result: string } | { type: 'error'; message: string };
+export type RunOutcome = 'running' | 'done' | 'error' | 'denied' | 'expired' | 'cancelled';
+export interface RunRow {
+  id: number; ts: number; source: string; target: string; model?: string; parentRunId?: number; jobId?: string;
+  kind: TaskKind; reason?: string; taskHash: string; durationMs?: number;
+  inputTokens?: number; outputTokens?: number; costUsd?: number; outcome: RunOutcome; error?: string;
+  resultPath?: string; resultSha256?: string; verdict?: 'up' | 'down' | 'redo';
+}
+/** Something `delegate` can hand a task to: a local model server (OpenAI API) or an agent with a run hook. */
+export interface Target { id: string; name: string; kind: 'model' | 'agent'; cost: Cost; envId: string; models: string[] }
+export interface Ctx { signal: AbortSignal; inventory: Inventory; pollMs?: number; runId?: number }   // runId: set for run(), so nested delegations link to it
 export interface Switch { id: string; label: string; on: boolean; envId: string; integration: string }
 export interface TestStep { name: string; ok: boolean; detail: string; ms: number }
 export interface TestResult { ok: boolean; steps: TestStep[] }
@@ -92,5 +122,11 @@ export interface IntegrationModule {
   switches?(env: Environment, det: Detection, ctx: Ctx): Promise<Switch[]>;
   setSwitch?(env: Environment, det: Detection, id: string, on: boolean, ctx: Ctx): Promise<void>;
   test?(env: Environment, det: Detection, ctx: Ctx): Promise<TestStep[]>;
+  run?(env: Environment, det: Detection, req: RunRequest, ctx: Ctx): AsyncIterable<RunEvent>;
+  /** Give the tool agent-spaghetti's MCP server where its own CLI is the documented way (else the generic `connect` is used). */
+  connect?(env: Environment, det: Detection, cli: Cli, dryRun: boolean): Promise<Connected>;
 }
+/** How to run agent-spaghetti in an environment (`[...args, 'mcp', '--as', id]` starts the MCP bridge). */
+export interface Cli { command: string; args: string[] }
+export interface Connected { description: string; changes: string[]; applied: boolean }
 export interface Integration { manifest: Manifest; module?: IntegrationModule; source: 'builtin' | 'user'; hash?: string }

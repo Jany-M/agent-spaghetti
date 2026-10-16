@@ -61,3 +61,14 @@ test('report: markdown with environments, tools, backends, agents and running se
   assert.match(md, /\| openclaw · main \| wsl:T \| m \| not observed \|/);
   assert.match(md, /## Running sessions\n\| Env \| Agent \| Kind \| Status \|\n\|---\|---\|---\|---\|\n\| wsl:T \| main \| chat \| running \|/);
 });
+test('liveState: delegated runs while running, server queues; tray stats show both', async () => {
+  const { renderStats, trayState } = await import('@agent-spaghetti/sdk');
+  let s = liveState([ev(1, 'run.started', { id: 4, source: 'cursor', target: 'lmstudio' }, 'hub'),
+    { id: 2, ts: 2, type: 'backend.queue', envId: 'windows', source: 'lmstudio', data: { waiting: 2, running: 1 } },
+    ev(3, 'backend.changed', { integration: 'lmstudio', up: true, models: [{ model: 'm', contextLength: null }] }, 'windows')]);
+  assert.deepEqual(s.runs['4'], { id: 4, source: 'cursor', target: 'lmstudio', ts: 1 });
+  assert.equal(trayState(true, null, s, []), 'working');
+  assert.deepEqual(renderStats(true, null, s, []).slice(1), ['lmstudio · m · queue 2', '1 delegated task running']);
+  s = liveState([ev(4, 'run.finished', { id: 4, outcome: 'done' }, 'hub')], s);
+  assert.deepEqual(s.runs, {});
+});

@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { spawnFile } from '../proc.ts';
+import { hexToIp } from './hosts.ts';
 
 export type Spawn = typeof spawnFile;
 export interface DistroRow { name: string; state: 'running' | 'stopped'; isDefault: boolean }
@@ -32,13 +33,21 @@ export async function loadBundle(path = process.env.AGENT_SPAGHETTI_ENV_BUNDLE
 }
 
 // Node >= 20 inside a distro: find-node.sh (shared with the OpenClaw pack). Read lazily: the env bundle never needs it.
-export const probeScript = () => 'd="${XDG_DATA_HOME:-$HOME/.local/share}/agent-spaghetti"; echo "dir=$d"; '
+// The default route gives the Windows side's address, where the daemon also listens for this distro's MCP bridges.
+const DIR = 'd="${XDG_DATA_HOME:-$HOME/.local/share}/agent-spaghetti"; ';
+export const probeScript = () => `${DIR}echo "dir=$d"; `
   + `echo "node=$(${readFileSync(new URL('./find-node.sh', import.meta.url), 'utf8')})"; `
+  + 'echo "route=$(awk \'$2=="00000000"{print $3; exit}\' /proc/net/route 2>/dev/null)"; '
   + '[ "$(cat "$d/agent-spaghetti-env.mjs.sha256" 2>/dev/null)" = "$1" ] && echo fresh=1 || echo fresh=0';
-const COPY = 'd="${XDG_DATA_HOME:-$HOME/.local/share}/agent-spaghetti"; mkdir -p "$d" && cat > "$d/agent-spaghetti-env.mjs.tmp" '
-  + '&& mv -f "$d/agent-spaghetti-env.mjs.tmp" "$d/agent-spaghetti-env.mjs" && printf %s "$1" > "$d/agent-spaghetti-env.mjs.sha256"';
-
-export type Prepared = { ok: true; node: string; bundlePath: string } | { ok: false; why: string };
+/** Writes stdin to <dir>/<name>, user-only, atomically. */
+const WRITE = `${DIR}umask 077; mkdir -p "$d" && cat > "$d/$1.tmp" && mv -f "$d/$1.tmp" "$d/$1"`;
+export function writeDistroFile(distro: string, name: string, content: string | Buffer, spawn: Spawn = spawnFile) {
+  return spawn('wsl.exe', wslArgs(distro, ['sh', '-c', WRITE, 'sh', name]), { input: content, timeoutMs: 30000 }).then(r => r.code === 0);
+}
+export type Prepared = { ok: true; node: string; bundlePath: string; gateway: string | null } | { ok: false; why: string };
+const PREPARED = new Map<string, Extract<Prepared, { ok: true }>>();
+/** What the last prepareDistro found in a distro (node, bundle, Windows-side address). */
+export const prepared = (distro: string) => PREPARED.get(distro) ?? null;
 /** Find Node >= 20 in the distro and make sure the current bundle is there (copied only when its hash changed). */
 export async function prepareDistro(distro: string, bundle: Bundle | null, spawn: Spawn = spawnFile): Promise<Prepared> {
   if (!bundle) return { ok: false, why: 'env bundle not built (run: npm run build)' };
@@ -46,11 +55,11 @@ export async function prepareDistro(distro: string, bundle: Bundle | null, spawn
   const kv = Object.fromEntries(probe.stdout.toString('utf8').split('\n').map(l => l.trim().split(/=(.*)/s).slice(0, 2)).filter(p => p.length === 2));
   if (probe.code !== 0 || !kv.dir) return { ok: false, why: `distro not reachable (wsl exit ${probe.code})` };
   if (!kv.node) return { ok: false, why: 'no Node.js >= 20 in this distro (needed to scan inside it)' };
-  if (kv.fresh !== '1') {
-    const c = await spawn('wsl.exe', wslArgs(distro, ['sh', '-c', COPY, 'sh', bundle.sha256]), { input: bundle.text, timeoutMs: 30000 });
-    if (c.code !== 0) return { ok: false, why: `could not copy the env bundle (exit ${c.code})` };
-  }
-  return { ok: true, node: kv.node, bundlePath: `${kv.dir}/agent-spaghetti-env.mjs` };
+  if (kv.fresh !== '1' && !(await writeDistroFile(distro, 'agent-spaghetti-env.mjs', bundle.text, spawn) && await writeDistroFile(distro, 'agent-spaghetti-env.mjs.sha256', bundle.sha256, spawn)))
+    return { ok: false, why: 'could not copy the env bundle' };
+  const p = { ok: true as const, node: kv.node, bundlePath: `${kv.dir}/agent-spaghetti-env.mjs`, gateway: /^[0-9A-Fa-f]{8}$/.test(kv.route ?? '') ? hexToIp(kv.route) : null };
+  PREPARED.set(distro, p);
+  return p;
 }
 /** Always `--exec` (no shell): with `--`, wsl.exe re-parses the command line through a shell and mangles arguments. */
 export const wslArgs = (distro: string, argv: string[]) => ['-d', distro, '--exec', ...argv];

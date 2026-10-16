@@ -1,12 +1,17 @@
-// The one JSON-over-HTTP server helper (127.0.0.1 only, bearer token, optional SSE stream). Used by the daemon now
-// and by later listeners (gateway, MCP) so there is never a second server implementation.
+// The one JSON-over-HTTP server helper (loopback, plus the Windows side of WSL for in-distro MCP bridges; bearer token;
+// optional SSE stream). Used by the daemon
+// and later listeners (gateway) so there is never a second server implementation.
 import { createServer, type IncomingMessage } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { redact } from '@agent-spaghetti/sdk';
 
 export interface Route { method: 'GET' | 'POST'; path: string; handle(input: Record<string, unknown>): Promise<unknown> | unknown }
 export interface ServeOpts { token: string; port?: number; routes: Route[]; stream?: { path: string; subscribe(fn: (data: unknown) => void): () => void } }
-export interface Server { port: number; close(): Promise<void> }
+export interface Server {
+  port: number; close(): Promise<void>;
+  /** Also answer on another local address, same port and token (the Windows side of WSL for in-distro bridges). */
+  listenOn(host: string): Promise<boolean>;
+}
 
 const same = (a: string, b: string) => { const x = Buffer.from(a), y = Buffer.from(b); return x.length === y.length && timingSafeEqual(x, y); };
 async function body(req: IncomingMessage): Promise<Record<string, unknown>> {
@@ -16,7 +21,7 @@ async function body(req: IncomingMessage): Promise<Record<string, unknown>> {
 }
 
 export async function serveJson(o: ServeOpts): Promise<Server> {
-  const server = createServer(async (req, res) => {
+  const handler: Parameters<typeof createServer>[1] = async (req, res) => {
     const send = (code: number, b: unknown) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(b)); };
     const bearer = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1] ?? '';
     if (!same(bearer, o.token)) return send(401, { error: 'unauthorized' });
@@ -33,8 +38,15 @@ export async function serveJson(o: ServeOpts): Promise<Server> {
     if (!route) return send(404, { error: 'not found' });
     try { send(200, await route.handle({ ...Object.fromEntries(url.searchParams), ...(req.method === 'POST' ? await body(req) : {}) })); }
     catch (e) { send(500, { error: redact((e as Error).message) }); }
+  };
+  const servers = new Map<string, ReturnType<typeof createServer>>();
+  const listen = (host: string, port: number) => new Promise<number>((r, j) => {
+    const s = createServer(handler);
+    s.once('error', j);
+    s.listen(port, host, () => { servers.set(host, s); r((s.address() as { port: number }).port); });
   });
-  await new Promise<void>((r, j) => { server.once('error', j); server.listen(o.port ?? 0, '127.0.0.1', r); });
-  return { port: (server.address() as { port: number }).port,
-    close: () => new Promise<void>(r => { server.closeAllConnections(); server.close(() => r()); }) };
+  const port = await listen('127.0.0.1', o.port ?? 0);
+  return { port,
+    listenOn: async host => servers.has(host) || listen(host, port).then(() => true, () => false),
+    close: () => Promise.all([...servers.values()].map(s => new Promise<void>(r => { s.closeAllConnections(); s.close(() => r()); }))).then(() => {}) };
 }

@@ -7,7 +7,7 @@ import { Bus } from './bus.ts';
 import { loadIntegrations, type Loaded } from './registry.ts';
 import { discoverEnvironments, type EnvEntry } from './env/discover.ts';
 import { extraHostsFromEnv } from './env/hosts.ts';
-import { loadBundle } from './env/wsl.ts';
+import { loadBundle, prepared, writeDistroFile } from './env/wsl.ts';
 import { runScan } from './scan.ts';
 import { startDaemon } from './daemon.ts';
 import { loadOrCreateToken, writeDiscovery } from './config.ts';
@@ -16,6 +16,12 @@ import { onEnv } from './dispatch.ts';
 import { startObservers } from './observers.ts';
 import { Consent } from './consent.ts';
 import { handlers, type Services } from './ops.ts';
+import { Ledger } from './ledger.ts';
+import { Runner } from './runner.ts';
+import { fileURLToPath } from 'node:url';
+
+/** How a client on the host runs agent-spaghetti (Agent Plugins need a bare command: node from PATH). */
+const HOST_CLI = { command: 'node', args: [fileURLToPath(new URL('../../cli/src/index.ts', import.meta.url))] };
 
 const DAY = 86400000;
 export interface DaemonOpts {
@@ -38,6 +44,8 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
   bus.subscribe(e => { live = liveState([e], live); });
 
   const consent = new Consent(bus);
+  const ledger = new Ledger(store);
+  const token = loadOrCreateToken(dir);
   const load = () => loadIntegrations(BUILTINS, userIntegrationsDir(dir));
   let loaded: Loaded = await load();
   let entries: EnvEntry[] = [];
@@ -59,8 +67,26 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
       });
     }
   };
+  const host = () => entries.find(e => e.env)?.env ?? null;
+  const runner = new Runner({ bus, consent, ledger, settings, resultsDir: join(dir, 'results'), host, snapshot: () => store.loadSnapshot<Snapshot>('scan'),
+    integrations: () => loaded.integrations.filter(i => !settings.get('disabled').includes(i.manifest.id)) });
+  const hubFiles = new Map<string, string>();
+  /** Running distros reach the daemon on the Windows side of their network: listen there and tell them where (hub.json, user-only). */
+  const shareWithDistros = async () => {
+    for (const e of entries.filter(e => e.distro && e.status.state === 'running')) {
+      const p = prepared(e.distro!);
+      if (!p?.gateway || !(await server.listenOn(p.gateway))) continue;
+      const json = JSON.stringify({ host: p.gateway, port: server.port, token });
+      if (hubFiles.get(e.distro!) !== json && await writeDistroFile(e.distro!, 'hub.json', json)) hubFiles.set(e.distro!, json);
+    }
+  };
   const services: Services = {
-    store, bus, settings, consent, loaded: () => loaded, live: () => live,
+    store, bus, settings, consent, ledger, runner, host, loaded: () => loaded, live: () => live,
+    cli: envId => {
+      const e = entries.find(x => x.status.id === envId);
+      const p = e?.distro ? prepared(e.distro) : null;
+      return e?.env ? HOST_CLI : p ? { command: p.node, args: [p.bundlePath] } : null;
+    },
     shutdown: () => void close().then(() => process.exit(0)),
     async scan(): Promise<Snapshot> {
       loaded = await load();                                   // drop-ins are re-read on every scan
@@ -68,6 +94,7 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
       entries = await discover(c.extraHosts);
       const snap = await runScan(entries, c.integrations, bus, { ...c, rejected: loaded.rejected });
       ask(snap.pending);
+      await shareWithDistros();
       if (o.observe !== false) {
         observers?.dispose();
         observers = startObservers(entries, c.integrations, { ...c, backendPollMs: settings.get('observe.backendPollMs'), sessionPollMs: settings.get('observe.sessionPollMs') },
@@ -86,7 +113,7 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
       }));
     },
   };
-  const server = await startDaemon({ services, token: loadOrCreateToken(dir), port: Number(env.AGENT_SPAGHETTI_PORT ?? 0) });
+  const server = await startDaemon({ services, token, port: Number(env.AGENT_SPAGHETTI_PORT ?? 0) });
   const removeDiscovery = writeDiscovery(dir, server.port);
   ask(store.loadSnapshot<Snapshot>('scan')?.pending);
   const close = async () => { clearTimeout(rescan); observers?.dispose(); clearInterval(pruneTimer); removeDiscovery(); await server.close(); store.close(); };

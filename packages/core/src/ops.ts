@@ -8,11 +8,17 @@ import type { Route } from './serve.ts';
 import type { Settings } from './settings.ts';
 import type { Consent } from './consent.ts';
 import type { EnvCommand, EnvResults } from './actions.ts';
+import type { Ledger } from './ledger.ts';
+import { targets, type Runner } from './runner.ts';
+import { readFileSync } from 'node:fs';
 import { ENGINES } from './engine/inspect.ts';
 
 export interface Services {
-  store: Store; bus: Bus; settings: Settings; consent: Consent;
+  store: Store; bus: Bus; settings: Settings; consent: Consent; ledger: Ledger; runner: Runner;
   shutdown(): void;
+  host(): import('@agent-spaghetti/sdk').Environment | null;
+  /** How to run agent-spaghetti in an environment (clients start its MCP bridge with it). */
+  cli(envId: string): import('@agent-spaghetti/sdk').Cli | null;
   loaded(): Loaded; scan(): Promise<Snapshot>; live(): LiveState;
   /** Run a command in the given (default: every running) environment(s); failures are per env. */
   onEnvs<C extends EnvCommand>(cmd: C, args: string[], envIds?: string[]): Promise<Array<EnvResult<EnvResults[C]>>>;
@@ -96,6 +102,48 @@ export const handlers: Handlers = {
     return { ok: true };
   },
   shutdown: (_i, s) => { setImmediate(() => s.shutdown()); return { stopping: true }; },   // answer first, then stop
+  delegate: async (i, s) => {
+    const { source, waitMs, ...req } = i;
+    need(req.target, 'target'); need(req.task, 'task');
+    const { id, done } = s.runner.start(source || 'cli', { ...req, parentRunId: req.parentRunId ? Number(req.parentRunId) : undefined });
+    if (Number(waitMs) > 0) await Promise.race([done, new Promise(r => setTimeout(r, Number(waitMs)))]);
+    return runView(s, id);
+  },
+  targets: (_i, s) => targets({ host: s.host, snapshot: () => snapshot(s), integrations: () => s.loaded().integrations.filter(x => !s.settings.get('disabled').includes(x.manifest.id)) }),
+  runs: (i, s) => {
+    if (i.id === undefined || i.id === null || String(i.id) === '') return { runs: s.ledger.list({ since: num(i.since, 0), limit: num(i.limit, 50) }) };
+    const v = runView(s, num(i.id, 0));
+    return { runs: s.ledger.chain(v.id), result: v.result };
+  },
+  cancel: (i, s) => ({ cancelled: s.runner.cancel(num(i.id, 0)) }),
+  verdict: (i, s) => {
+    if (!['up', 'down', 'redo'].includes(i.value)) throw new Error('verdict must be up, down or redo');
+    if (!s.ledger.get(num(i.id, 0))) throw new Error(`no run ${i.id}`);
+    s.ledger.update(num(i.id, 0), { verdict: i.value }); return { ok: true };
+  },
+  connect: async (i, s) => {
+    const envId = i.envId ?? snapshot(s)?.detections.find(d => d.integration === need(i.integration, 'integration'))?.envId;
+    if (!envId) throw new Error(`${i.integration} was not found by the last scan`);
+    const cli = s.cli(envId);
+    if (!cli) throw new Error(`cannot run agent-spaghetti in ${envId} (see: status)`);
+    const [r] = await s.onEnvs('connect', [i.integration, JSON.stringify(cli), i.dryRun ? 'dry-run' : ''], [envId]);
+    if (!r?.result) throw new Error(r?.error ?? `${envId} is not running`);
+    return r.result;
+  },
+  hook: (i, s) => {   // metadata only: the hook command already dropped prompts, responses and file contents
+    const d = i.data ?? {};
+    const keep = Object.fromEntries(['conversation_id', 'session_id', 'generation_id', 'tool_name', 'mcp_server_name', 'status', 'model'].filter(k => typeof d[k] === 'string').map(k => [k, d[k]]));
+    s.bus.emit({ ts: Date.now(), type: 'client.hook', envId: s.host()?.id ?? 'hub', source: need(i.client, 'client'), data: { event: need(i.event, 'event'), ...keep } });
+    return { ok: true };
+  },
 };
+/** The run record plus its result text (read from the result file) once it has one. */
+function runView(s: Services, id: number) {
+  const run = s.ledger.get(id);
+  if (!run) throw new Error(`no run ${id}`);
+  let result: string | undefined;
+  try { if (run.resultPath) result = readFileSync(run.resultPath, 'utf8'); } catch { /* moved or deleted by the user */ }
+  return { id, run, result };
+}
 export const routesFor = (s: Services): Route[] => (Object.keys(OPS) as OpId[]).map(id => ({
   method: OPS[id].method, path: OPS[id].path, handle: (input: Record<string, unknown>) => (handlers[id] as (i: unknown, s: Services) => unknown)(input, s) }));

@@ -7,7 +7,7 @@ import { parseDefaultGateway } from '../../../packages/core/src/env/hosts.ts';
 import { expandPath, globFirst, whichBin, localEnvironment } from '../../../packages/core/src/env/local.ts';
 import { parseWindowsInventory, windowsScript } from '../../../packages/core/src/env/inventory/windows.ts';
 import { parseProcNetTcp, parseDesktopEntry, linuxCollector } from '../../../packages/core/src/env/inventory/linux.ts';
-import { parseWslListVerbose, runInDistro, listDistros, type Spawn } from '../../../packages/core/src/env/wsl.ts';
+import { parseWslListVerbose, prepared, runInDistro, listDistros, type Spawn } from '../../../packages/core/src/env/wsl.ts';
 import { discoverEnvironments } from '../../../packages/core/src/env/discover.ts';
 
 const fx = (f: string) => readFileSync(new URL(`../../fixtures/inventory/${f}`, import.meta.url), 'utf8');
@@ -94,11 +94,13 @@ test('runInDistro: no node → reason; stale bundle copied once; fresh bundle no
   assert.deepEqual(await runInDistro('T', bundle, ['inspect'], '{}', mk('dir=/home/u/.local/share/agent-spaghetti\nfresh=0\n')),
     { ok: false, why: 'no Node.js >= 20 in this distro (needed to scan inside it)' });
   calls.length = 0;
-  const r = await runInDistro('T', bundle, ['inspect', '--x'], '{"p":1}', mk('dir=/d\nnode=/usr/bin/node\nfresh=0\n'));
+  const r = await runInDistro('T', bundle, ['inspect', '--x'], '{"p":1}', mk('dir=/d\nnode=/usr/bin/node\nroute=010200C0\nfresh=0\n'));
   assert.deepEqual(r, { ok: true, stdout: '{"ok":1}' });
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 4, 'probe, bundle, its hash, run');
   assert.ok(Buffer.isBuffer(calls[1].input));
-  assert.deepEqual(calls[2].a, ['-d', 'T', '--exec', '/usr/bin/node', '/d/agent-spaghetti-env.mjs', 'inspect', '--x']);
+  assert.deepEqual([calls[1].a.at(-1), calls[2].input], ['agent-spaghetti-env.mjs', 'abc']);
+  assert.deepEqual(calls[3].a, ['-d', 'T', '--exec', '/usr/bin/node', '/d/agent-spaghetti-env.mjs', 'inspect', '--x']);
+  assert.deepEqual(prepared('T'), { ok: true, node: '/usr/bin/node', bundlePath: '/d/agent-spaghetti-env.mjs', gateway: '192.0.2.1' }, 'Windows side of the distro');
   calls.length = 0;
   await runInDistro('T', bundle, ['inspect'], '{}', mk('dir=/d\nnode=/usr/bin/node\nfresh=1\n'));
   assert.equal(calls.length, 2);

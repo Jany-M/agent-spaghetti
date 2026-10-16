@@ -19,7 +19,8 @@
       ],
       "levels": [
         "detect",
-        "observe"
+        "observe",
+        "drive"
       ]
     }
   },

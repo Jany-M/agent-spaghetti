@@ -17,6 +17,7 @@
       "version": "2.1.205",
       "levels": [
         "detect",
+        "drive",
         "client"
       ],
       "connectable": "needs-setup"

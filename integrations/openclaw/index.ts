@@ -5,7 +5,7 @@
 //   openclaw config get mcp.servers --json / config patch --stdin / mcp reload   (switches, shared with the pack)
 // The config file itself is never opened by the hub.
 import type { AgentInfo, IntegrationModule } from '@agent-spaghetti/sdk';
-import { mcpServers, setMcpEnabled } from './pack/mcp.ts';
+import { MCP_NAME, addMcpServer, mcpServers, setMcpEnabled } from './pack/mcp.ts';
 import { openclawExe, openclawJson } from './cli.ts';
 export { openclawExe, openclawJson };
 /** Longest configured provider id wins (ids may contain '/'); otherwise the first segment. */
@@ -65,6 +65,13 @@ export const openclawModule: IntegrationModule = {
     void tick();
     const timer = setInterval(tick, ctx.pollMs ?? 2000);
     return { dispose: () => clearInterval(timer) };
+  },
+  async connect(env, det, cli, dryRun) {
+    const exe = openclawExe(det);
+    if (!exe) throw new Error('openclaw not found');
+    const server = { command: cli.command, args: [...cli.args, 'mcp', '--as', 'openclaw'] };
+    if (!dryRun) await addMcpServer(env, exe, server);
+    return { description: `add the ${MCP_NAME} MCP server to OpenClaw (kept on; other servers stay parked)`, changes: [`openclaw config patch: mcp.servers.${MCP_NAME}`, 'openclaw mcp reload'], applied: !dryRun };
   },
   async switches(env, det) {
     const exe = openclawExe(det);

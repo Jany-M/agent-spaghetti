@@ -29,14 +29,38 @@ export function spawnFile(cmd: string, args: string[], opts: SpawnOpts = {}): Pr
   });
 }
 
-/** Long-running process: one callback per stdout line. Returns a stop function and the exit promise. */
-export function spawnLines(cmd: string, args: string[], onLine: (line: string) => void, opts: { env?: NodeJS.ProcessEnv } = {}):
-  { stop(): void; exited: Promise<number> } {
+export interface LinesOpts { env?: NodeJS.ProcessEnv; input?: string; cwd?: string }
+/** Long-running process: one callback per stdout line. Returns a stop function, the exit promise and the stderr tail. */
+export function spawnLines(cmd: string, args: string[], onLine: (line: string) => void, opts: LinesOpts = {}):
+  { stop(): void; exited: Promise<number>; stderr(): string } {
   const { file, argv, verbatim } = resolveCmd(cmd, args);
-  const child = spawn(file, argv, { windowsHide: true, windowsVerbatimArguments: verbatim, stdio: ['ignore', 'pipe', 'ignore'], env: opts.env });
+  const child = spawn(file, argv, { windowsHide: true, windowsVerbatimArguments: verbatim, cwd: opts.cwd, env: opts.env,
+    stdio: [opts.input === undefined ? 'ignore' : 'pipe', 'pipe', 'pipe'] });
+  let err = '';
+  child.stderr!.on('data', (d: Buffer) => { err = (err + d.toString('utf8')).slice(-2000); });
+  child.stdin?.on('error', () => { /* exited before reading */ });
+  if (opts.input !== undefined) child.stdin!.end(opts.input);
   createInterface({ input: child.stdout! }).on('line', onLine);
   const exited = new Promise<number>(r => { child.on('error', () => r(127)); child.on('close', c => r(c ?? 1)); });
-  return { stop: () => { child.kill(); }, exited };
+  return { stop: () => { child.kill(); }, exited, stderr: () => err };
+}
+/** Lines as an async iterable (runs); throws after the last line when the process failed. */
+export async function* execLines(cmd: string, args: string[], o: LinesOpts & { signal?: AbortSignal } = {}): AsyncIterable<string> {
+  const queue: string[] = []; let wake: (() => void) | null = null;
+  const p = spawnLines(cmd, args, l => { queue.push(l); wake?.(); }, o);
+  let code: number | null = null;
+  void p.exited.then(c => { code = c; wake?.(); });
+  const abort = () => p.stop();
+  o.signal?.addEventListener('abort', abort);
+  try {
+    while (true) {
+      if (queue.length) { yield queue.shift()!; continue; }
+      if (code !== null) break;
+      await new Promise<void>(r => { wake = r; }); wake = null;
+    }
+    if (o.signal?.aborted) throw new Error('cancelled');
+    if (code !== 0) throw new Error(`${cmd} exited with ${code}${p.stderr() ? `: ${p.stderr().trim().slice(-400)}` : ''}`);
+  } finally { o.signal?.removeEventListener('abort', abort); if (code === null) p.stop(); }
 }
 
 /** Starts a process that outlives its parent (the tray starting the daemon). Output is appended to `logFile`. */

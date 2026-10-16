@@ -1,11 +1,11 @@
 // The one Environment implementation (Node APIs). Runs on the Windows host, on Linux, and inside WSL via the env bundle.
-import { access, readdir, readFile } from 'node:fs/promises';
+import { access, mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { homedir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import type { EnvKind, Environment } from '@agent-spaghetti/sdk';
-import { spawnFile } from '../proc.ts';
-import { http } from '../http.ts';
+import { execLines, spawnFile } from '../proc.ts';
+import { http, httpLines } from '../http.ts';
 import { hostCandidates } from './hosts.ts';
 import { collectorFor } from './inventory/index.ts';
 
@@ -52,7 +52,10 @@ export function localEnvironment(o: { id?: string; kind?: EnvKind; extraHosts?: 
       return { code: r.code, stdout: r.stdout.toString('utf8'), stderr: r.stderr.toString('utf8') };
     },
     http,
+    execLines: (cmd, args, o) => execLines(cmd, args, { ...o, env: o?.env ? { ...process.env, ...o.env } : undefined }),
+    httpLines,
     readFile: p => readFile(expandPath(p), 'utf8').catch(() => null),
+    writeFile: async (p, c) => { const f = expandPath(p); await mkdir(dirname(f), { recursive: true }); await writeFile(f, c); },
     which: b => whichBin(b),
     glob: p => globFirst(expandPath(p)),
     hostCandidates: () => hostCandidates(kind, o.extraHosts ?? []),

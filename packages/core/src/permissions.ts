@@ -5,6 +5,9 @@ import { basename } from 'node:path';
 import type { Action, Ctx, Environment, Grant, Integration, Inventory, Pending } from '@agent-spaghetti/sdk';
 import { check } from '@agent-spaghetti/sdk';
 
+const execResource = (cmd: string, args: string[]) => `${basename(cmd).replace(/\.(exe|cmd|bat)$/i, '')} ${args.join(' ')}`.trim();
+const netResource = (url: string, method = 'GET') => `${method} ${new URL(url).pathname}`;
+async function* refused(action: Action, resource: string): AsyncIterable<string> { throw new Error(`not permitted: ${action} ${resource}`); }
 export function guardEnvironment(env: Environment, subject: string, grants: Grant[], pending: Pending[]): Environment {
   const resolved = new Set<string>();                         // paths a granted glob returned may then be read
   const allowed = (action: Action, resource: string) => {
@@ -14,18 +17,17 @@ export function guardEnvironment(env: Environment, subject: string, grants: Gran
   };
   return {
     ...env,
-    exec: async (cmd, args, o) => allowed('exec', `${basename(cmd).replace(/\.(exe|cmd|bat)$/i, '')} ${args.join(' ')}`.trim())
-      ? env.exec(cmd, args, o) : { code: 126, stdout: '', stderr: 'not permitted' },
-    http: async req => {
-      const u = new URL(req.url);
-      return allowed('net', `${req.method ?? 'GET'} ${u.pathname}`) ? env.http(req) : null;
-    },
+    exec: async (cmd, args, o) => allowed('exec', execResource(cmd, args)) ? env.exec(cmd, args, o) : { code: 126, stdout: '', stderr: 'not permitted' },
+    execLines: (cmd, args, o) => (allowed('exec', execResource(cmd, args)) ? env.execLines(cmd, args, o) : refused('exec', execResource(cmd, args))),
+    httpLines: req => (allowed('net', netResource(req.url, req.method)) ? env.httpLines(req) : refused('net', netResource(req.url, req.method))),
+    http: async req => (allowed('net', netResource(req.url, req.method)) ? env.http(req) : null),
     which: async b => (allowed('read', `PATH:${b}`) ? env.which(b) : null),
     glob: async p => {
       if (!allowed('read', p)) return null;
       const r = await env.glob(p); if (r) resolved.add(r); return r;
     },
     readFile: async p => (resolved.has(p) || allowed('read', p) ? env.readFile(p) : null),
+    writeFile: async (p, c) => { if (!allowed('write', p)) throw new Error(`not permitted: write ${p}`); return env.writeFile(p, c); },
   };
 }
 /** Env values reach a third-party integration only when granted. */

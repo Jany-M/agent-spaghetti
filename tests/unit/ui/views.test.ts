@@ -12,13 +12,13 @@ const html = (el: ReturnType<typeof h>) => renderToStaticMarkup(el);
 const noop = () => {};
 
 test('approval card: what, where, why; Deny first, one button per offered scope; never pre-focused', () => {
-  const a = html(h(ApprovalCard, { req: ask, name: 'Acme', now: 0, onAnswer: noop }));
+  const a = html(h(ApprovalCard, { req: ask, names: new Map([['acme', 'Acme']]), now: 0, onAnswer: noop }));
   assert.match(a, /Acme wants to read <code>PATH:acme<\/code>/);
   assert.match(a, /look for acme/);
   assert.deepEqual([...a.matchAll(/<button[^>]*>([^<]+)</g)].map(m => m[1]), ['Deny', 'Always allow']);
   assert.ok(!/autofocus/i.test(a));
-  const r = html(h(ApprovalCard, { req: run, name: 'Cursor', now: 1_000, onAnswer: noop }));
-  assert.match(r, /hand a task to <code>claude-cli<\/code><span class="badge">paid<\/span>/);
+  const r = html(h(ApprovalCard, { req: run, names: new Map([['acme', 'Cursor'], ['claude-cli', 'Claude Code CLI']]), now: 1_000, onAnswer: noop }));
+  assert.match(r, /hand a task to <code>Claude Code CLI<\/code><span class="badge">paid<\/span>/);
   assert.match(r, /<pre>write &lt;tests&gt;<\/pre>/);
   assert.match(r, /your Claude plan/);
   assert.match(r, /expires in 60 s/);

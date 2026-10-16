@@ -1,13 +1,14 @@
 // Per-environment commands. The SAME function answers in the daemon (host env) and in the env bundle (inside distros),
 // so a command is added once here and works everywhere (core/dispatch.ts routes it).
-import type { Environment, Grant, Integration, Switch, TestResult } from '@agent-spaghetti/sdk';
+import type { ConnectResult, Environment, Grant, Integration, Switch, TestResult } from '@agent-spaghetti/sdk';
+import { connectIntegration } from './connect.ts';
 import { inspectAs } from './engine/observe.ts';
 import { testIntegration } from './engine/test.ts';
 import { scanEnv, type EnvScan } from './scan.ts';
 
-export const ENV_COMMANDS = ['inspect', 'switches', 'switch', 'test'] as const;
+export const ENV_COMMANDS = ['inspect', 'switches', 'switch', 'test', 'connect'] as const;
 export type EnvCommand = (typeof ENV_COMMANDS)[number];
-export interface EnvResults { inspect: EnvScan; switches: Switch[]; switch: Switch; test: TestResult }
+export interface EnvResults { inspect: EnvScan; switches: Switch[]; switch: Switch; test: TestResult; connect: ConnectResult }
 
 /** Integrations with switches, with the detection the engine made (modules never re-detect). */
 async function withSwitches(env: Environment, integrations: Integration[], grants: Grant[]) {
@@ -31,6 +32,12 @@ export async function runEnvCommand<C extends EnvCommand>(env: Environment, inte
           if (sw) { await i.module!.setSwitch!(env, det, id, state === 'on', ctx); return { ...sw, on: state === 'on' }; }
         }
         throw new Error(`unknown switch ${id} in ${env.id}`);
+      }
+      case 'connect': {          // args: integration id, Cli JSON, 'dry-run' or ''
+        const i = integrations.find(i => i.manifest.id === args[0]);
+        const r = i && await inspectAs(i, env, await env.inventory(i.manifest.detect?.env ?? []), grants);
+        if (!i || !r) throw new Error(`${args[0]} is not installed in ${env.id}`);
+        return { integration: i.manifest.id, envId: env.id, ...await connectIntegration(env, i, r.detection, JSON.parse(args[1]), args[2] === 'dry-run') };
       }
       case 'test': {
         const i = integrations.find(i => i.manifest.id === args[0]);

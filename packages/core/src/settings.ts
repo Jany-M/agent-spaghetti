@@ -8,6 +8,9 @@ export const SETTINGS = {
   'events.retentionDays': { default: 14, help: 'Days of events kept in the store' },
   'observe.backendPollMs': { default: 3000, help: 'How often backends are re-checked while the daemon runs' },
   'observe.sessionPollMs': { default: 2000, help: 'How often agent sessions are polled (tools without an event stream)' },
+  'backend.concurrency': { default: 1, help: 'Requests a local model server runs at once (the rest wait in its queue)' },
+  'consent.timeoutSec': { default: 120, help: 'Seconds a delegation waits for your answer before it is denied' },
+  'delegate.deadlineSec': { default: 1800, help: 'Longest a delegated run may take' },
 } as const;
 export type SettingKey = keyof typeof SETTINGS;
 export type SettingValue<K extends SettingKey> = (typeof SETTINGS)[K]['default'] extends readonly string[] ? string[] : number;

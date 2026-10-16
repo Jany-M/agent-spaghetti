@@ -7,10 +7,11 @@ export type Status = OpIO['status']['out'];
 export interface HubView { up: boolean; status: Status | null }
 export type Answer = (id: string, allow: boolean, scope?: ConsentScope) => void;
 
-export function ApprovalCard({ req, name, now, onAnswer }: { req: ConsentRequest; name: string; now: number; onAnswer: Answer }) {
+export function ApprovalCard({ req, names, now, onAnswer }: { req: ConsentRequest; names: Map<string, string>; now: number; onAnswer: Answer }) {
+  const name = names.get(req.subject) ?? req.subject, what = req.action === 'run' ? names.get(req.resource) ?? req.resource : req.resource;
   const left = req.expiresAt ? Math.max(0, Math.round((req.expiresAt - now) / 1000)) : null;
   return h('div', { className: 'card ask', role: 'group', 'aria-label': `Question from ${name}` },
-    h('div', { className: 'what' }, `${name} wants to ${ACTION_LABEL[req.action]} `, h('code', null, req.resource),
+    h('div', { className: 'what' }, `${name} wants to ${ACTION_LABEL[req.action]} `, h('code', null, what),
       req.cost && req.cost !== 'free' ? h('span', { className: 'badge' }, req.cost === 'metered' ? 'paid' : req.cost) : null),
     h('div', { className: 'why' }, req.why),
     req.task !== undefined ? h('pre', null, req.task) : null,
@@ -23,8 +24,10 @@ export function ApprovalCard({ req, name, now, onAnswer }: { req: ConsentRequest
 
 function sessions(s: Status) {
   const agents = new Map(s.snapshot?.agents.map(a => [`${a.envId}|${a.id.slice(a.integration.length + 1)}`, a.name]) ?? []);
-  return Object.values(s.live.sessions).map(x =>
-    `${agents.get(`${x.envId}|${x.agentId}`) ?? x.agentId ?? 'agent'} · ${x.kind ?? 'session'} ${x.status ?? ''}${x.model ? ` · ${x.model}` : ''}`.trim());
+  const names = new Map(s.snapshot?.detections.map(d => [d.integration, d.name]) ?? []);
+  const runs = Object.values(s.live.runs).map(r => `${names.get(r.source) ?? r.source} → ${names.get(r.target) ?? r.target} (run ${r.id})`);
+  return [...runs, ...Object.values(s.live.sessions).map(x =>
+    `${agents.get(`${x.envId}|${x.agentId}`) ?? x.agentId ?? 'agent'} · ${x.kind ?? 'session'} ${x.status ?? ''}${x.model ? ` · ${x.model}` : ''}`.trim())];
 }
 const section = (title: string, ...children: ReactNode[]) => h('section', null, h('h2', null, title), ...children);
 
@@ -40,7 +43,7 @@ export function PopoverView({ view, now, onAnswer, onScan, scanning }: { view: H
       h('div', { className: 'lines' }, h('div', null, h('span', { className: `dot ${state}`, 'aria-label': state }), lines[0]),
         ...lines.slice(1).map(l => h('div', { key: l }, l)))),
     h('main', { className: 'body' },
-      consents.length ? section('Waiting for you', ...consents.map(c => h(ApprovalCard, { key: c.id, req: c, name: names.get(c.subject) ?? c.subject, now, onAnswer }))) : null,
+      consents.length ? section('Waiting for you', ...consents.map(c => h(ApprovalCard, { key: c.id, req: c, names, now, onAnswer }))) : null,
       section('Running', running.length ? h('div', { className: 'card list' }, ...running.map((r, i) => h('div', { key: i }, r))) : h('div', { className: 'empty' }, view.up ? 'Nothing running.' : 'Start the daemon from the tray menu.'))),
     h('footer', { className: 'foot' },
       h('span', null, s?.snapshot ? `last scan ${new Date(s.snapshot.ts).toLocaleTimeString()}` : ''),

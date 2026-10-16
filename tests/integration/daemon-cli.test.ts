@@ -8,6 +8,9 @@ import { HubClient, DaemonDown, emptyLive, liveState, type Integration, type Sna
 import { Settings } from '../../packages/core/src/settings.ts';
 import { fakeEnv } from '@agent-spaghetti/sdk/testing';
 import { Consent } from '../../packages/core/src/consent.ts';
+import { Ledger } from '../../packages/core/src/ledger.ts';
+import { Runner } from '../../packages/core/src/runner.ts';
+import { BUILTINS } from '@agent-spaghetti/integrations';
 import { Store } from '../../packages/core/src/store.ts';
 import { Bus } from '../../packages/core/src/bus.ts';
 import { startDaemon } from '../../packages/core/src/daemon.ts';
@@ -28,8 +31,14 @@ async function boot(scan: () => Promise<Snapshot> = async () => SNAP) {
   const sw: Switch[] = [{ id: 'openclaw-mcp:a', label: 'a', on: false, envId: 'wsl:TestDistro', integration: 'openclaw' }];
   const calls: string[] = [];
   let stopped = 0;
-  const services: Services = { store, bus, settings: new Settings(store), consent: new Consent(bus), shutdown: () => { stopped++; }, live: () => live, scan,
-    loaded: () => ({ integrations: [THIRD], rejected: [] }),
+  const settings = new Settings(store), consent = new Consent(bus), ledger = new Ledger(store);
+  const host = fakeEnv({ lines: { 'POST http://127.0.0.1:1234/v1/chat/completions': ['data: {"choices":[{"delta":{"content":"Hi"}}]}', 'data: {"choices":[],"usage":{"prompt_tokens":3,"completion_tokens":1}}', 'data: [DONE]'] } });
+  const integrations = [THIRD, BUILTINS.find(b => b.manifest.id === 'lmstudio')!];
+  const resultsDir = mkdtempSync(join(tmpdir(), 'as-results-'));
+  const runner = new Runner({ bus, consent, ledger, settings, resultsDir, host: () => host, snapshot: () => store.loadSnapshot('scan'), integrations: () => integrations });
+  const services: Services = { store, bus, settings, consent, ledger, runner, host: () => host, cli: () => ({ command: 'node', args: ['/x/cli.ts'] }),
+    shutdown: () => { stopped++; }, live: () => live, scan,
+    loaded: () => ({ integrations, rejected: [] }),
     onEnvs: async (cmd, args, envIds) => {
       calls.push([cmd, ...args, ...(envIds ?? ['*'])].join(' '));
       const r: Record<string, unknown> = { switches: sw, switch: { ...sw[0], on: args[1] === 'on' }, test: { ok: true, steps: [{ name: 'detect', ok: true, detail: 'found', ms: 1 }] } };
@@ -179,4 +188,22 @@ test('runDaemon: a third-party drop-in asks once per action; allowing stores a g
   assert.ok((await c.call('events', { since: 0 })).filter(e => e.type === 'scan.completed').length > before, 'rescanned');
   assert.equal((await c.call('status')).consents.length, 0);
   } finally { await d.close(); }
+});
+
+test('CLI 3: targets, delegate to a free local model (result printed), runs, runs <id>, verdict, cancel', async () => {
+  const b = await boot();
+  const cli = async (...a: string[]) => { const t = io(); const code = await run(a, t.io, b.env); return { code, out: t.o.join('\n'), err: t.e.join('\n') }; };
+  try {
+    await cli('scan');
+    let r = await cli('targets'); assert.match(r.out, /lmstudio\s+LM Studio\s+model\s+free\s+m/);
+    r = await cli('delegate', 'lmstudio', 'say', 'hi', '--kind', 'summarize', '--reason', 'test'); assert.equal(r.code, 0, r.err); assert.equal(r.out, 'Hi');
+    r = await cli('runs'); assert.match(r.out, /^\s+1 .+ cli → lmstudio \(m\)\s+summarize\s+done/m); assert.match(r.out, /· test$/m);
+    r = await cli('runs', '1'); assert.match(r.out, /\n\nHi$/);
+    r = await cli('verdict', '1', 'redo'); assert.equal(r.code, 0); assert.match((await cli('runs')).out, /\[redo\]/);
+    r = await cli('verdict', '1', 'meh'); assert.equal(r.code, 1);
+    r = await cli('cancel', '1'); assert.match(r.out, /run 1 is not running/);
+    r = await cli('delegate', 'nope', 'x'); assert.equal(r.code, 1); assert.match(r.err, /unknown or unavailable target nope/);
+    const types = (await b.client.call('events', { since: 0 })).map(e => e.type);
+    for (const t of ['run.started', 'run.finished', 'backend.queue']) assert.ok(types.includes(t as never), t);
+  } finally { await b.close(); }
 });

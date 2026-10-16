@@ -1,0 +1,9 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "agent-spaghetti",
+  "description": "Hand tasks to the local models and other agents on this machine, with your approval for anything that costs money.",
+  "author": {
+    "name": "Agent Spaghetti"
+  },
+  "license": "BUSL-1.1"
+}

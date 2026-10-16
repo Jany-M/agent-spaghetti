@@ -1,4 +1,4 @@
-// The one SQLite store: events, latest snapshots, settings (kv) and permission grants (1b).
+// The one SQLite store (schema owner): events, latest snapshots, settings + grants (kv), the run record (runs, core/ledger.ts).
 import { DatabaseSync } from 'node:sqlite';
 import type { HubEvent, StoredEvent } from '@agent-spaghetti/sdk';
 
@@ -10,7 +10,10 @@ export class Store {
       this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=3000;
         CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, type TEXT, env_id TEXT, source TEXT, data TEXT);
         CREATE TABLE IF NOT EXISTS snapshots(key TEXT PRIMARY KEY, ts INTEGER, json TEXT);
-        CREATE TABLE IF NOT EXISTS kv(key TEXT PRIMARY KEY, json TEXT);`);
+        CREATE TABLE IF NOT EXISTS kv(key TEXT PRIMARY KEY, json TEXT);
+        CREATE TABLE IF NOT EXISTS runs(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, source TEXT, target TEXT, model TEXT,
+          parent_run_id INTEGER, job_id TEXT, kind TEXT, reason TEXT, task_hash TEXT, duration_ms INTEGER, input_tokens INTEGER,
+          output_tokens INTEGER, cost_usd REAL, outcome TEXT, error TEXT, result_path TEXT, result_sha256 TEXT, verdict TEXT);`);
     } catch (err) { throw new Error(`agent-spaghetti store cannot open "${path}": ${(err as Error).message}`); }
   }
   appendEvent(e: HubEvent): number {

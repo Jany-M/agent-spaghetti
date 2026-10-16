@@ -64,7 +64,7 @@ export type TrayState = 'idle' | 'working' | 'approval' | 'problem';
 export function trayState(up: boolean, snap: Snapshot | null, live: LiveState, pending: ConsentRequest[]): TrayState {
   if (!up || snap?.envs.some(e => e.state === 'error')) return 'problem';
   if (pending.length) return 'approval';
-  return Object.keys(live.sessions).length ? 'working' : 'idle';
+  return Object.keys(live.sessions).length || Object.keys(live.runs).length ? 'working' : 'idle';
 }
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 /** Short status lines: tray tooltip, popover header and `agent-spaghetti status --short`. */
@@ -75,9 +75,12 @@ export function renderStats(up: boolean, snap: Snapshot | null, live: LiveState,
   const running = Object.values(live.backends).filter(b => b.up && b.models.length);
   const backends = running.length ? running.map(b => ({ integration: b.integration, model: b.models[0].model, ctx: b.models[0].contextLength ?? undefined }))
     : (snap?.backends ?? []).map(b => ({ integration: b.integration, model: b.model, ctx: b.contextLength }));
-  for (const l of new Set(backends.map(b => `${name.get(b.integration) ?? b.integration} · ${b.model}${ctxLabel(b.ctx)}`))) lines.push(l);   // one line per server seen from several envs
+  const queue = (id: string) => { const q = live.queues[id]; return q?.waiting ? ` · queue ${q.waiting}` : ''; };
+  for (const l of new Set(backends.map(b => `${name.get(b.integration) ?? b.integration} · ${b.model}${ctxLabel(b.ctx)}${queue(b.integration)}`))) lines.push(l);   // one line per server seen from several envs
   const sessions = Object.keys(live.sessions).length;
   if (sessions) lines.push(`${plural(sessions, 'session')} running`);
+  const runs = Object.keys(live.runs).length;
+  if (runs) lines.push(`${plural(runs, 'delegated task')} running`);
   if (pending.length) lines.push(`${plural(pending.length, 'approval')} waiting`);
   return lines;
 }

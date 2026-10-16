@@ -1,10 +1,10 @@
 // The generic manifest interpreter (ADR 0004 + ADR 0008). Order: installed apps → processes → PATH → default paths.
 // Endpoints: env override → ports the tool's processes listen on → manifest default, on every host candidate.
 import type { BackendInfo, Ctx, Detection, Environment, Install, Inspection, Integration, Inventory, Manifest } from '@agent-spaghetti/sdk';
-import { firstNumber, levelsOf, parseJson, pick, samePath, wildcard, type Engines } from '@agent-spaghetti/sdk';
+import { firstNumber, levelsOf, parseJson, pick, pluginDir, samePath, wildcard, type Engines } from '@agent-spaghetti/sdk';
 
 type Detect = NonNullable<Manifest['detect']>;
-export const ENGINES: Engines = { openai: false, acp: false };   // flipped by the phase that adds each run engine
+export const ENGINES: Engines = { openai: true, acp: false };    // openai: engine/openai.ts (Phase 3); acp arrives in Phase 5
 const PROBE_MS = 2500, EXEC_MS = 10000, DEFAULT_VERSION = /(\d+\.\d+\.\d+)/;
 export const platformOf = (k: Environment['kind']) => (k === 'windows' ? 'windows' : k === 'macos' ? 'macos' : 'linux');
 const pathsFor = (p: Detect['paths'], k: Environment['kind']) => (Array.isArray(p) ? p : p?.[platformOf(k)] ?? []);
@@ -76,11 +76,20 @@ export async function listModels(env: Environment, m: Manifest, hit: { endpoint:
         : [];
     });
 }
-function explain(m: Manifest, installs: Install[], hit: unknown, backends: BackendInfo[], inv: Inventory): Pick<Detection, 'connectable' | 'why'> {
+/** Whether the client already has agent-spaghetti (its plugin folder, or the entry in its MCP config). Read-only. */
+export async function isConnected(env: Environment, m: Manifest): Promise<boolean> {
+  const s = m.speaks;
+  if (s?.agentPlugins && await env.glob(`${pluginDir(s.agentPlugins.dir)}/mcp.json`)) return true;
+  if (!s?.mcpClient) return false;
+  const servers = pick(parseJson((await env.readFile(s.mcpClient.config)) ?? ''), s.mcpClient.key);
+  return !!servers && typeof servers === 'object' && 'agent-spaghetti' in servers;
+}
+function explain(m: Manifest, installs: Install[], hit: unknown, backends: BackendInfo[], inv: Inventory, connected: boolean): Pick<Detection, 'connectable' | 'why'> {
   const partial = inv.partial.length ? ` (partial scan: ${inv.partial.join(', ')})` : '';
   if (m.detect?.http && !hit) return { connectable: 'needs-setup', why: 'installed, server not running' + partial };
   if (m.models) return { connectable: 'yes', why: backends.length ? `${backends.length} model(s) loaded` : 'server up, no model loaded' };
-  if (m.speaks?.mcpClient || m.speaks?.agentPlugins) return { connectable: 'needs-setup', why: 'can connect to agent-spaghetti once its MCP server and plugin exist (Phase 3)' };
+  if (m.speaks?.mcpClient || m.speaks?.agentPlugins) return connected ? { connectable: 'yes', why: 'connected to agent-spaghetti' }
+    : { connectable: 'needs-setup', why: `not connected yet (run: agent-spaghetti connect ${m.id})` };
   return { connectable: 'yes', why: installs.length > 1 ? `${installs.length} installs` : installs.some(i => i.via === 'process') ? 'running' : 'installed' };
 }
 
@@ -95,7 +104,7 @@ export async function inspect(i: Integration, env: Environment, ctx: Ctx): Promi
   const detection: Detection = {
     integration: m.id, name: m.name, envId: env.id, installs, endpoint: hit?.endpoint,
     version: await readVersion(env, d.version, installs, hit?.body), levels: levelsOf(i, ENGINES), cost: m.cost ?? 'unknown',
-    ...explain(m, installs, hit, backends, ctx.inventory),
+    ...explain(m, installs, hit, backends, ctx.inventory, await isConnected(env, m)),
   };
   const base: Inspection = { detection, agents: [], backends };
   return i.module?.inspect ? i.module.inspect(env, base, ctx) : base;

@@ -83,7 +83,7 @@ test('testIntegration: detect, reachable, models, 1-token completion (free only)
   assert.deepEqual(r.steps.map(s => [s.name, s.ok]), [['detect', true], ['server reachable', true], ['models', true], ['1-token completion', true]]);
   assert.equal(r.ok, true);
   const paid = await testIntegration(env, { ...lms, manifest: { ...lms.manifest, cost: 'metered' } });
-  assert.match(paid.steps.at(-1)!.detail, /skipped: paid target/);
+  assert.match(paid.steps.at(-1)!.detail, /skipped: may cost money/);
   const none = await testIntegration(fakeEnv(), lms);
   assert.deepEqual(none, { ok: false, steps: [{ ...none.steps[0], name: 'detect', ok: false, detail: 'not found in this environment' }] });
   const guarded = await testIntegration(env, user({ detect: { http: { port: 1234, path: '/m' } } }));

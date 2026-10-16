@@ -7,7 +7,7 @@ import { dataDir, discoveryPath, tokenPath } from './paths.ts';
 export class DaemonDown extends Error {}
 export class HubClient {
   readonly base: string; private token: string;
-  constructor(o: { port: number; token: string }) { this.base = `http://127.0.0.1:${o.port}`; this.token = o.token; }
+  constructor(o: { port: number; token: string; host?: string }) { this.base = `http://${o.host ?? '127.0.0.1'}:${o.port}`; this.token = o.token; }
   /** AGENT_SPAGHETTI_PORT overrides the discovery file. */
   static fromDiscovery(env: NodeJS.ProcessEnv = process.env): HubClient {
     const dir = dataDir(env);

@@ -20,3 +20,22 @@ export async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Pr
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
   return out;
 }
+/** First come, first served slots (one local GPU = one request at a time). */
+export class Semaphore {
+  running = 0;
+  private queue: Array<() => void> = [];
+  limit: number;
+  constructor(limit: number) { this.limit = limit; }
+  get waiting() { return this.queue.length; }
+  async acquire(signal?: AbortSignal): Promise<() => void> {
+    if (this.running >= this.limit) await new Promise<void>((res, rej) => {
+      const go = () => { signal?.removeEventListener('abort', stop); res(); };
+      const stop = () => { this.queue = this.queue.filter(f => f !== go); rej(new Error('cancelled')); };
+      signal?.addEventListener('abort', stop, { once: true });
+      this.queue.push(go);
+    });
+    this.running++;
+    let done = false;
+    return () => { if (done) return; done = true; this.running--; this.queue.shift()?.(); };
+  }
+}

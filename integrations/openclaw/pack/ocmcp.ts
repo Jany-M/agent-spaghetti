@@ -3,7 +3,7 @@
 import type { Environment } from '@agent-spaghetti/sdk';
 import { readFileSync } from 'node:fs';
 import { entryFor, search, type Catalog } from './catalog.ts';
-import { mcpServers, setMcpEnabled, type McpServer } from './mcp.ts';
+import { MCP_NAME, mcpServers, setMcpEnabled, type McpServer } from './mcp.ts';
 import { stripAnsi } from './state.ts';
 
 export interface McpDeps { env: Environment; exe: string; pack: string | null; vars: NodeJS.ProcessEnv; say(s: string): void }
@@ -12,7 +12,7 @@ export const MCP_COMMANDS = ['list', 'search', 'on', 'off', 'off-all', 'probe', 
 
 export async function mcpMain(cmd: string, a: string[], d: McpDeps): Promise<number> {
   if (!(MCP_COMMANDS as readonly string[]).includes(cmd)) { d.say(`ocmcp: turn OpenClaw MCP servers on/off (they are OFF by default)\ncommands: ${MCP_COMMANDS.join(', ')}`); return 2; }
-  const servers = await mcpServers(d.env, d.exe);
+  const servers = (await mcpServers(d.env, d.exe)).filter(s => s.name !== MCP_NAME);   // ours is managed by `connect`
   const generic = load(d.vars.MCP_CATALOG ?? `${d.pack}/mcp/catalog.json`), local = d.pack ? load(`${d.pack}/catalog.local.json`) : {};
   const cat = (s: McpServer) => entryFor(s, generic, local);
   const broken = (s: McpServer) => cat(s).broken ? `  [BROKEN: ${cat(s).broken}]` : '';

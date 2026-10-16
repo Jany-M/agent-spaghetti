@@ -1,18 +1,23 @@
 #!/usr/bin/env node
 // `agent-spaghetti` CLI: thin. Every command is an op through HubClient, rendered by sdk/format. No logic of its own.
 import { writeFileSync } from 'node:fs';
-import { DaemonDown, HubClient, OPS, SCOPE_LABEL, detectionRows, permissionRows, renderStats, renderTable, renderTree, switchRows, testLines,
-  type Action, type ConsentRequest, type ConsentScope, type OpId, type StoredEvent } from '@agent-spaghetti/sdk';
+import { DaemonDown, HubClient, OPS, SCOPE_LABEL, detectionRows, describeRun, permissionRows, renderStats, renderTable, renderTree, serveMcpStdio, switchRows, testLines,
+  type Action, type ConsentRequest, type ConsentScope, type OpId, type RunRow, type StoredEvent, type TaskKind } from '@agent-spaghetti/sdk';
+import { planHook } from './hook.ts';
 
 export interface IO { out(s: string): void; err(s: string): void }
 const DOWN = 'agent-spaghetti daemon is not running. Start it with: agent-spaghetti daemon';
 export const usage = () => ['Usage: agent-spaghetti <command> [--json]', '',
   `  ${'daemon'.padEnd(44)}Start the daemon (foreground)`,
+  `  ${'mcp --as <client>'.padEnd(44)}MCP server for a client (stdio; started by the client)`,
   ...Object.values(OPS).map(o => `  ${o.usage.padEnd(44)}${o.summary}`)].join('\n');
 const time = (ts: number) => new Date(ts).toTimeString().slice(0, 8);
 const eventLine = (e: StoredEvent) => `${time(e.ts)}  ${e.type}  ${e.source}  ${e.envId}`;
 /** CLI verbs that are not op names (from the usage strings in OPS). */
 const VERB: Record<string, OpId> = { on: 'switch', off: 'switch', allow: 'grant', deny: 'grant', set: 'setting', answer: 'consent' };
+const runLine = (r: RunRow) => `${String(r.id).padStart(4)}  ${new Date(r.ts).toLocaleString()}  ${r.source} → ${r.target}${r.model ? ` (${r.model})` : ''}  ${r.kind}  ${r.outcome}`
+  + `${r.durationMs ? ` ${Math.round(r.durationMs / 1000)}s` : ''}${r.costUsd ? ` $${r.costUsd.toFixed(4)}` : ''}${r.verdict ? ` [${r.verdict}]` : ''}${r.reason ? `  · ${r.reason}` : ''}`;
+const readStdin = async () => { let s = ''; for await (const c of process.stdin) s += c; return s; };
 const consentLine = (c: ConsentRequest) => `? ${c.id}  ${c.subject} wants ${c.action} ${c.resource} (${c.why}) → answer ${c.id} allow|deny${c.scopes.length > 1 ? ` [${c.scopes.join('|')}]` : ''}`;
 /** Reads "--name value" and removes it from args. */
 const flag = (args: string[], name: string) => { const i = args.indexOf(name); return i < 0 ? undefined : args.splice(i, 2)[1]; };
@@ -28,8 +33,26 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
     await d.close();
     return 0;
   }
+  if (cmd === 'mcp') {          // stdio MCP server for a client; parent run id comes from a delegated agent's environment
+    const as = flag([...args], '--as') ?? 'mcp';
+    await serveMcpStdio(HubClient.fromDiscovery(env), { source: as, parentRunId: Number(env.AGENT_SPAGHETTI_PARENT_RUN) || undefined });
+    return 0;
+  }
   const op = cmd && (VERB[cmd] ?? (cmd in OPS ? cmd as OpId : undefined));
   if (!op) { io.err(usage()); return 1; }
+  if (op === 'hook') {          // client hooks: always answer the client, even when the daemon is down
+    const plan = planHook(JSON.parse((await readStdin()) || '{}'));
+    const c = (() => { try { return HubClient.fromDiscovery(env); } catch { return null; } })();
+    if ('delegate' in plan) {
+      const r = await c?.call('delegate', { ...plan.delegate, source: args[1] ?? 'client', waitMs: 0 }).catch((e: Error) => e);
+      io.out(JSON.stringify({ ...plan.reply, user_message: !r ? 'agent-spaghetti is not running: start it, then send again.'
+        : r instanceof Error ? `agent-spaghetti: ${r.message}` : `Sent to ${plan.delegate.target} (run ${r.id}). The result will be in ${plan.delegate.resultDir ?? 'the agent-spaghetti results folder'}/${r.id}.md` }));
+    } else {
+      if (plan.report) await c?.call('hook', { client: args[1] ?? 'client', ...plan.report }).catch(() => {});
+      io.out(JSON.stringify(plan.reply));
+    }
+    return 0;
+  }
   const envId = flag(args, '--env'), outFile = flag(args, '--out');
   const [, a1, a2, a3] = args;
   try {
@@ -94,6 +117,29 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
         const r = await c.call('consent', { id: a1, allow: a2 === 'allow', scope }); print(r, () => `answered: ${a2}${scope ? ` (${scope})` : ''}`); break;
       }
       case 'shutdown': { const r = await c.call('shutdown'); print(r, () => 'agent-spaghetti daemon is stopping'); break; }
+      case 'delegate': {
+        const kind = flag(args, '--kind') as TaskKind | undefined, reason = flag(args, '--reason'), model = flag(args, '--model');
+        const [, target, ...task] = args;
+        if (!target || !task.length) { io.err(`usage: agent-spaghetti ${OPS.delegate.usage}`); return 1; }
+        let v = await c.call('delegate', { target, task: task.join(' '), kind, reason, model, source: 'cli', waitMs: 0 });
+        while (v.run.outcome === 'running') { await new Promise(r => setTimeout(r, 1000)); const r = await c.call('runs', { id: v.id }); v = { id: v.id, run: r.runs.find(x => x.id === v.id)!, result: r.result }; }
+        const d = describeRun(v);
+        print(v, () => d.content[0].text);
+        return 'isError' in d ? 1 : 0;
+      }
+      case 'targets': { const r = await c.call('targets'); print(r, () => r.length ? renderTable([['Target', 'Name', 'Kind', 'Cost', 'Models'], ...r.map(t => [t.id, t.name, t.kind, t.cost, t.models.join(', ') || '-'])]) : 'Nothing to delegate to yet (scan first; start a local model server or install an agent).'); break; }
+      case 'runs': {
+        const r = await c.call('runs', a1 ? { id: Number(a1) } : {});
+        print(r, () => [...r.runs.map(runLine), ...(r.result ? ['', r.result] : [])].join('\n') || 'No runs yet.');
+        break;
+      }
+      case 'cancel': { const r = await c.call('cancel', { id: Number(a1) }); print(r, () => (r.cancelled ? `run ${a1} cancelled` : `run ${a1} is not running`)); break; }
+      case 'verdict': { const r = await c.call('verdict', { id: Number(a1), value: a2 as 'up' }); print(r, () => `run ${a1}: ${a2}`); break; }
+      case 'connect': {
+        const r = await c.call('connect', { integration: a1, dryRun: args.includes('--dry-run') });
+        print(r, () => [`${r.applied ? 'Done' : 'Would'}: ${r.description} (${r.envId})`, ...r.changes.map(x => `  ${x}`)].join('\n'));
+        break;
+      }
       case 'report': {
         const r = await c.call('report');
         if (outFile) { writeFileSync(outFile, r.markdown); io.out(`report written to ${outFile} (review it before sharing)`); } else print(r, () => r.markdown);

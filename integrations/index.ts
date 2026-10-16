@@ -2,6 +2,7 @@
 // tests/guards asserts this list equals the folders. Third-party manifests are loaded from disk by the registry.
 import type { Integration, Manifest } from '@agent-spaghetti/sdk';
 import { openclawModule } from './openclaw/index.ts';
+import { claudeCliModule } from './claude-cli/index.ts';
 import chatgptDesktopManifest from './chatgpt-desktop/manifest.json' with { type: 'json' };
 import claudeCliManifest from './claude-cli/manifest.json' with { type: 'json' };
 import claudeDesktopManifest from './claude-desktop/manifest.json' with { type: 'json' };
@@ -21,7 +22,7 @@ import vllmManifest from './vllm/manifest.json' with { type: 'json' };
 import vscodeManifest from './vscode/manifest.json' with { type: 'json' };
 import windsurfManifest from './windsurf/manifest.json' with { type: 'json' };
 
-const MODULES: Record<string, Integration['module']> = { openclaw: openclawModule };
+const MODULES: Record<string, Integration['module']> = { openclaw: openclawModule, 'claude-cli': claudeCliModule };
 export const BUILTIN_MANIFESTS = [chatgptDesktopManifest, claudeCliManifest, claudeDesktopManifest, clineManifest, codexManifest, continueManifest, cursorManifest, kiloManifest, llamacppManifest, lmstudioManifest, mempalaceManifest, ollamaManifest, openclawManifest, opencodeManifest, rooManifest, vllmManifest, vscodeManifest, windsurfManifest] as unknown as Manifest[];
 export const BUILTINS: Integration[] = BUILTIN_MANIFESTS.map(manifest => ({ manifest, module: MODULES[manifest.id], source: 'builtin' }));
 export const BUILTIN_DIR = new URL('.', import.meta.url);

@@ -4,18 +4,28 @@
 //   observe <payload>                 long-running; one JSON event per line
 //   switches <payload> | switch <payload> <id> on|off | test <payload> <integration>
 //   openclaw <command> [...]          OpenClaw pack commands (apply.sh / ocmcp), see integrations/openclaw/pack
+//   mcp --as <client>                 agent-spaghetti's MCP server for a client in this distro (talks to the daemon on Windows)
 //   version
 import type { Integration } from '@agent-spaghetti/sdk';
 import { BUILTINS } from '@agent-spaghetti/integrations';
+import { HubClient, VERSION, serveMcpStdio } from '@agent-spaghetti/sdk';
+import { readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { decodePayload, ENV_COMMANDS, extraHostsFromEnv, localEnvironment, observeEnv, runEnvCommand, scanEnv, type EnvCommand } from '@agent-spaghetti/core/portable';
 import { packMain } from '@agent-spaghetti/integrations/openclaw/pack/main.ts';
 
-export const VERSION = '0.2.0';
 const out = (v: unknown) => process.stdout.write(JSON.stringify(v) + '\n');
 
 export async function main(argv: string[]): Promise<number> {
   const [cmd, raw, ...rest] = argv;
   if (cmd === 'version') { process.stdout.write(VERSION + '\n'); return 0; }
+  if (cmd === 'mcp') {      // MCP bridge for clients in this distro; the daemon wrote where it listens for us (hub.json)
+    const hub = JSON.parse(readFileSync(join(process.env.XDG_DATA_HOME ?? join(homedir(), '.local', 'share'), 'agent-spaghetti', 'hub.json'), 'utf8'));
+    const all = [raw, ...rest];
+    await serveMcpStdio(new HubClient(hub), { source: all[all.indexOf('--as') + 1] ?? 'mcp', parentRunId: Number(process.env.AGENT_SPAGHETTI_PARENT_RUN) || undefined });
+    return 0;
+  }
   if (cmd === 'openclaw') {
     const env = localEnvironment({ extraHosts: extraHostsFromEnv(process.env) });   // LLM_HOSTS from overrides.env
     const inspect = async (ids: string[]) => (await scanEnv(env, BUILTINS.filter(b => ids.includes(b.manifest.id)))).inspections;

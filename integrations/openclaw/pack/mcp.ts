@@ -11,10 +11,15 @@ export async function mcpServers(env: Environment, exe: string): Promise<McpServ
     url: typeof s?.url === 'string' ? s.url : undefined, command: typeof s?.command === 'string' ? s.command : undefined,
     args: Array.isArray(s?.args) ? s.args.filter((a: unknown) => typeof a === 'string') : undefined }));
 }
+/** agent-spaghetti's own server: added by `connect`, never parked by the pack. */
+export const MCP_NAME = 'agent-spaghetti';
 /** One validated merge-patch through OpenClaw's own CLI, then reload. */
-export async function setMcpEnabled(env: Environment, exe: string, map: Record<string, boolean>): Promise<void> {
-  const body = JSON.stringify({ mcp: { servers: Object.fromEntries(Object.entries(map).map(([k, v]) => [k, { enabled: v }])) } });
-  const r = await env.exec(exe, ['config', 'patch', '--stdin'], { input: body, timeoutMs: 60000 });
+async function patchServers(env: Environment, exe: string, servers: Record<string, Record<string, unknown>>): Promise<void> {
+  const r = await env.exec(exe, ['config', 'patch', '--stdin'], { input: JSON.stringify({ mcp: { servers } }), timeoutMs: 60000 });
   if (r.code !== 0) throw new Error(`openclaw config patch failed: ${(r.stderr || r.stdout).slice(-400)}`);
   await env.exec(exe, ['mcp', 'reload'], { timeoutMs: 60000 });
 }
+export const setMcpEnabled = (env: Environment, exe: string, map: Record<string, boolean>) =>
+  patchServers(env, exe, Object.fromEntries(Object.entries(map).map(([k, v]) => [k, { enabled: v }])));
+export const addMcpServer = (env: Environment, exe: string, s: { command: string; args: string[] }) =>
+  patchServers(env, exe, { [MCP_NAME]: { command: s.command, args: s.args, enabled: true } });

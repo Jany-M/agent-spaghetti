@@ -84,12 +84,12 @@ else {
     pop.on('blur', () => pop?.hide());
     pop.webContents.on('will-navigate', e => e.preventDefault());
     pop.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-    await pop.loadFile(asset('popover.html'));
-    ipcMain.handle(CHANNEL.call, (_e, op: unknown, input: Record<string, unknown>) => {
+    ipcMain.handle(CHANNEL.call, (_e, op: unknown, input: Record<string, unknown>) => {   // before the page loads: it calls at once
       if (!isBridgeOp(op)) throw new Error(`op not allowed: ${String(op)}`);
       if (!client) throw new Error('agent-spaghetti daemon is not running');
       return client.call(op, input as never);
     });
+    await pop.loadFile(asset('popover.html'));
     setMenu();
     await ensureDaemon({ connect, start: startDaemon }).catch(e => console.error(e));
     void follow();

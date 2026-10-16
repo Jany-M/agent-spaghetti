@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnFile } from '../../packages/core/src/proc.ts';
 import { encodePayload } from '../../packages/core/src/env/wsl.ts';
-import { VERSION } from '../../packages/env/src/main.ts';
+import { VERSION } from '@agent-spaghetti/sdk';
 
 const dir = mkdtempSync(join(tmpdir(), 'as-bundle-')), out = join(dir, 'agent-spaghetti-env.mjs');
 const node = (args: string[]) => spawnFile(process.execPath, [out, ...args], { timeoutMs: 60000 });

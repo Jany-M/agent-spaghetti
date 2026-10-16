@@ -9,11 +9,16 @@ export type Action = (typeof ACTIONS)[number];
 export const ACTION_LABEL: Record<Action, string> = { exec: 'run a program', read: 'read', net: 'contact a local server', write: 'change a file',
   run: 'hand a task to', config: 'change a setting', load: 'load its own code' };
 export type Mode = 'allow' | 'deny';
-export interface Grant { subject: string; action: Action; resource: string; mode: Mode; by: 'user' | 'default'; ts: number }
+export interface Grant {
+  subject: string; action: Action; resource: string; mode: Mode; by: 'user' | 'default'; ts: number;
+  jobId?: string; budgetUsd?: number;            // run grants only: valid for one job / until this much was spent
+}
 /** An action a third-party integration tried without a grant (recorded by the guard, asked by the daemon). */
 export interface Pending { subject: string; action: Action; resource: string }
 export interface DeclaredAction { action: Action; resource: string; why: string }
 
+/** Where `connect` installs the agent-spaghetti plugin inside a client's plugin folder. */
+export const pluginDir = (clientDir: string) => `${clientDir.replace(/[\\/]$/, '')}/agent-spaghetti`;
 /** What a manifest WOULD make the hub do, in the exact resource format the guard checks (what · where · how · why). */
 export function declaredActions(m: Manifest): DeclaredAction[] {
   const d = m.detect ?? {}, out: DeclaredAction[] = [];
@@ -26,6 +31,8 @@ export function declaredActions(m: Manifest): DeclaredAction[] {
   for (const n of d.env ?? []) out.push({ action: 'read', resource: `env:${n}`, why: 'read an endpoint override variable' });
   if (d.http) out.push({ action: 'net', resource: `GET ${d.http.path}`, why: 'probe the local server (localhost / WSL host only)' });
   if (m.models?.path) out.push({ action: 'net', resource: `GET ${m.models.path}`, why: 'list loaded models' });
+  if (m.speaks?.mcpClient) out.push({ action: 'read', resource: m.speaks.mcpClient.config, why: 'check whether agent-spaghetti is connected' });
+  if (m.speaks?.agentPlugins) out.push({ action: 'read', resource: `${pluginDir(m.speaks.agentPlugins.dir)}/mcp.json`, why: 'check whether the agent-spaghetti plugin is installed' });
   return out;
 }
 /** First matching grant wins; resources may use '*'. No grant → 'ask'. */
@@ -50,3 +57,18 @@ export interface ConsentRequest {
 }
 export interface ConsentAnswer { answer: 'granted' | 'denied' | 'expired'; scope?: ConsentScope }
 export const SCOPE_LABEL: Record<ConsentScope, string> = { once: 'Allow once', job: 'Allow for this job', always: 'Always allow' };
+
+/** Delegation (ADR 0005 `run`): grants first (a job-bound grant only for its job, a budget only until spent),
+ *  then the default: free targets run, anything that may cost money asks. */
+export function runDecision(grants: Grant[], source: string, target: string, cost: Cost, o: { jobId?: string; spentUsd(g: Grant): number }):
+  { mode: 'allow' | 'deny' | 'ask'; grant: Grant | null; why: string } {
+  const g = grants.find(g => g.subject === source && g.action === 'run' && wildcard(g.resource, target) && (g.jobId === undefined || g.jobId === o.jobId));
+  if (g?.mode === 'deny') return { mode: 'deny', grant: g, why: 'denied by your permissions' };
+  if (g && g.budgetUsd !== undefined) {
+    const spent = o.spentUsd(g);
+    return spent < g.budgetUsd ? { mode: 'allow', grant: g, why: `budget: $${spent.toFixed(2)} of $${g.budgetUsd.toFixed(2)} used` }
+      : { mode: 'ask', grant: g, why: `budget used: $${spent.toFixed(2)} of $${g.budgetUsd.toFixed(2)}` };
+  }
+  if (g) return { mode: 'allow', grant: g, why: g.jobId ? `allowed for job ${g.jobId}` : 'always allowed' };
+  return cost === 'free' ? { mode: 'allow', grant: null, why: 'free target' } : { mode: 'ask', grant: null, why: 'may cost money' };
+}
