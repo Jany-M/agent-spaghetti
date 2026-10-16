@@ -10,3 +10,4 @@ AGENTS.md
 CLAUDE.md
 node_modules/
 dist/
+!packages/sdk/src/secrets.ts
