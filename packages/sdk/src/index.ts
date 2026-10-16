@@ -4,3 +4,7 @@ export * from './json.ts';
 export * from './match.ts';
 export * from './schema.ts';
 export * from './levels.ts';
+export * from './format.ts';
+export * from './paths.ts';
+export * from './ops.ts';
+export * from './client.ts';

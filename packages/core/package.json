@@ -1,3 +1,14 @@
-{ "name": "@agent-spaghetti/core", "version": "0.1.0", "private": true, "type": "module",
-  "exports": { ".": "./src/index.ts" },
-  "dependencies": { "@agent-spaghetti/sdk": "*", "@agent-spaghetti/integrations": "*" } }
+{
+ "name": "@agent-spaghetti/core",
+ "version": "0.1.0",
+ "private": true,
+ "type": "module",
+ "exports": {
+  ".": "./src/index.ts",
+  "./portable": "./src/portable.ts"
+ },
+ "dependencies": {
+  "@agent-spaghetti/sdk": "*",
+  "@agent-spaghetti/integrations": "*"
+ }
+}

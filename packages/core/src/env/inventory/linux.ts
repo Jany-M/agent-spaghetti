@@ -42,7 +42,7 @@ export const linuxCollector: Collector = async (_env, envNames) => {
   }
   for (const [file, v6] of [['/proc/net/tcp', false], ['/proc/net/tcp6', true]] as const) {
     const text = await readFile(file, 'utf8').catch(() => null);
-    if (text === null) { inv.partial.push(file); continue; }
+    if (text === null) { if (!v6) inv.partial.push(file); continue; }   // no tcp6 = IPv6 off, not a gap
     for (const s of parseProcNetTcp(text, v6)) inv.listening.push({ address: s.address, port: s.port, pid: inodeToPid.get(s.inode) });
   }
   const dataDirs = [process.env.XDG_DATA_HOME ?? join(homedir(), '.local/share'), ...(process.env.XDG_DATA_DIRS ?? '/usr/local/share:/usr/share').split(':')];
