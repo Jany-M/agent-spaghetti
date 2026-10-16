@@ -1,0 +1,81 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { fakeEnv, fakeInventory, type FakeSpec } from '@agent-spaghetti/sdk/testing';
+import type { Integration, Manifest } from '@agent-spaghetti/sdk';
+import { inspect } from '../../../packages/core/src/engine/inspect.ts';
+
+const run = async (m: Partial<Manifest>, spec: FakeSpec, module?: Integration['module']) => {
+  const env = fakeEnv(spec);
+  return { env, r: await inspect({ source: 'builtin', module, manifest: { manifest: 1, id: 'x', name: 'X', roles: ['backend'], ...m } as Manifest },
+    env, { signal: new AbortController().signal, inventory: fakeInventory(spec.inventory) }) };
+};
+const LMS: Partial<Manifest> = {
+  detect: { installed: ['LM Studio*'], process: ['LM Studio'], bin: ['lms'], version: { from: 'installed' }, http: { port: 1234, path: '/api/v0/models' } },
+  models: { list: 'data', id: 'id', filter: [{ field: 'state', in: ['loaded'] }], context: ['loaded_context_length', 'max_context_length'] },
+};
+const body = (data: unknown[]) => ({ status: 200, body: JSON.stringify({ data }) });
+
+test('platform filter: nothing is called', async () => {
+  const { env, r } = await run({ platforms: ['windows'], detect: { bin: ['x'] } }, { kind: 'wsl' });
+  assert.equal(r, null); assert.deepEqual(env.calls, []);
+});
+test('custom install dir via installed apps + non-default port via the process listening socket', async () => {
+  const { r } = await run(LMS, {
+    inventory: { installed: [{ name: 'LM Studio 0.4.26', version: '0.4.26', location: 'D:/Apps/LM Studio', source: 'uninstall' }],
+      processes: [{ name: 'LM Studio', pid: 42, path: 'D:/Apps/LM Studio/LM Studio.exe' }], listening: [{ port: 4321, address: '127.0.0.1', pid: 42 }] },
+    http: { 'http://127.0.0.1:4321/api/v0/models': body([{ id: 'm1', state: 'loaded', loaded_context_length: 8192 }, { id: 'm2', state: 'not-loaded' }]) },
+  });
+  assert.equal(r!.detection.version, '0.4.26');
+  assert.equal(r!.detection.endpoint, 'http://127.0.0.1:4321');
+  assert.deepEqual(r!.detection.installs.map(i => i.via), ['installed', 'process']);
+  assert.deepEqual(r!.backends.map(b => [b.id, b.contextLength, b.reachableFrom]), [['x:m1', 8192, ['windows']]]);
+  assert.equal(r!.detection.why, '1 model(s) loaded');
+});
+test('two installs (per-user + system) are both listed; same path twice is one', async () => {
+  const { r } = await run({ detect: { installed: ['Tool*'], bin: ['tool'] } }, {
+    inventory: { installed: [{ name: 'Tool (User)', location: 'C:/Users/u/Tool', source: 'uninstall' }, { name: 'Tool', location: 'C:/Program Files/Tool', source: 'uninstall' }] },
+    bins: { tool: 'c:\\users\\u\\tool' } });
+  assert.equal(r!.detection.installs.length, 2);
+  assert.equal(r!.detection.why, '2 installs');
+});
+test('env override: bind-all host → port on every candidate; explicit URL → that URL only', async () => {
+  const d: Partial<Manifest> = { detect: { env: ['OLLAMA_HOST'], http: { port: 11434, path: '/api/version' }, version: { json: 'version' } } };
+  const a = await run(d, { hosts: ['127.0.0.1', '192.0.2.10'], inventory: { env: { OLLAMA_HOST: '0.0.0.0:5555' } },
+    http: { 'http://192.0.2.10:5555/api/version': { status: 200, body: '{"version":"0.12.3"}' } } });
+  assert.equal(a.r!.detection.endpoint, 'http://192.0.2.10:5555');
+  assert.equal(a.r!.detection.version, '0.12.3');
+  const b = await run(d, { inventory: { env: { OLLAMA_HOST: 'http://192.0.2.20:6000' } } });
+  assert.equal(b.r, null);
+  assert.deepEqual(b.env.calls.slice(0, 1), ['GET http://192.0.2.20:6000/api/version']);
+});
+test('server off: installed + needs-setup; non-JSON answer counts as off; nothing found → null', async () => {
+  const off = await run(LMS, { bins: { lms: 'C:/x/lms.exe' } });
+  assert.equal(off.r!.detection.connectable, 'needs-setup');
+  assert.match(off.r!.detection.why, /server not running/);
+  const html = await run(LMS, { bins: { lms: 'C:/x/lms.exe' }, http: { 'http://127.0.0.1:1234/api/v0/models': { status: 200, body: '<html>' } } });
+  assert.equal(html.r!.detection.endpoint, undefined);
+  assert.equal((await run(LMS, {})).r, null);
+});
+test('server up with nothing loaded; models.path fetched separately; per-platform default paths', async () => {
+  const a = await run(LMS, { http: { 'http://127.0.0.1:1234/api/v0/models': body([]) } });
+  assert.equal(a.r!.detection.why, 'server up, no model loaded');
+  const b = await run({ detect: { http: { port: 11434, path: '/api/version' } }, models: { path: '/api/ps', list: 'models', id: 'model', context: ['context_length'] } },
+    { http: { 'http://127.0.0.1:11434/api/version': { status: 200, body: '{}' }, 'http://127.0.0.1:11434/api/ps': { status: 200, body: '{"models":[{"model":"m:8b","context_length":8192}]}' } } });
+  assert.deepEqual(b.r!.backends.map(x => [x.model, x.contextLength]), [['m:8b', 8192]]);
+  const c = await run({ detect: { paths: { linux: ['~/x'], windows: ['~/y.exe'] } } }, { kind: 'wsl', files: { '~/x': '' } });
+  assert.deepEqual(c.r!.detection.installs, [{ path: '~/x', via: 'path' }]);
+});
+test('version from args runs the found executable, never an install folder; process without path still counts', async () => {
+  const a = await run({ detect: { bin: ['t'], version: { args: ['--version'] } } }, { bins: { t: '/usr/bin/t' }, exec: { '/usr/bin/t --version': { code: 0, stdout: 'T 1.2.3\n', stderr: '' } } });
+  assert.equal(a.r!.detection.version, '1.2.3');
+  const b = await run({ detect: { installed: ['T'], version: { args: ['--version'] } } }, { inventory: { installed: [{ name: 'T', location: 'C:/T', source: 'uninstall' }] } });
+  assert.equal(b.r!.detection.version, undefined);
+  assert.deepEqual(b.env.calls, []);
+  const c = await run({ detect: { process: ['t.exe'] } }, { inventory: { processes: [{ name: 'T', pid: 9 }] } });
+  assert.equal(c.r!.detection.why, 'running');
+});
+test('a module enriches the base result', async () => {
+  const { r } = await run({ detect: { bin: ['t'] } }, { bins: { t: '/t' } }, { async inspect(env, base) { return { ...base, agents: [{ id: 'x:a', integration: 'x', name: 'a', envId: env.id }] }; } });
+  assert.equal(r!.agents[0].name, 'a');
+  assert.ok(r!.detection.levels.includes('observe'));
+});

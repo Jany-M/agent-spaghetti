@@ -1,0 +1,7 @@
+{"installed":[{"n":"Cursor (User)","v":"3.22.12","l":"C:\\Users\\u\\AppData\\Local\\Programs\\cursor\\","i":"C:\\Users\\u\\AppData\\Local\\Programs\\cursor\\Cursor.exe","s":"uninstall"},
+{"n":"LM Studio 0.4.26","v":"0.4.26+4","l":"","i":"\"D:\\Apps\\LM Studio\\LM Studio.exe\",0","s":"uninstall"},
+{"n":"Claude","v":"2.1.0.0","l":"C:\\Program Files\\WindowsApps\\Claude_2.1.0.0_x64__abc","s":"msix"},
+{"n":"","v":"","l":"","s":"uninstall"}],
+"processes":[{"n":"LM Studio","p":42,"x":"D:\\Apps\\LM Studio\\LM Studio.exe"},{"n":"svchost","p":4,"x":""},{"n":"wslrelay","p":77,"x":"C:\\Program Files\\WSL\\wslrelay.exe"}],
+"listening":[{"a":"127.0.0.1","o":4321,"p":42},{"a":"127.0.0.1","o":18789,"p":77}],
+"env":{"OLLAMA_HOST":"0.0.0.0:5555"},"partial":["msix"]}
