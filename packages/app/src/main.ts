@@ -96,6 +96,11 @@ else {
     pop = new BrowserWindow({ ...SIZE, show: false, frame: false, resizable: false, skipTaskbar: true, alwaysOnTop: true, icon: asset('icon.png'),
       webPreferences: { preload: asset('preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
     pop.on('blur', () => pop?.hide());
+    pop.webContents.session.on('will-download', (_e, item) => {             // files a panel saves (the machine report) go to Downloads
+      const path = join(app.getPath('downloads'), item.getFilename());
+      item.setSavePath(path);
+      item.once('done', (_d, state) => notify(state === 'completed' ? 'Saved' : 'Not saved', state === 'completed' ? path : item.getFilename()));
+    });
     pop.on('close', e => { if (!quitting) { e.preventDefault(); pop?.hide(); } });   // Alt+F4 hides: the popover lives as long as the tray
     pop.webContents.on('will-navigate', e => e.preventDefault());
     pop.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));

@@ -116,7 +116,7 @@ export const openclawModule: IntegrationModule = {
     return o.action === 'check' ? healthSteps(env, exe) : applySetup({ env, exe, dryRun: o.dryRun, model: o.options.model ?? 'auto', cli: o.cli, localModels: o.localModels });
   },
   cli: (env, det, args, say) => packCli(env, det, args, say),
-  settings: { model: { default: 'auto', help: 'Model the OpenClaw setup gives its workflow: auto (keep it while it answers, else the best loaded local model), keep, or <server>:<model> from targets' } },
+  settings: { model: { default: 'auto', choices: { from: 'models', extra: ['auto', 'keep'] }, help: 'Model the OpenClaw setup gives its workflow: auto (keep it while it answers, else the best loaded local model), keep, or <server>:<model> from targets' } },
   async switches(env, det) {
     const exe = openclawExe(det);
     return exe ? (await mcpServers(env, exe)).map(s => ({ id: `openclaw-mcp:${s.name}`, label: `OpenClaw MCP server ${s.name}`, on: s.enabled, envId: env.id, integration: 'openclaw' })) : [];

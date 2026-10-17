@@ -1,14 +1,14 @@
 // The one list of core settings keys (typed), stored in the store's kv table, plus each integration's own settings
 // (module `settings`, keys prefixed with its id). Grants live here too.
-import type { Grant, Integration, SettingDef } from '@agent-spaghetti/sdk';
+import type { Grant, Integration, SettingChoices, SettingDef } from '@agent-spaghetti/sdk';
 import type { Store } from './store.ts';
 
 export const SETTINGS = {
-  disabled: { default: [] as string[], help: 'Integrations the scan skips (hub-side off switch)' },
+  disabled: { default: [] as string[], help: 'Integrations the scan skips (hub-side off switch)', choices: { from: 'tools' } },
   llmHosts: { default: [] as string[], help: 'Extra hosts to probe for local servers (added to LLM_HOSTS)' },
   'events.retentionDays': { default: 14, help: 'Days of events kept in the store' },
-  'connect.auto': { default: [] as string[], help: 'Clients connected to agent-spaghetti on every scan ("Always connect")' },
-  'connect.never': { default: [] as string[], help: 'Clients never connected and never asked about ("Don\'t connect")' },
+  'connect.auto': { default: [] as string[], help: 'Clients connected to agent-spaghetti on every scan ("Always connect")', choices: { from: 'clients' } },
+  'connect.never': { default: [] as string[], help: 'Clients never connected and never asked about ("Don\'t connect")', choices: { from: 'clients' } },
   'scan.everyMin': { default: 10, help: 'Minutes between automatic full rescans (0 = only on start, on demand and when a tool starts or stops)' },
   'observe.toolPollMs': { default: 3000, help: 'How often running tools and model servers are re-checked' },
   'observe.sessionPollMs': { default: 2000, help: 'How often agent sessions are polled (tools without an event stream)' },
@@ -16,7 +16,7 @@ export const SETTINGS = {
   'consent.timeoutSec': { default: 120, help: 'Seconds a delegation waits for your answer before it is denied' },
   'delegate.deadlineSec': { default: 1800, help: 'Longest a delegated run may take' },
   'delegate.maxHops': { default: 8, help: 'Most hand-offs in one chain (hops plus nested delegations); stops loops' },
-  'dispatcher.model': { default: '', help: 'Model the dispatcher thinks with: <target>:<model> from targets (empty = off: auto hand-offs go to the best-ranked target)' },
+  'dispatcher.model': { default: '', help: 'Model the dispatcher thinks with: <target>:<model> from targets (empty = off: auto hand-offs go to the best-ranked target)', choices: { from: 'models', extra: [''] } },
   'gateway.port': { default: 0, help: 'Port of the model gateway on 127.0.0.1, the OpenAI-compatible endpoint tools can use (0 = off; e.g. 4141)' },
   'gateway.routes': { default: [] as string[], help: 'Each tool\'s model through the gateway: <tool>=<target>:<model> or <tool>=auto (Tools → the tool → Model)' },
   'dispatcher.stuckMin': { default: 10, help: 'Minutes without progress before the dispatcher hands a run to another target (once per chain)' },
@@ -48,8 +48,8 @@ export class Settings {
     if (!d) throw new Error(`unknown setting ${k} (known: ${Object.keys(this.defs()).join(', ')})`);
     this.put(k, d, Array.isArray(d.default) ? text.split(',').map(x => x.trim()).filter(Boolean) : typeof d.default === 'string' ? text.trim() : Number(text));
   }
-  all(): Record<string, { value: unknown; help: string }> {
-    return Object.fromEntries(Object.entries(this.defs()).map(([k, d]) => [k, { value: this.value(k, d), help: d.help }]));
+  all(): Record<string, { value: unknown; help: string; choices?: SettingChoices }> {
+    return Object.fromEntries(Object.entries(this.defs()).map(([k, d]) => [k, { value: this.value(k, d), help: d.help, ...(d.choices ? { choices: d.choices } : {}) }]));
   }
   /** One tool's own settings without the prefix (<id>.model → { model: … }), for its module hooks. */
   optionsOf(id: string): Record<string, string> {

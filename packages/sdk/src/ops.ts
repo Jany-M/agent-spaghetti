@@ -97,7 +97,7 @@ export interface OpIO {
 }
 /** A delegated run as callers see it: its record and, once finished, the result text. */
 /** Every setting; `choices`: the values that make sense now (e.g. the loaded models for dispatcher.model, best first). */
-export type SettingsOut = Record<string, { value: unknown; help: string; choices?: string[] }>;
+export type SettingsOut = Record<string, { value: unknown; help: string; choices?: Array<{ value: string; label: string }> }>;
 /** The model gateway as the Tools panel and `gateway` show it (port 0 = off). */
 export interface GatewayStatus { port: number; url: string | null; clients: Array<{ id: string; since: number }> }
 export interface RunView { id: number; run: RunRow; result?: string }

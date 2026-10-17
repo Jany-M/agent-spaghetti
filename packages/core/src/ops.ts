@@ -74,7 +74,7 @@ export const handlers: Handlers = {
     const id = need(i.integration, 'integration id');
     if (!s.loaded().integrations.some(x => x.manifest.id === id)) throw new Error(`unknown integration ${id}`);
     const found = [...new Set(snapshot(s)?.detections.filter(d => d.integration === id).map(d => d.envId) ?? [])];
-    return s.onEnvs('test', [id], i.envId ? [i.envId] : found.length ? found : undefined);
+    return checked(s, id, 'test', await s.onEnvs('test', [id], i.envId ? [i.envId] : found.length ? found : undefined));
   },
   permissions: (_i, s) => ({
     subjects: s.loaded().integrations.filter(i => i.source === 'user').map(i => ({ subject: i.manifest.id, declared: declaredActions(i.manifest) })),
@@ -183,12 +183,12 @@ export const handlers: Handlers = {
     const envIds = [...new Set(snapshot(s)?.detections.filter(d => d.integration === id && (!i.envId || d.envId === i.envId)
       && d.installs.some(x => x.via === 'bin' || x.via === 'path')).map(d => d.envId))];
     if (!envIds.length) throw new Error(`${id} was not found by the last scan`);
-    return Promise.all(envIds.map(async envId => {
+    return checked(s, id, i.check ? 'check' : i.dryRun ? 'dry run' : 'set up', await Promise.all(envIds.map(async envId => {
       const cli = s.cli(envId);
       if (!cli) return { envId, error: 'agent-spaghetti cannot run there (see: status)' };
       const [r] = await s.onEnvs('setup', [id, JSON.stringify(cli), i.check ? 'check' : 'apply', i.dryRun ? 'dry-run' : '', JSON.stringify(s.settings.optionsOf(id))], [envId]);
       return r ?? { envId, error: 'not running' };
-    }));
+    })));
   },
   hook: (i, s) => {   // metadata only: the hook command already dropped prompts, responses and file contents
     const d = i.data ?? {};
@@ -197,11 +197,22 @@ export const handlers: Handlers = {
     return { ok: true };
   },
 };
+/** A tool's test or setup result, also recorded as an event (Activity shows it). */
+function checked<R extends Array<{ envId: string; result?: { ok: boolean }; error?: string }>>(s: Services, id: string, action: string, r: R): R {
+  const ok = r.length > 0 && r.every(x => x.result?.ok);
+  s.bus.emit({ ts: Date.now(), type: 'tool.checked', envId: s.host()?.id ?? 'hub', source: id, data: { action, ok, envs: r.map(x => x.envId).join(',') } });
+  return r;
+}
 /** Settings plus the choices the GUI offers: the dispatcher thinks with a loaded model (free first). */
 function settingsView(s: Services): SettingsOut {
-  const all: SettingsOut = s.settings.all();
-  all['dispatcher.model'].choices = rankTargets(s.runner.targets().filter(t => t.kind === 'model')).flatMap(t => t.models.map(m => `${t.id}:${m}`));
-  return all;
+  const tools = s.loaded().integrations.map(i => ({ value: i.manifest.id, label: i.manifest.name })).sort((a, b) => a.label.localeCompare(b.label));
+  const from = {
+    tools: () => tools,
+    clients: () => tools.filter(t => s.loaded().integrations.find(i => i.manifest.id === t.value)!.manifest.roles.includes('client')),
+    models: () => rankTargets(s.runner.targets().filter(t => t.kind === 'model')).flatMap(t => t.models.map(m => ({ value: `${t.id}:${m}`, label: `${t.name}: ${m}` }))),
+  };
+  return Object.fromEntries(Object.entries(s.settings.all()).map(([k, { choices, ...v }]) => [k, choices
+    ? { ...v, choices: [...(choices.extra ?? []).map(x => ({ value: x, label: x || 'off' })), ...from[choices.from]()] } : v]));
 }
 /** A hand-off chain as its caller sees it: the last hop's record and result, still `running` until the chain has ended. */
 function chainView(s: Services, chainId: number): RunView {

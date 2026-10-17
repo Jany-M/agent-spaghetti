@@ -84,7 +84,7 @@ export interface Snapshot { ts: number; envs: EnvStatus[]; detections: Detection
 export const EVENT_TYPES = [
   'scan.completed', 'scan.integration_error', 'env.status', 'backend.detected', 'agent.detected',
   'session.started', 'session.updated', 'session.ended', 'backend.changed', 'tool.changed', 'switch.changed', 'permission.pending',
-  'consent.requested', 'consent.answered', 'consent.expired',
+  'consent.requested', 'consent.answered', 'consent.expired', 'tool.checked',
   'run.started', 'run.event', 'run.finished', 'run.delivered', 'dispatcher.action', 'backend.queue', 'client.hook', 'client.connected',
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
@@ -153,7 +153,9 @@ export interface IntegrationModule {
   /** The tool's own settings (shown in Settings as `<id>.<key>`; its hooks get them as `options`). */
   settings?: Record<string, SettingDef>;
 }
-export interface SettingDef { default: string | number | string[]; help: string }
+export interface SettingDef { default: string | number | string[]; help: string; choices?: SettingChoices }
+/** Where a setting's values come from, so the GUI offers a pick list: found tools, connectable clients, loaded models; `extra` first. */
+export interface SettingChoices { from: 'tools' | 'clients' | 'models'; extra?: readonly string[] }
 /** A loaded model of a local OpenAI-compatible server, as an agent's config needs it. */
 export interface LocalModel { integration: string; base: string; model: string; contextLength?: number }
 export interface SetupOpts {

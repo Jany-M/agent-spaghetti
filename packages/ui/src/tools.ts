@@ -1,17 +1,21 @@
 // Tools panel (ADR 0009): every found tool, grouped by type in collapsible blocks; connect/disconnect, preference,
 // test, skip in scans, its model through the gateway and its key; "More" shows its switches and, for third-party tools, what it may do.
 import { createElement as h, useState, type ReactNode } from 'react';
-import { ACTION_LABEL, AUTO, ENGINE_LABEL, TOOL_GROUPS, testLines, type DeclaredAction, type Grant, type Mode, type Switch, type ToolRow } from '@agent-spaghetti/sdk/web';
+import { ACTION_LABEL, AUTO, ENGINE_LABEL, TOOL_GROUPS, testLines, type DeclaredAction, type Grant, type Mode, type Switch, type TestResult, type ToolRow } from '@agent-spaghetti/sdk/web';
 import type { Bridge } from './bridge.ts';
 import { useAct, useOp } from './hooks.ts';
 
 export type Preference = NonNullable<ToolRow['preference']>;
 const PREF_LABEL: Record<Preference, string> = { ask: 'Ask at start', always: 'Always connect', never: "Don't connect" };
+export interface Output { ok: boolean | null; lines: string[] }
+/** Per-environment results (test, setup) as one output block. */
+export const envOutput = (title: string, r: Array<{ envId: string; result?: TestResult; error?: string }>): Output => ({
+  ok: r.length > 0 && r.every(x => x.result?.ok), lines: r.flatMap(x => [`${title} in ${x.envId}`, ...(x.result ? testLines(x.result) : [`FAIL  ${x.error}`])]) });
 export interface ToolDetails { switches?: Switch[]; declared?: DeclaredAction[]; grants?: Grant[] }
 export interface ToolsProps {
   rows: ToolRow[]; busy: string | null; error: string | null; closed: Set<string>;
   gatewayUrl: string | null; models: string[];             // the gateway's address (null = off); `target:model` choices
-  tests: Record<string, string[]>; details: Record<string, ToolDetails>;
+  output: Record<string, Output>; details: Record<string, ToolDetails>;   // output: the last test / setup / key result, shown under the row
   onToggleGroup(group: string, open: boolean): void; onExpand(id: string): void;
   onConnect(id: string, on: boolean): void; onPreference(id: string, p: Preference): void; onTest(id: string): void; onSkip(id: string, skip: boolean): void;
   onSetup(id: string, o: { check?: boolean; dryRun?: boolean }): void;
@@ -30,8 +34,8 @@ function Row({ r, p }: { r: ToolRow; p: ToolsProps }) {
         h('div', { className: 'row' }, ...(['allow', 'deny'] as const).map(m => h('button', { key: m, disabled: busy || mode === m, className: m === 'allow' ? 'allow' : '', onClick: () => p.onGrant(r.id, a, m) }, m === 'allow' ? 'Allow' : 'Deny')),
           mode ? h('button', { disabled: busy, onClick: () => p.onGrant(r.id, a, null) }, 'Ask again') : null));
     }))] : []),
-    ...(p.tests[r.id] ? [h('pre', { key: 'test' }, p.tests[r.id].join('\n'))] : []),
   ];
+  const out = p.output[r.id];
   const g = r.gateway && r.state !== 'not found' ? r.gateway : null;
   return h('div', { className: `card tool${r.asks ? ' asking' : ''}` },
     h('div', { className: 'top' }, h('span', { className: 'name' }, r.name), r.version ? h('span', { className: 'meta' }, ` ${r.version}`) : null,
@@ -56,6 +60,7 @@ function Row({ r, p }: { r: ToolRow; p: ToolsProps }) {
       p.gatewayUrl ? h('button', { disabled: busy, title: 'A key for this tool, shown once with the steps to use the gateway', onClick: () => p.onKey(r.id, true) }, g.key ? 'New gateway key' : 'Use the gateway')
         : h('span', { className: 'why' }, 'Model gateway off (Settings → gateway.port)'),
       g.key ? h('button', { disabled: busy, onClick: () => p.onKey(r.id, false) }, 'Revoke key') : null) : null,
+    out ? h('div', { className: `out ${out.ok === null ? '' : out.ok ? 'pass' : 'fail'}`, role: 'status' }, h('pre', null, out.lines.join('\n'))) : null,
     h('details', { onToggle: (e: { currentTarget: { open: boolean } }) => { if (e.currentTarget.open) p.onExpand(r.id); } }, h('summary', null, 'More'),
       ...(more.length ? more : [h('div', { key: 'none', className: 'empty' }, d ? 'No switches or permissions.' : 'Loading…')])));
 }
@@ -93,7 +98,8 @@ export function ToolsPanel({ bridge }: { bridge: Bridge }) {
   const settings = useOp(bridge, 'settings');
   const { busy, error, act } = useAct(tools.reload);
   const [closed, setClosed] = useState(loadClosed);
-  const [tests, setTests] = useState<Record<string, string[]>>({});
+  const [output, setOutput] = useState<Record<string, Output>>({});
+  const show = (id: string, o: Output) => setOutput(x => ({ ...x, [id]: o }));
   const [details, setDetails] = useState<Record<string, ToolDetails>>({});
   const rows = tools.data?.rows ?? [];
   const expand = (id: string) => void Promise.all([
@@ -101,12 +107,12 @@ export function ToolsPanel({ bridge }: { bridge: Bridge }) {
     rows.find(r => r.id === id)?.source === 'user' ? bridge.call('permissions') : Promise.resolve(null),
   ]).then(([switches, perm]) => setDetails(d => ({ ...d, [id]: { switches, declared: perm?.subjects.find(s => s.subject === id)?.declared, grants: perm?.grants.filter(g => g.subject === id) } })));
   return h(ToolsView, {
-    rows, busy, error: error ?? tools.error, closed, tests, details, gatewayUrl: gateway.data?.url ?? null,
+    rows, busy, error: error ?? tools.error, closed, output, details, gatewayUrl: gateway.data?.url ?? null,
     models: (targets.data ?? []).filter(t => t.kind === 'model').flatMap(t => t.models.map(m => `${t.id}:${m}`)),
     onModel: (id, model) => act(`model ${id}`, () => bridge.call('gatewayClient', { integration: id, model })),
     onKey: (id, create) => act(`key ${id}`, async () => {
       const r = await bridge.call('gatewayClient', { integration: id, key: create ? 'create' : 'revoke' });
-      setTests(t => ({ ...t, [id]: r.setup ? [r.setup] : ['Key revoked: the tool can no longer use the gateway.'] }));
+      show(id, { ok: null, lines: [r.setup ? `Key for ${id} (shown only now):\n\n${r.setup}` : 'Key revoked: the tool can no longer use the gateway.'] });
       await gateway.reload();
     }),
     onToggleGroup: (g, open) => setClosed(c => { const n = new Set(c); if (open) n.delete(g); else n.add(g); try { localStorage.setItem(CLOSED, JSON.stringify([...n])); } catch { /* convenience only */ } return n; }),
@@ -120,15 +126,9 @@ export function ToolsPanel({ bridge }: { bridge: Bridge }) {
       if ((p === 'always' && !on) || (p === 'never' && on)) await bridge.call('connect', { integration: id, on: !on });   // the choice applies now
       await settings.reload();
     }),
-    onTest: id => act(`test ${id}`, async () => {
-      const r = await bridge.call('test', { integration: id });
-      setTests(t => ({ ...t, [id]: r.flatMap(x => [`${id} in ${x.envId}`, ...(x.result ? testLines(x.result) : [`FAIL  ${x.error}`])]) }));
-    }),
+    onTest: id => act(`test ${id}`, async () => show(id, envOutput('test', await bridge.call('test', { integration: id })))),
     onSkip: (id, skip) => act(`skip ${id}`, () => bridge.call(skip ? 'disable' : 'enable', { id })),
-    onSetup: (id, o) => act(`setup ${id}`, async () => {
-      const r = await bridge.call('setup', { integration: id, ...o });
-      setTests(t => ({ ...t, [id]: r.flatMap(x => [`${o.check ? 'check' : o.dryRun ? 'dry run' : 'set up'} in ${x.envId}`, ...(x.result ? testLines(x.result) : [`FAIL  ${x.error}`])]) }));
-    }),
+    onSetup: (id, o) => act(`setup ${id}`, async () => show(id, envOutput(o.check ? 'check' : o.dryRun ? 'dry run' : 'set up', await bridge.call('setup', { integration: id, ...o })))),
     onSwitch: (s, on) => act(`switch ${s.id}`, () => bridge.call('switch', { id: s.id, on, envId: s.envId }).then(() => expand(s.integration))),
     onGrant: (id, a, mode) => act(`grant ${id}`, () => (mode ? bridge.call('grant', { subject: id, mode, action: a.action, resource: a.resource })
       : bridge.call('revoke', { subject: id, action: a.action, resource: a.resource })).then(() => expand(id))),

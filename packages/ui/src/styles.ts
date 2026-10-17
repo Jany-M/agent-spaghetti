@@ -48,7 +48,12 @@ details.group > .card { margin-top:6px; }
 .card.error { border-left:3px solid var(--problem); }
 .form .grid { display:grid; grid-template-columns:1fr 1fr; gap:6px 8px; margin:6px 0; }
 .form label { display:flex; flex-direction:column; gap:2px; font-size:12px; color:var(--muted); }
-.form label.setting { padding:6px 0; border-bottom:1px solid var(--line); } .form label.setting .name { color:var(--fg); font-weight:600; }
+.form .setting { padding:6px 0; border-bottom:1px solid var(--line); display:flex; flex-direction:column; gap:3px; } .form .setting:last-child { border:0; }
+.form .setting .name { font-weight:600; } .ok { color:var(--idle); font-weight:400; font-size:12px; }
+.checks { display:grid; grid-template-columns:1fr 1fr; gap:0 8px; } .checks input, .check input { width:auto; margin-right:4px; }
+.out { margin-top:6px; } .out.fail pre { border-left:3px solid var(--problem); } .out.pass pre { border-left:3px solid var(--idle); }
+.steps { display:flex; flex-wrap:wrap; gap:4px; align-items:center; margin-top:4px; } .step { font-size:12px; padding:1px 4px 1px 8px; border-radius:10px; border:1px solid var(--line); }
+.step button { border:0; background:none; padding:0 4px; }
 input, select, textarea { font:inherit; color:var(--fg); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:4px 6px; width:100%; }
 textarea { resize:vertical; }
 .row select { width:auto; }

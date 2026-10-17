@@ -108,7 +108,7 @@ test('CLI: status before scan, scan prints tree + table + rejected, --json parse
   t = io(); assert.equal(await run(['wat'], t.io, b.env), 1); assert.match(t.e[0], /Usage: agent-spaghetti/);
 });
 
-test('CLI 1b: switches, on (env resolved, switch.changed → live), test, permissions, allow/revoke, settings, disable, report', async () => {
+test('CLI 1b: switches, on (env resolved, switch.changed → live), test (recorded as an event), permissions, allow/revoke, settings, disable, report', async () => {
   const b = await boot();
   const cli = async (...a: string[]) => { const t = io(); const code = await run(a, t.io, b.env); return { code, out: t.o.join('\n'), err: t.e.join('\n') }; };
   let r = await cli('switches'); assert.equal(r.code, 0); assert.match(r.out, /openclaw-mcp:a\s+wsl:TestDistro\s+off/); assert.match(r.out, /windows: boom/);
@@ -117,6 +117,7 @@ test('CLI 1b: switches, on (env resolved, switch.changed → live), test, permis
   assert.equal((await b.client.call('status')).live.switches['openclaw-mcp:a'].on, true);
   r = await cli('on', 'nope'); assert.equal(r.code, 1); assert.match(r.err, /unknown switch nope/);
   r = await cli('test', 'acme', '--env', 'windows'); assert.equal(r.code, 0); assert.match(r.out, /acme in windows\nOK\s+detect/);
+  assert.deepEqual(b.services.store.eventsSince(0).filter(e => e.type === 'tool.checked').map(e => [e.source, e.data]), [['acme', { action: 'test', ok: true, envs: 'windows' }]], 'a test shows in Activity');
   r = await cli('test', 'ghost'); assert.equal(r.code, 1); assert.match(r.err, /unknown integration ghost/);
   r = await cli('permissions'); assert.match(r.out, /read\s+PATH:acme\s+not asked yet/);
   r = await cli('allow', 'acme'); assert.match(r.out, /acme: 2 grant\(s\)/);

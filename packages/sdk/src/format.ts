@@ -100,7 +100,12 @@ export const ENGINE_LABEL: Record<Target['engine'], string> = { openai: 'model A
 /** Where a chain's result went (ADR 0010), as people read it. */
 export const DELIVERY_LABEL: Record<Delivery, string> = { inline: 'returned', resumed: 'resumed in its session', injected: 'sent to its chat', unread: 'waiting to be read', read: 'read' };
 /** One event as a line (CLI `events`, the Activity panel). */
-export const eventLine = (e: StoredEvent) => `${new Date(e.ts).toTimeString().slice(0, 8)}  ${e.type}  ${e.source}  ${e.envId}`;
+export const eventLine = (e: StoredEvent) => `${new Date(e.ts).toTimeString().slice(0, 8)}  ${e.type}  ${e.source}  ${e.envId}${eventFacts(e.data)}`;
+/** An event's short facts (plain values only, each cut short): what makes a line in Activity readable. */
+const eventFacts = (d: Record<string, unknown>) => {
+  const kv = Object.entries(d).filter(([, v]) => ['string', 'number', 'boolean'].includes(typeof v)).slice(0, 6).map(([k, v]) => `${k}=${String(v).slice(0, 40)}`);
+  return kv.length ? `  ${kv.join(' ')}` : '';
+};
 
 /** Tool blocks in the Tools panel and `agent-spaghetti integrations`: first role in this order wins (no manifest field needed). */
 export const TOOL_GROUPS = [
