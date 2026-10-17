@@ -70,20 +70,27 @@ Local models answer at once; a paid one (OpenAI or Anthropic API, found if `OPEN
 
 ## Works with
 
-- Claude Code
-- Claude Desktop
-- ChatGPT Desktop
-- Codex
-- VSCode
-- Cursor
-- Continue (up to last opensource version)
-- Openclaw
-- OpenCode
-- Cline
-- Kilo
-- ZooCode (ex RooCode)
-- LM Studio
-- AnythingLLM
+- anthropic-api
+- anythingllm
+- chatgpt-desktop
+- claude-cli
+- claude-desktop
+- cline
+- codex
+- continue
+- cursor
+- kilo
+- llamacpp
+- lmstudio
+- mempalace
+- ollama
+- openai-api
+- openclaw
+- opencode
+- vllm
+- vscode
+- windsurf
+- zoo-code
 
 ## Per-tool notes
 
