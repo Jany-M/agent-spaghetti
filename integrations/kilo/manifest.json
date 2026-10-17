@@ -2,13 +2,25 @@
   "$schema": "../../packages/sdk/manifest.schema.json",
   "manifest": 1,
   "id": "kilo",
-  "name": "Kilo Code",
+  "name": "Kilo",
   "roles": [
+    "agent",
     "client"
   ],
   "cost": "unknown",
   "detect": {
+    "installed": [
+      "Kilo"
+    ],
+    "process": [
+      "kilo-desktop",
+      "kilo"
+    ],
+    "bin": [
+      "kilo"
+    ],
     "paths": [
+      "%LOCALAPPDATA%/KiloDesktop/app-*/resources/kilo/*/bin/kilo.exe",
       "~/.vscode/extensions/kilocode.kilo-code-*",
       "~/.vscode-insiders/extensions/kilocode.kilo-code-*",
       "~/.cursor/extensions/kilocode.kilo-code-*",
@@ -17,6 +29,17 @@
     "version": {
       "file": "~/.vscode/extensions/kilocode.kilo-code-*/package.json",
       "json": "version"
+    }
+  },
+  "speaks": {
+    "mcpClient": {
+      "config": "~/.config/kilo/kilo.jsonc",
+      "key": "mcp",
+      "entry": {
+        "type": "local",
+        "enabled": true
+      },
+      "commandArray": true
     }
   }
 }

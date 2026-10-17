@@ -4,10 +4,21 @@
   "id": "cline",
   "name": "Cline",
   "roles": [
+    "agent",
     "client"
   ],
   "cost": "unknown",
   "detect": {
+    "installed": [
+      "Cline"
+    ],
+    "process": [
+      "cline-app",
+      "cline"
+    ],
+    "bin": [
+      "cline"
+    ],
     "paths": [
       "~/.vscode/extensions/saoudrizwan.claude-dev-*",
       "~/.vscode-insiders/extensions/saoudrizwan.claude-dev-*",
@@ -17,6 +28,12 @@
     "version": {
       "file": "~/.vscode/extensions/saoudrizwan.claude-dev-*/package.json",
       "json": "version"
+    }
+  },
+  "speaks": {
+    "mcpClient": {
+      "config": "~/.cline/data/settings/cline_mcp_settings.json",
+      "key": "mcpServers"
     }
   }
 }

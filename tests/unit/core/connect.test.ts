@@ -38,8 +38,13 @@ test('connect: plugin into the client folder; MCP merge keeps other servers and 
   await assert.rejects(setConnection(fakeEnv({ files: { [conf]: '{oops' } }), integ({ mcpClient: { config: conf, key: 'mcpServers' } }), det, cli, true, false), /not a JSON object; not changed/);
   assert.equal(doc.mcpServers['agent-spaghetti'].type, undefined);
   const typed = fakeEnv();
-  await setConnection(typed, integ({ mcpClient: { config: conf, key: 'servers', type: true } }), det, cli, true, false);
-  assert.equal(JSON.parse((await typed.readFile(conf))!).servers['agent-spaghetti'].type, 'stdio', 'VS Code needs "type"');
+  await setConnection(typed, integ({ mcpClient: { config: conf, key: 'servers', entry: { type: 'stdio' } } }), det, cli, true, false);
+  assert.equal(JSON.parse((await typed.readFile(conf))!).servers['agent-spaghetti'].type, 'stdio', 'extra entry fields from the manifest');
+  const arr = fakeEnv({ files: { [conf]: '{\n  // mine\n  "mcp": { "other": { "type": "remote" }, },\n}' } });
+  await setConnection(arr, integ({ mcpClient: { config: conf, key: 'mcp', entry: { type: 'local', enabled: true }, commandArray: true } }), det, cli, true, false);
+  assert.deepEqual(JSON.parse((await arr.readFile(conf))!).mcp, { other: { type: 'remote' }, 'agent-spaghetti': { type: 'local', enabled: true, command: ['node', 'C:/Program Files/as/cli.ts', 'mcp', '--as', 'cursor'] } },
+    'JSONC config read; command and args as one array');
+  assert.match((await arr.readFile(`${conf}.bak`))!, /\/\/ mine/, 'the commented original is kept');
   const dry = fakeEnv();
   const d = await setConnection(dry, integ({ mcpClient: { config: conf, key: 'servers' } }), det, cli, true, true);
   assert.deepEqual([d.applied, d.changes], [false, [`write ${conf}`]]);

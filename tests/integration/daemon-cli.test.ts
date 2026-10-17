@@ -247,6 +247,8 @@ test('runDaemon: a found client is asked once; "this session" connects until shu
   const dir = mkdtempSync(join(tmpdir(), 'as-'));
   let d = await runDaemon({ AGENT_SPAGHETTI_DATA_DIR: dir }, { scanOnStart: false, observe: false, discover: machine });
   let c = HubClient.fromDiscovery({ AGENT_SPAGHETTI_DATA_DIR: dir });
+  let closed = false;
+  try {
   await c.call('scan');
   const q = await question(c);
   assert.deepEqual([q.subject, q.labels?.title, q.labels?.once, q.labels?.always, q.labels?.deny], ['vscode', 'Connect VS Code to agent-spaghetti?', 'Connect for this session', 'Always connect', "Don't connect"]);
@@ -255,7 +257,8 @@ test('runDaemon: a found client is asked once; "this session" connects until shu
   await c.call('consent', { id: q.id, allow: true, scope: 'once' });
   for (let i = 0; i < 100 && !(await entry()); i++) await new Promise(r => setTimeout(r, 20));
   assert.equal((await entry()).type, 'stdio');
-  await d.close();
+  await d.close(); closed = true;
+  } finally { if (!closed) await d.close(); }
   assert.equal(await entry(), undefined, 'session connection undone on shutdown');
   // a crash: the session list survives, the connection too; the next start undoes it, then asks again
   await host.writeFile(conf, '{"servers":{"agent-spaghetti":{"command":"node"}}}');

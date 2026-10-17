@@ -100,3 +100,9 @@ test('rankTargets: free, then unknown, then metered; up before down; least queue
   assert.deepEqual(rankTargets(items).map(x => x.id), ['b', 'a', 'down', 'maybe', 'paid']);
   assert.deepEqual(rankTargets(items, { up: id => id !== 'down', queued: id => (id === 'b' ? 2 : 0) }).map(x => x.id), ['a', 'b', 'down', 'maybe', 'paid']);
 });
+test('parseJsonc: comments and trailing commas go, strings stay untouched; not JSON → undefined', async () => {
+  const { parseJsonc } = await import('@agent-spaghetti/sdk');
+  assert.deepEqual(parseJsonc('{\n // c\n "a": "x // not a comment, }", /* b */ "l": [1, 2, /* t */ ],\n}'), { a: 'x // not a comment, }', l: [1, 2] });
+  assert.deepEqual(parseJsonc('{"q": "say \\"hi\\" /* x */"}'), { q: 'say "hi" /* x */' });
+  assert.equal(parseJsonc('{oops'), undefined);
+});

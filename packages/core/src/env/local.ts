@@ -22,7 +22,7 @@ export function expandPath(p: string, env: NodeJS.ProcessEnv = process.env, home
     .replace(/%([A-Za-z0-9_]+)%/g, (m, n) => env[n] ?? m)
     .replace(/\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?/g, (m, n) => env[n] ?? m);
 }
-/** First existing path matching a pattern; '*' is allowed inside a single segment. */
+/** First existing path matching a pattern; '*' is allowed inside a single segment; the newest version wins (`app-0.1.12` before `app-0.1.9`). */
 export async function globFirst(pattern: string): Promise<string | null> {
   const parts = pattern.replaceAll('\\', '/').split('/');
   const walk = async (base: string, i: number): Promise<string | null> => {
@@ -30,7 +30,7 @@ export async function globFirst(pattern: string): Promise<string | null> {
     const seg = parts[i];
     if (!seg.includes('*')) return walk(i === 0 ? (seg === '' ? '/' : /^[A-Za-z]:$/.test(seg) ? seg + '/' : seg) : join(base, seg), i + 1);
     const re = new RegExp('^' + seg.split('*').map(s => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$', 'i');
-    const names = (await readdir(base).catch(() => [] as string[])).filter(n => re.test(n)).sort();
+    const names = (await readdir(base).catch(() => [] as string[])).filter(n => re.test(n)).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
     for (const n of names) { const r = await walk(join(base, n), i + 1); if (r) return r; }
     return null;
   };

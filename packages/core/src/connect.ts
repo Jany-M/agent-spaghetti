@@ -3,7 +3,7 @@
 // A module's own connect() wins where the tool's CLI is the documented way.
 import { readFileSync } from 'node:fs';
 import type { Cli, Connected, Detection, Environment, Integration, Manifest } from '@agent-spaghetti/sdk';
-import { VERSION, parseJson, pluginDir } from '@agent-spaghetti/sdk';
+import { VERSION, parseJsonc, pluginDir } from '@agent-spaghetti/sdk';
 
 export const SERVER_NAME = 'agent-spaghetti';
 const PLUGIN = new URL('../../../clients/plugin/', import.meta.url);
@@ -38,15 +38,17 @@ async function plugin(env: Environment, spec: NonNullable<Speaks['agentPlugins']
   const files = Object.fromEntries(Object.entries(pluginFiles(spec.variant ?? 'agent-plugins', cli, client)).map(([k, v]) => [`${dir}/${k}`, v]));
   return { description: `install the agent-spaghetti plugin in ${dir} (reload the client to load it)`, changes: await write(env, files, dryRun) };
 }
-/** JSON-merge (or delete) our one server entry; the previous file is kept as .bak; a file that is not JSON is never touched. */
+/** JSON-merge (or delete) our one server entry; the previous file is kept as .bak (comments in a JSONC file live on only there);
+ *  a file that is not JSON(C) is never touched. */
 async function mcpConfig(env: Environment, spec: NonNullable<Speaks['mcpClient']>, cli: Cli, client: string, on: boolean, dryRun: boolean) {
   const text = await env.readFile(spec.config);
-  const json = text === null ? {} : parseJson(text);
+  const json = text === null ? {} : parseJsonc(text);
   if (!json || typeof json !== 'object' || Array.isArray(json)) throw new Error(`${spec.config} is not a JSON object; not changed`);
   const doc = json as Record<string, Record<string, unknown>>;
   const { [SERVER_NAME]: _, ...others } = doc[spec.key] ?? {};
   if (!on && text === null) return { description: `${spec.config} does not exist; nothing to remove`, changes: [] };
-  doc[spec.key] = on ? { ...others, [SERVER_NAME]: { ...(spec.type ? { type: 'stdio' } : {}), ...mcpEntry(cli, client) } } : others;
+  const e = mcpEntry(cli, client);
+  doc[spec.key] = on ? { ...others, [SERVER_NAME]: { ...spec.entry, ...(spec.commandArray ? { command: [e.command, ...e.args] } : e) } } : others;
   const files: Record<string, string> = { ...(text === null ? {} : { [`${spec.config}.bak`]: text }), [spec.config]: JSON.stringify(doc, null, 2) };
   return { description: `${on ? 'add' : 'remove'} the ${SERVER_NAME} MCP server ${on ? 'to' : 'from'} ${spec.config} (restart the client)`, changes: await write(env, files, dryRun) };
 }

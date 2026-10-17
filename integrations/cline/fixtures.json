@@ -1,5 +1,32 @@
 [
   {
+    "name": "desktop app (uninstall entry + process), not connected yet",
+    "env": {
+      "inventory": {
+        "installed": [
+          {
+            "name": "Cline",
+            "version": "0.0.46",
+            "location": "C:/Users/u/AppData/Local/Cline",
+            "source": "uninstall"
+          }
+        ],
+        "processes": [
+          {
+            "name": "cline-app",
+            "pid": 4,
+            "path": "C:/Users/u/AppData/Local/Cline/cline-app.exe"
+          }
+        ]
+      }
+    },
+    "expect": {
+      "version": "0.0.46",
+      "installs": 2,
+      "connected": false
+    }
+  },
+  {
     "name": "found",
     "env": {
       "files": {

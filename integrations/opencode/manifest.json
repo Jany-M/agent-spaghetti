@@ -9,16 +9,30 @@
   ],
   "cost": "unknown",
   "detect": {
-    "bin": [
-      "opencode"
+    "installed": [
+      "OpenCode*"
     ],
     "process": [
+      "opencode"
+    ],
+    "bin": [
       "opencode"
     ],
     "version": {
       "args": [
         "--version"
       ]
+    }
+  },
+  "speaks": {
+    "mcpClient": {
+      "config": "~/.config/opencode/opencode.json",
+      "key": "mcp",
+      "entry": {
+        "type": "local",
+        "enabled": true
+      },
+      "commandArray": true
     }
   }
 }

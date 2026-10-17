@@ -1,5 +1,32 @@
 [
   {
+    "name": "desktop app (uninstall entry + process)",
+    "env": {
+      "inventory": {
+        "installed": [
+          {
+            "name": "OpenCode 1.19.0",
+            "location": "C:/Users/u/AppData/Local/Programs/opencode-desktop",
+            "version": "1.19.0",
+            "source": "uninstall"
+          }
+        ],
+        "processes": [
+          {
+            "name": "OpenCode",
+            "pid": 5,
+            "path": "C:/Users/u/AppData/Local/Programs/opencode-desktop/OpenCode.exe"
+          }
+        ]
+      }
+    },
+    "expect": {
+      "version": "1.19.0",
+      "installs": 2,
+      "connected": false
+    }
+  },
+  {
     "name": "found",
     "env": {
       "kind": "linux",

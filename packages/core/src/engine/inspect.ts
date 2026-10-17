@@ -1,7 +1,7 @@
 // The generic manifest interpreter (ADR 0004 + ADR 0008). Order: installed apps → processes → PATH → default paths.
 // Endpoints: env override → ports the tool's processes listen on → manifest default, on every host candidate.
 import type { BackendInfo, Ctx, Detection, Environment, Install, Inspection, Integration, Inventory, Manifest } from '@agent-spaghetti/sdk';
-import { firstNumber, levelsOf, parseJson, pick, pluginDir, samePath, wildcard, type Engines } from '@agent-spaghetti/sdk';
+import { firstNumber, levelsOf, parseJson, parseJsonc, pick, pluginDir, samePath, wildcard, type Engines } from '@agent-spaghetti/sdk';
 
 type Detect = NonNullable<Manifest['detect']>;
 export const ENGINES: Engines = { openai: true, acp: false };    // openai: engine/openai.ts (Phase 3); acp arrives in Phase 5
@@ -84,7 +84,7 @@ export async function isConnected(env: Environment, m: Manifest): Promise<boolea
   const s = m.speaks;
   if (s?.agentPlugins && await env.glob(`${pluginDir(s.agentPlugins.dir)}/mcp.json`)) return true;
   if (!s?.mcpClient) return false;
-  const servers = pick(parseJson((await env.readFile(s.mcpClient.config)) ?? ''), s.mcpClient.key);
+  const servers = pick(parseJsonc(await env.readFile(s.mcpClient.config)), s.mcpClient.key);
   return !!servers && typeof servers === 'object' && 'agent-spaghetti' in servers;
 }
 function explain(m: Manifest, installs: Install[], hit: unknown, backends: BackendInfo[], inv: Inventory, connected: boolean | undefined): Pick<Detection, 'connectable' | 'why'> {

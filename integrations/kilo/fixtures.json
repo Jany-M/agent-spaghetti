@@ -1,5 +1,43 @@
 [
   {
+    "name": "Kilo Desktop with its bundled CLI (newest app folder)",
+    "env": {
+      "inventory": {
+        "installed": [
+          {
+            "name": "Kilo",
+            "version": "0.1.12",
+            "location": "C:/Users/u/AppData/Local/KiloDesktop",
+            "source": "uninstall"
+          }
+        ]
+      },
+      "files": {
+        "%LOCALAPPDATA%/KiloDesktop/app-*/resources/kilo/*/bin/kilo.exe": ""
+      },
+      "exec": {}
+    },
+    "expect": {
+      "version": "0.1.12",
+      "installs": 2,
+      "connected": false
+    }
+  },
+  {
+    "name": "connected: our entry in kilo.jsonc (comments allowed)",
+    "env": {
+      "bins": {
+        "kilo": "C:/Users/u/bin/kilo.exe"
+      },
+      "files": {
+        "~/.config/kilo/kilo.jsonc": "{\n  // mine\n  \"mcp\": { \"agent-spaghetti\": { \"type\": \"local\" }, },\n}"
+      }
+    },
+    "expect": {
+      "connected": true
+    }
+  },
+  {
     "name": "found",
     "env": {
       "files": {

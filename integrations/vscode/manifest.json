@@ -25,7 +25,9 @@
     "mcpClient": {
       "config": "%APPDATA%/Code/User/mcp.json",
       "key": "servers",
-      "type": true
+      "entry": {
+        "type": "stdio"
+      }
     }
   }
 }
