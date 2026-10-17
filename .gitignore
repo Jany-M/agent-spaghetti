@@ -11,3 +11,4 @@ node_modules/
 dist/
 !packages/sdk/src/secrets.ts
 .as-tmp/
+.agent-spaghetti/

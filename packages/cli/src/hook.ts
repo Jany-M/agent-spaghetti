@@ -39,5 +39,5 @@ export function planHook(input: Record<string, any>, client = 'client'): HookPla
   const root = Array.isArray(input.workspace_roots) ? String(input.workspace_roots[0] ?? '') : String(input.cwd ?? '');
   const files = (Array.isArray(input.attachments) ? input.attachments : []).filter((a: any) => a?.type === 'file' && a.file_path).map((a: any) => String(a.file_path));
   return { block: kind.block, delegate: { target: p.target, ...(p.model ? { model: p.model } : {}), ...(p.then.length ? { then: p.then } : {}), task: p.task,
-    ...(files.length ? { files } : {}), reason: 'sent with the >> prefix', ...(root ? { cwd: root, resultDir: `${root}/.agent-spaghetti/results` } : {}) } };
+    ...(files.length ? { files } : {}), reason: 'sent with the >> prefix', ...(root ? { cwd: root, resultDir: [root, '.agent-spaghetti', 'results'].join(root.includes('\\') ? '\\' : '/') } : {}) } };
 }

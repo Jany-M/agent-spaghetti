@@ -83,7 +83,7 @@ test('>> hooks (Cursor, Claude Code): one parser for target[:model] and chains; 
   assert.deepEqual(p.block('sent'), { continue: false, user_message: 'sent' });
   const cc = planHook({ hook_event_name: 'UserPromptSubmit', prompt: '>>codex fix it', cwd: 'E:\\proj', session_id: 's' });
   assert.ok('delegate' in cc);
-  assert.deepEqual([cc.delegate.cwd, cc.block('sent')], ['E:\\proj', { decision: 'block', reason: 'sent' }]);
+  assert.deepEqual([cc.delegate.cwd, cc.delegate.resultDir, cc.block('sent')], ['E:\\proj', 'E:\\proj\\.agent-spaghetti\\results', { decision: 'block', reason: 'sent' }]);
   assert.deepEqual(planHook({ hook_event_name: 'UserPromptSubmit', prompt: 'plain' }), { reply: {}, report: { event: 'UserPromptSubmit', data: {} } });
   assert.deepEqual(planHook({ hook_event_name: 'UserPromptSubmit', prompt: '>>codex fix it', cursor_version: '3.22', workspace_roots: ['/w'] }, 'claude-cli'), { reply: {} },
     'Claude Code\'s hook run by Cursor (third-party import) stays out: Cursor\'s own hook sends it');

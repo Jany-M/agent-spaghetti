@@ -36,7 +36,7 @@ export const OPS = {
       + 'Pass the files the user attached or means as `files`. Returns the result, or a run id to check with `run_status` if it takes long.',
       input: { type: 'object', additionalProperties: false, required: ['task'], properties: {
         target: { type: 'string', description: 'Target id from `targets`, or `auto`; omit to let the user pick (or auto)' }, task: { type: 'string', description: 'The full task, self-contained' },
-        files: { type: 'array', items: { type: 'string' }, description: 'Files the user attached, referenced or named (absolute, or relative to cwd)' },
+        files: { type: 'array', items: { type: 'string' }, description: 'Files the user attached, referenced or named: absolute paths (relative ones only with cwd)' },
         kind: { type: 'string', enum: HANDOFF_KINDS }, reason: { type: 'string', description: 'One line: why this is handed off' },
         model: { type: 'string', description: 'A loaded model of a model target, or an agent of an agent target (see `targets`; default: the first model / the default agent)' },
         cwd: { type: 'string', description: 'The project folder (default: your open workspace)' },
