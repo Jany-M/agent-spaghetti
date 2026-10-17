@@ -41,7 +41,16 @@ Status keeps itself current: running tools and model servers are re-checked ever
 
 ## Hand off work and get results back
 
-- From a connected tool: ask its agent to delegate (for example "have the local model write the tests, then Claude Code review them"), or in Cursor start a prompt with `>>target ` to send it without using Cursor's model.
+- From a connected tool, in its own chat (examples; target names come from **Tools**):
+
+  | Tool | Type | |
+  |---|---|---|
+  | any | `have the local model write the tests, then Claude Code review them` | its agent calls `delegate` |
+  | VS Code | `/mcp.agent-spaghetti.delegate` | a form with a target list; or `#delegate` in a prompt |
+  | Claude Code | `@agent-spaghetti:target://openclaw review this` | `@` lists the targets |
+  | Cursor, Claude Code | `>>openclaw >>claude-cli review src/app.ts` | sent straight to the targets, not to the tool's model |
+
+  The open workspace goes along as the folder to work in, and attached files (`@file`, `#file`) go too: agents get their paths (translated for WSL), models get their text. No target named? The tool asks you to pick one (or `auto`), and a paid target asks for approval right there or in the tray. Agents edit files only for editing kinds (code-edit, refactor, tests, docs). A `>>` result also lands in `<workspace>/.agent-spaghetti/results/<run>.md`.
 - From the tray: **Runs → New task**. From a terminal: `delegate <target> <task> [--model <m>] [--then <target>,…]`.
 - **Chains:** a hand-off can name next steps (`then`); each step gets the previous result, and the last result goes back to whoever asked: straight into the waiting call, into the caller's own session when it can continue one, into its chat (VS Code), or as a result waiting for it (`run_status`, the tray tells you).
 - **`auto`** lets Agent Spaghetti pick the target: the best free one, or the one its dispatcher model chooses (Settings → `dispatcher.model`, off by default). With a dispatcher model set, a hand-off that stops progressing is passed to another target once.

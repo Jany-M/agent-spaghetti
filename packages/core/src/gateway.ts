@@ -4,10 +4,9 @@
 // question as a hand-off, the same server queue, the same record. Only `model` is rewritten; prompts are never stored.
 import { createHash, randomBytes } from 'node:crypto';
 import type { Target } from '@agent-spaghetti/sdk';
-import { AUTO, rankTargets } from '@agent-spaghetti/sdk';
+import { AUTO, parseHop, rankTargets } from '@agent-spaghetti/sdk';
 import { openaiForward } from './engine/openai.ts';
 import type { Runner } from './runner.ts';
-import { parseHop } from './runner.ts';
 import { serveJson, WRITTEN, type CallCtx, type Server } from './serve.ts';
 import type { Settings } from './settings.ts';
 import type { Store } from './store.ts';

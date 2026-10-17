@@ -114,7 +114,7 @@ export const handlers: Handlers = {
   shutdown: (_i, s) => { setImmediate(() => s.shutdown()); return { stopping: true }; },   // answer first, then stop
   delegate: async (i, s) => {
     const { source, waitMs, ...req } = i;
-    need(req.target, 'target'); need(req.task, 'task');
+    need(req.task, 'task'); req.target ||= AUTO;                // no target: Agent Spaghetti picks
     const { id, done } = await s.runner.begin(source || 'cli', { ...req, parentRunId: req.parentRunId ? Number(req.parentRunId) : undefined, chainId: undefined });
     s.runner.watch(id);                                       // the caller waits or polls next: a quick result is returned to it
     if (Number(waitMs) > 0) { await Promise.race([done, new Promise(r => setTimeout(r, Number(waitMs)))]); s.runner.watch(id); }

@@ -53,6 +53,21 @@ async function mcpConfig(env: Environment, spec: NonNullable<Speaks['mcpClient']
   return { description: `${on ? 'add' : 'remove'} the ${SERVER_NAME} MCP server ${on ? 'to' : 'from'} ${spec.config} (restart the client)`, changes: await write(env, files, dryRun) };
 }
 
+/** The `>>` shortcut in a tool's prompt hook (e.g. Claude Code's UserPromptSubmit): our one entry added or removed, the rest kept. */
+async function promptHook(env: Environment, spec: NonNullable<Speaks['promptHook']>, cli: Cli, client: string, on: boolean, dryRun: boolean) {
+  const text = await env.readFile(spec.config);
+  const doc = (text === null ? {} : parseJsonc(text)) as Record<string, any> | undefined;
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) throw new Error(`${spec.config} is not a JSON object; not changed`);
+  const ours = (e: any) => (e?.hooks ?? []).some((h: any) => Array.isArray(h?.args) && h.args.at(-2) === 'hook' && h.args.at(-1) === client);
+  const before = (doc.hooks?.[spec.event] ?? []) as unknown[], others = before.filter(e => !ours(e));
+  const entry = { hooks: [{ type: 'command', command: cli.command, args: [...cli.args, 'hook', client] }] };
+  const after = on ? [...others, entry] : others;
+  const what = `${on ? 'add' : 'remove'} the >> shortcut ${on ? 'to' : 'from'} ${spec.config} (${spec.event})`;
+  if (JSON.stringify(after) === JSON.stringify(before)) return { description: what, changes: [] };   // already so: the file is left alone
+  doc.hooks = { ...doc.hooks, [spec.event]: after };
+  const files: Record<string, string> = { ...(text === null ? {} : { [`${spec.config}.bak`]: text }), [spec.config]: JSON.stringify(doc, null, 2) };
+  return { description: what, changes: await write(env, files, dryRun) };
+}
 /** Through the tool's own CLI: remove (also replaces an older entry), then add. */
 async function mcpCli(env: Environment, spec: NonNullable<Speaks['mcpCli']>, exe: string | undefined, cli: Cli, client: string, on: boolean, dryRun: boolean) {
   if (!exe) throw new Error(`${client}: its program was not found`);
@@ -69,11 +84,13 @@ async function mcpCli(env: Environment, spec: NonNullable<Speaks['mcpCli']>, exe
 export async function setConnection(env: Environment, i: Integration, det: Detection, cli: Cli, on: boolean, dryRun: boolean): Promise<Connected> {
   if (i.module?.connect) return i.module.connect(env, det, cli, on, dryRun);
   const sp = i.manifest.speaks, client = i.manifest.id;
-  if (sp?.mcpCli) return { ...await mcpCli(env, sp.mcpCli, programOf(det, i.manifest.detect?.bin?.[0]), cli, client, on, dryRun), applied: !dryRun };
-  if (!sp?.agentPlugins && !sp?.mcpClient) throw new Error(`${i.manifest.name} has no MCP client or plugin support agent-spaghetti knows of`);
-  // connect: the plugin where supported, else the MCP config; disconnect: both (whichever a user or an older version added)
-  const steps = on ? [sp.agentPlugins ? plugin(env, sp.agentPlugins, cli, client, on, dryRun) : mcpConfig(env, sp.mcpClient!, cli, client, on, dryRun)]
-    : [...(sp.agentPlugins ? [plugin(env, sp.agentPlugins, cli, client, on, dryRun)] : []), ...(sp.mcpClient ? [mcpConfig(env, sp.mcpClient, cli, client, on, dryRun)] : [])];
-  const r = await Promise.all(steps);
+  if (!sp?.mcpCli && !sp?.agentPlugins && !sp?.mcpClient) throw new Error(`${i.manifest.name} has no MCP client or plugin support agent-spaghetti knows of`);
+  // the server: the tool's CLI, else the plugin where supported, else the MCP config (disconnect: plugin and config, whichever is there);
+  // plus the `>>` prompt hook where the tool has one
+  const server = sp.mcpCli ? [() => mcpCli(env, sp.mcpCli!, programOf(det, i.manifest.detect?.bin?.[0]), cli, client, on, dryRun)]
+    : on ? [() => (sp.agentPlugins ? plugin(env, sp.agentPlugins, cli, client, on, dryRun) : mcpConfig(env, sp.mcpClient!, cli, client, on, dryRun))]
+    : [...(sp.agentPlugins ? [() => plugin(env, sp.agentPlugins!, cli, client, on, dryRun)] : []), ...(sp.mcpClient ? [() => mcpConfig(env, sp.mcpClient!, cli, client, on, dryRun)] : [])];
+  const r: Array<{ description: string; changes: string[] }> = [];
+  for (const step of [...server, ...(sp.promptHook ? [() => promptHook(env, sp.promptHook!, cli, client, on, dryRun)] : [])]) r.push(await step());   // in order: one file at a time
   return { description: r.map(x => x.description).join('; '), changes: r.flatMap(x => x.changes), applied: !dryRun };
 }

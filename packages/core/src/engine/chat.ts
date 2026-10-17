@@ -2,6 +2,7 @@
 // https://code.visualstudio.com/docs/configure/command-line), with a footer asking its agent to call `report` when done.
 // The launch runs where the tool is (actions.ts runHere); the runner then waits for the report (or the deadline).
 import type { Environment, RunRequest } from '@agent-spaghetti/sdk';
+import { cmdSafe } from '../proc.ts';
 
 /** The prompt argument: inert words only (Windows .cmd shims refuse quotes and the like); the task itself goes on stdin. */
 export const CHAT_PROMPT = 'Do the task in the attached text. It comes from Agent Spaghetti';
@@ -10,7 +11,9 @@ export const chatTask = (req: RunRequest, runId: number) => req.kind === 'report
   : `${req.task}\n\n---\nWhen you have finished, call the agent-spaghetti MCP tool \`report\` with run_id ${runId} and your complete result as \`result\``
     + ` (status "failed" if you could not do it). To hand part of the work to another tool, use \`delegate\`.`;
 
-export async function chatLaunch(env: Environment, exe: string, command: string[], task: string): Promise<void> {
-  const r = await env.exec(exe, [...command, CHAT_PROMPT, '-'], { input: task, timeoutMs: 60000 });
+/** Opens the chat with the task on stdin and the files attached (`-a`; files a .cmd shim could not pass stay listed in the task). */
+export async function chatLaunch(env: Environment, exe: string, command: string[], task: string, files: string[] = []): Promise<void> {
+  const attach = files.filter(cmdSafe).flatMap(f => ['-a', f]);
+  const r = await env.exec(exe, [...command, ...attach, CHAT_PROMPT, '-'], { input: task, timeoutMs: 60000 });
   if (r.code !== 0) throw new Error(`could not open the chat: ${(r.stderr || r.stdout).trim().slice(-300) || `exit ${r.code}`}`);
 }

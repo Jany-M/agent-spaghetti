@@ -43,8 +43,9 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
     const c = (() => { try { return HubClient.fromDiscovery(env); } catch { return null; } })();
     if ('delegate' in plan) {
       const r = await c?.call('delegate', { ...plan.delegate, source: args[1] ?? 'client', waitMs: 0 }).catch((e: Error) => e);
-      io.out(JSON.stringify({ ...plan.reply, user_message: !r ? 'agent-spaghetti is not running: start it, then send again.'
-        : r instanceof Error ? `agent-spaghetti: ${r.message}` : `Sent to ${plan.delegate.target} (run ${r.id}). The result will be in ${plan.delegate.resultDir ?? 'the agent-spaghetti results folder'}/${r.id}.md` }));
+      io.out(JSON.stringify(plan.block(!r ? 'agent-spaghetti is not running: start it, then send again.'
+        : r instanceof Error ? `agent-spaghetti: ${r.message}`
+        : `Sent to ${[plan.delegate.target, ...(plan.delegate.then ?? [])].join(' → ')} (run ${r.id}). The result will be in ${plan.delegate.resultDir ?? 'the agent-spaghetti results folder'}/${r.id}.md and in Agent Spaghetti → Runs.`)));
     } else {
       if (plan.report) await c?.call('hook', { client: args[1] ?? 'client', ...plan.report }).catch(() => {});
       io.out(JSON.stringify(plan.reply));

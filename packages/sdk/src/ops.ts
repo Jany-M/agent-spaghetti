@@ -33,12 +33,13 @@ export const OPS = {
   delegate:     { method: 'POST', path: '/v1/delegate', gui: 'runs',     usage: 'delegate <target> <task> [options]', summary: 'Hand a task to a local model or agent (--kind, --reason, --model, --then <target[:model]>,…)',
     mcp: { name: 'delegate', description: 'Hand a task to a local model or another agent on this machine (see `targets`). Free local models run at once; '
       + 'targets that may cost money ask the user first. `then` hands the result on to further targets in order; the last result comes back to you. '
-      + 'Returns the result, or a run id to check with `run_status` if it takes long.',
-      input: { type: 'object', additionalProperties: false, required: ['target', 'task'], properties: {
-        target: { type: 'string', description: 'Target id from `targets`, or `auto` to let Agent Spaghetti choose' }, task: { type: 'string', description: 'The full task, self-contained' },
+      + 'Pass the files the user attached or means as `files`. Returns the result, or a run id to check with `run_status` if it takes long.',
+      input: { type: 'object', additionalProperties: false, required: ['task'], properties: {
+        target: { type: 'string', description: 'Target id from `targets`, or `auto`; omit to let the user pick (or auto)' }, task: { type: 'string', description: 'The full task, self-contained' },
+        files: { type: 'array', items: { type: 'string' }, description: 'Files the user attached, referenced or named (absolute, or relative to cwd)' },
         kind: { type: 'string', enum: HANDOFF_KINDS }, reason: { type: 'string', description: 'One line: why this is handed off' },
         model: { type: 'string', description: 'A loaded model of a model target, or an agent of an agent target (see `targets`; default: the first model / the default agent)' },
-        cwd: { type: 'string', description: 'Working folder for agents that edit files' },
+        cwd: { type: 'string', description: 'The project folder (default: your open workspace)' },
         context: { type: 'string', description: 'Findings or instructions the target needs besides the task' },
         then: { type: 'array', items: { type: 'string' }, description: 'Next targets (`target`, `target:model` or `auto`), each getting the previous result' },
         returnTo: { type: 'string', enum: ['caller', 'none'], description: 'caller (default): the last result comes back to you; none: nothing comes back' },

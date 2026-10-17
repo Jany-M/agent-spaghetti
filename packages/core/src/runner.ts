@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ConsentScope, Delivery, Environment, Integration, RunEvent, RunOutcome, RunRequest, RunRow, Snapshot, Target } from '@agent-spaghetti/sdk';
-import { AUTO, TASK_KINDS, programOf, runDecision, withGrants } from '@agent-spaghetti/sdk';
+import { AUTO, TASK_KINDS, envPath, parseHop, programOf, runDecision, withGrants } from '@agent-spaghetti/sdk';
 import type { Bus } from './bus.ts';
 import type { Consent } from './consent.ts';
 import type { Ledger } from './ledger.ts';
@@ -47,9 +47,13 @@ export function targets(d: Pick<RunnerDeps, 'host' | 'snapshot' | 'integrations'
 }
 
 const SCOPES = (jobId?: string): ConsentScope[] => (jobId ? ['once', 'job', 'always'] : ['once', 'always']);
-/** `target[:model]` (target ids never contain ':'; models may). */
-export const parseHop = (hop: string) => { const i = hop.indexOf(':'); return i < 0 ? { target: hop } : { target: hop.slice(0, i), model: hop.slice(i + 1) || undefined }; };
-const withContext = (req: RunRequest) => (req.context ? `${req.task}\n\n## Context from the previous step\n${req.context}` : req.task);
+/** The task with what travels with it: the previous step's result and the files meant. */
+const withContext = (req: RunRequest) => [req.task, req.context && `## Context from the previous step\n${req.context}`,
+  req.files?.length && `## Files\n${req.files.map(f => `- ${f}`).join('\n')}`].filter(Boolean).join('\n\n');
+const INLINE_MAX = 200_000;                                          // file text a model gets, all files together
+const isAbs = (p: string) => /^([a-zA-Z]:|[\\/])/.test(p);
+const under = (dir: string, p: string) => { const d = dir.replace(/[\\/]+$/, '').replaceAll('\\', '/'), f = p.replaceAll('\\', '/');
+  return f.toLowerCase().startsWith(`${d.toLowerCase()}/`) ? f.slice(d.length + 1) : p; };
 const INLINE_MS = 5000;   // a caller that polled this recently is still waiting for the result
 
 export class Runner {
@@ -165,7 +169,7 @@ export class Runner {
     const deadline = setTimeout(() => ac.abort(new Error('deadline reached')), req.deadlineMs ?? s.get('delegate.deadlineSec') * 1000);
     let result = '', usage: Extract<RunEvent, { type: 'usage' }> | undefined, error: string | undefined, model = req.model;
     try {
-      for await (const e of o.engine ? o.engine(ac.signal) : this.engine(id, t, { ...req, task: withContext(req) }, ac.signal, m => { model = m; })) {
+      for await (const e of o.engine ? o.engine(ac.signal) : this.engine(id, t, await this.forTarget(t, req), ac.signal, m => { model = m; })) {
         const r = this.running.get(id); if (r) r.at = Date.now();
         if (e.type === 'text') result += e.text;
         else if (e.type === 'tool') this.emit('run.event', id, { tool: e.name, summary: e.summary });
@@ -188,6 +192,26 @@ export class Runner {
     }
     return t.engine === 'chat' ? this.chatRun(id, t, req, signal) : this.d.runOn(t.envId, t.id, req, { signal, runId: id });
   }
+  /** The request as the target gets it: folder and files (absolute) in its environment's spelling (Windows ↔ WSL); agents get the
+   *  files listed in the task (relative to the folder when inside it), models get their text (small text files, INLINE_MAX in all). */
+  private async forTarget(t: Target, req: RunRequest): Promise<RunRequest> {
+    const host = this.d.host(), kind = (t.kind === 'model' ? host?.kind === 'windows' : t.envId === 'windows') ? 'windows' : 'posix';
+    const cwd = req.cwd && envPath(req.cwd, kind);
+    const files = req.files?.map(f => envPath(isAbs(f) || !req.cwd ? f : `${req.cwd.replace(/[\\/]+$/, '')}/${f}`, kind));
+    if (t.kind !== 'model') {
+      return { ...req, cwd, files, task: withContext({ ...req, files: files?.map(f => (cwd ? under(cwd, f) : f)) }) };   // listed relative, kept absolute
+    }
+    let left = INLINE_MAX;
+    const parts: string[] = [];
+    for (const f of files ?? []) {
+      const text = await host?.readFile(f).catch(() => null) ?? null;
+      const skip = text === null ? 'not readable' : text.includes('\0') ? 'not text' : text.length > left ? 'too large' : null;
+      if (skip) { parts.push(`- ${f} (not included: ${skip})`); continue; }
+      left -= text!.length;
+      parts.push(`### ${f}\n\`\`\`\n${text}\n\`\`\``);
+    }
+    return { ...req, cwd, files, task: [withContext({ ...req, files: undefined }), parts.length && `## Files\n${parts.join('\n\n')}`].filter(Boolean).join('\n\n') };
+  }
   /** A model target's server as the OpenAI engine needs it (the run engine and the gateway's pass-through), and its queue reports. */
   server(t: Target, model = t.models[0]) {
     const host = this.d.host(), i = this.d.integrations().find(x => x.manifest.id === t.id);
@@ -209,11 +233,16 @@ export class Runner {
       yield r?.failed ? { type: 'error', message: r.result || 'the agent reported a failure' } : { type: 'done', result: r?.result ?? '' };
     } finally { this.reports.delete(id); }
   }
-  /** `<data>/results/<id>.md`, plus a copy in the caller's folder when asked (e.g. the Cursor workspace). */
+  /** `<data>/results/<run>.md`, plus `<chain>.md` in the caller's folder when asked (e.g. the workspace of a `>>` prompt): each hop
+   *  overwrites it, so it ends with the chain's result. */
   private writeResult(id: number, req: RunRequest, result: string, error?: string): Partial<RunRow> {
     const text = error ? `${result}\n\n**Failed:** ${error}\n` : result;
     if (!text.trim()) return {};
-    for (const dir of [this.d.resultsDir, req.resultDir].filter((x): x is string => !!x)) { mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, `${id}.md`), text); }
+    mkdirSync(this.d.resultsDir, { recursive: true }); writeFileSync(join(this.d.resultsDir, `${id}.md`), text);
+    if (req.resultDir) {
+      const dir = envPath(req.resultDir, this.d.host()?.kind === 'windows' ? 'windows' : 'posix');
+      mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, `${req.chainId ?? id}.md`), text);
+    }
     return { resultPath: join(this.d.resultsDir, `${id}.md`), resultSha256: createHash('sha256').update(text).digest('hex') };
   }
   private emit(type: 'run.started' | 'run.event' | 'run.finished', id: number, data: Record<string, unknown>) {

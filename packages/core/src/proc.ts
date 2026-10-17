@@ -5,13 +5,15 @@ import { closeSync, openSync } from 'node:fs';
 
 const CMD_SHIM = /\.(cmd|bat)$/i;
 const UNSAFE_FOR_CMD = /["%^&|<>!\r\n]/;
+/** Whether an argument can pass through a Windows .cmd shim (cmd.exe) unchanged. */
+export const cmdSafe = (a: string) => !UNSAFE_FOR_CMD.test(a);
 export interface Spawned { code: number; stdout: Buffer; stderr: Buffer }   // code 127 = not found, 124 = timeout
 export interface SpawnOpts { timeoutMs?: number; signal?: AbortSignal; input?: string | Buffer; env?: NodeJS.ProcessEnv }
 
 /** Windows .cmd/.bat shims need cmd.exe; only inert arguments are allowed through it. */
 function resolveCmd(cmd: string, args: string[]): { file: string; argv: string[]; verbatim: boolean } {
   if (process.platform !== 'win32' || !CMD_SHIM.test(cmd)) return { file: cmd, argv: args, verbatim: false };
-  for (const a of [cmd, ...args]) if (UNSAFE_FOR_CMD.test(a)) throw new Error(`unsafe argument for .cmd: ${a}`);
+  for (const a of [cmd, ...args]) if (!cmdSafe(a)) throw new Error(`unsafe argument for .cmd: ${a}`);
   return { file: process.env.ComSpec ?? 'cmd.exe', argv: ['/d', '/s', '/c', `"${[cmd, ...args].map(a => `"${a}"`).join(' ')}"`], verbatim: true };
 }
 

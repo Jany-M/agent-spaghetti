@@ -47,6 +47,10 @@
         "--scope",
         "user"
       ]
+    },
+    "promptHook": {
+      "config": "~/.claude/settings.json",
+      "event": "UserPromptSubmit"
     }
   }
 }

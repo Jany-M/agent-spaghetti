@@ -78,7 +78,8 @@ test('CLI connect (manifest speaks.mcpCli: Claude Code, Codex) and module connec
   await setConnection(env, by('claude-cli'), d('/b/claude'), cli, false, false);
   assert.deepEqual(env.calls, ['exec /b/claude mcp remove --scope user agent-spaghetti']);
   const on = await setConnection(env, by('claude-cli'), d('/b/claude'), cli, true, false);
-  assert.equal(on.changes[0], '/b/claude mcp add --scope user agent-spaghetti -- node C:/Program Files/as/cli.ts mcp --as claude-cli');
+  assert.deepEqual(on.changes, ['/b/claude mcp add --scope user agent-spaghetti -- node C:/Program Files/as/cli.ts mcp --as claude-cli', 'write ~/.claude/settings.json'],
+    'the server, then the >> prompt hook (no settings file yet: nothing to back up)');
   await assert.rejects(setConnection(env, by('codex'), d('/b/codex.exe'), cli, true, false), /codex mcp add failed: boom/);
   await assert.rejects(setConnection(env, by('codex'), d('/b/other'), cli, true, true), /its program was not found/);
   const oc = by('openclaw');
@@ -87,6 +88,21 @@ test('CLI connect (manifest speaks.mcpCli: Claude Code, Codex) and module connec
   await setConnection(env, oc, d('/b/openclaw'), cli, false, false);
   assert.deepEqual(JSON.parse(env.inputs['/b/openclaw config patch --stdin']), { mcp: { servers: { 'agent-spaghetti': null } } });
   assert.equal(env.calls.filter(c => c === 'exec /b/openclaw mcp reload').length, 2);
+});
+test('>> prompt hook (Claude Code): our one entry added, kept unique, removed; the user\'s own hooks stay', async () => {
+  const { BUILTINS } = await import('@agent-spaghetti/integrations');
+  const claude = BUILTINS.find(b => b.manifest.id === 'claude-cli')!;
+  const own = { hooks: [{ type: 'command', command: 'my-check' }] };
+  const spec = { files: { '~/.claude/settings.json': JSON.stringify({ model: 'x', hooks: { UserPromptSubmit: [own], Stop: [own] } }) },
+    exec: { '/b/claude mcp remove --scope user agent-spaghetti': { code: 0, stdout: '', stderr: '' }, '/b/claude mcp add --scope user agent-spaghetti -- node C:/Program Files/as/cli.ts mcp --as claude-cli': { code: 0, stdout: '', stderr: '' } } };
+  const env = fakeEnv(spec), d = { ...det, installs: [{ path: '/b/claude', via: 'bin' as const }] };
+  const read = () => JSON.parse(spec.files['~/.claude/settings.json']);
+  await setConnection(env, claude, d, cli, true, false);
+  assert.deepEqual((await setConnection(env, claude, d, cli, true, false)).changes.filter(c => c.startsWith('write')), [], 'already there: the file is left alone');
+  assert.deepEqual(read().hooks.UserPromptSubmit, [own, { hooks: [{ type: 'command', command: 'node', args: ['C:/Program Files/as/cli.ts', 'hook', 'claude-cli'] }] }], 'once, after the user\'s own');
+  assert.deepEqual([read().model, read().hooks.Stop], ['x', [own]]);
+  await setConnection(env, claude, d, cli, false, false);
+  assert.deepEqual(read().hooks.UserPromptSubmit, [own]);
 });
 test('connectionPlan: never disconnects, always connects, unset asks once; tools that cannot connect are left alone', async () => {
   const { connectionPlan } = await import('../../../packages/core/src/connections.ts');

@@ -63,6 +63,7 @@ export interface Manifest {
     mcpClient?: { config: string; key: string; entry?: Record<string, unknown>; commandArray?: boolean };   // entry: extra fields our server entry needs (e.g. type); commandArray: command and args as one array
     mcpCli?: { add: string[]; remove: string[]; config?: string };   // the tool's CLI: <bin> <add…> agent-spaghetti -- <command…> (e.g. `claude mcp add`); config: the file it writes (connected = it names our server)
     agentPlugins?: { dir: string; variant?: 'agent-plugins' | 'cursor' };
+    promptHook?: { config: string; event: string };   // its prompt hook (`>>` shortcut): a JSON settings file with hooks.<event>[] = { hooks: [{ type: 'command', command, args }] }
   };
 }
 
@@ -107,6 +108,7 @@ export interface RunRequest {
   target: string; task: string; kind?: TaskKind; reason?: string; model?: string;
   cwd?: string; resultDir?: string; jobId?: string; parentRunId?: number; deadlineMs?: number;
   context?: string; then?: string[]; returnTo?: 'caller' | 'none'; returnSession?: string;
+  files?: string[];                                         // what the user meant (attached, referenced, named): listed for agents, inlined for models
   session?: string;                                         // a session of the target to continue (engines that can resume)
   chainId?: number;                                         // set by the runner for hops after the first
 }

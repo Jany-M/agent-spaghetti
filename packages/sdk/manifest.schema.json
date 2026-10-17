@@ -65,6 +65,8 @@
         "mcpCli": { "type": "object", "additionalProperties": false, "required": ["add", "remove"], "description": "the tool's own CLI adds/removes MCP servers: <bin> <add…> agent-spaghetti -- <command…> / <bin> <remove…> agent-spaghetti",
           "properties": { "add": { "type": "array", "items": { "type": "string" } }, "remove": { "type": "array", "items": { "type": "string" } },
             "config": { "type": "string", "description": "a non-JSON config file the CLI writes; connected = it names our server" } } },
+        "promptHook": { "type": "object", "additionalProperties": false, "required": ["config", "event"], "description": "the >> shortcut through the tool's prompt hook: hooks.<event>[] in a JSON settings file",
+          "properties": { "config": { "type": "string" }, "event": { "type": "string" } } },
         "agentPlugins": { "type": "object", "additionalProperties": false, "required": ["dir"], "properties": { "dir": { "type": "string" }, "variant": { "enum": ["agent-plugins", "cursor"] } } }
       }
     }

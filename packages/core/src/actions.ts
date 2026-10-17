@@ -79,5 +79,5 @@ export async function* runHere(env: Environment, integrations: Integration[], id
   const command = (sp?.acp ?? sp?.chat)!.command, exe = programOf(r.detection, command[0]);
   if (!exe) throw new Error(`${i.manifest.name}: ${command[0]} not found in ${env.id}`);
   if (sp?.acp) yield* acpRun(env, exe, command.slice(1), req, ctx);
-  else await chatLaunch(env, exe, command.slice(1), req.task);    // the result comes later, through `report`
+  else await chatLaunch(env, exe, command.slice(1), req.task, req.files);    // the result comes later, through `report`
 }

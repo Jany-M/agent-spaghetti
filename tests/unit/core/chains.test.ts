@@ -11,7 +11,8 @@ import { Bus } from '../../../packages/core/src/bus.ts';
 import { Consent } from '../../../packages/core/src/consent.ts';
 import { Settings } from '../../../packages/core/src/settings.ts';
 import { Ledger } from '../../../packages/core/src/ledger.ts';
-import { Runner, parseHop } from '../../../packages/core/src/runner.ts';
+import { parseHop } from '@agent-spaghetti/sdk';
+import { Runner } from '../../../packages/core/src/runner.ts';
 
 /** Agents that answer `<id>(<task>)`; `resumes` ones report a session; the paid one costs money. */
 const seen: Array<{ id: string; req: RunRequest }> = [];
@@ -129,4 +130,7 @@ test('chat launch: inert prompt argument, the task on stdin; a failed launch say
   assert.equal(env.inputs[key], 'the "task" & more');
   assert.doesNotMatch(CHAT_PROMPT, /["%^&|<>!\r\n]/, 'safe for .cmd shims');
   await assert.rejects(chatLaunch(fakeEnv(), 'code', ['chat'], 't'), /could not open the chat: not found/);
+  const withFiles = `code chat -a E:\\p\\a.ts ${CHAT_PROMPT} -`, e2 = fakeEnv({ exec: { [withFiles]: { code: 0, stdout: '', stderr: '' } } });
+  await chatLaunch(e2, 'code', ['chat'], 't', ['E:\\p\\a.ts', 'E:\\p\\a&b.ts']);
+  assert.equal(e2.inputs[withFiles], 't', 'safe files attached with -a; one a .cmd shim could not pass is left out');
 });

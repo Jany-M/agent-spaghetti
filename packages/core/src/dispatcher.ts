@@ -3,11 +3,11 @@
 // once per chain. It thinks with `dispatcher.model` through the runner itself (its runs are recorded like any other);
 // without a model it is off and `auto` takes the best-ranked target (sdk rankTargets: free first, no tool preferred).
 import type { Disposable, RunRequest, Target } from '@agent-spaghetti/sdk';
-import { AUTO, rankTargets } from '@agent-spaghetti/sdk';
+import { AUTO, parseHop, rankTargets } from '@agent-spaghetti/sdk';
 import type { Bus } from './bus.ts';
 import type { Ledger } from './ledger.ts';
 import type { Settings } from './settings.ts';
-import { parseHop, type Runner } from './runner.ts';
+import type { Runner } from './runner.ts';
 
 export const SELF = 'agent-spaghetti';
 const WATCH_MS = 30_000;

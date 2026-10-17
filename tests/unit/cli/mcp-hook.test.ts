@@ -1,8 +1,9 @@
-// The MCP bridge (both protocol eras) and the Cursor hook decisions.
+// The MCP bridge (both protocol eras) and the >> hook decisions (Cursor, Claude Code).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MCP_VERSION, OPS, mcpHandler, type HubClient, type RunView } from '@agent-spaghetti/sdk';
-import { planHook } from '../../../packages/cli/src/hook.ts';
+import * as hookMod from '../../../packages/cli/src/hook.ts';
+const { planHook } = hookMod;
 
 const meta = { 'io.modelcontextprotocol/protocolVersion': MCP_VERSION, 'io.modelcontextprotocol/clientCapabilities': {} };
 function fakeClient(views: RunView[], asking = false) {
@@ -14,7 +15,7 @@ function fakeClient(views: RunView[], asking = false) {
     if (op === 'runs' && input.unread) return { runs: [], unread: views.filter(v => v.run.outcome !== 'running') };
     if (op === 'runs' && input.id === 1) throw new Error('no run 1');
     if (op === 'runs') { const v = views[Math.min(++i, views.length - 1)]; return { runs: [v.run], result: v.result, final: v }; }
-    if (op === 'status') return { consents: asking ? [{ subject: 'cursor', action: 'run', resource: 'claude-cli' }] : [] };
+    if (op === 'status') return { consents: asking ? [{ id: 'q1', subject: 'cursor', action: 'run', resource: 'claude-cli', why: 'w', scopes: ['once'] }] : [] };
     if (op === 'targets') return [{ id: 'lmstudio' }];
     throw new Error('daemon down');
   } } as unknown as HubClient;
@@ -47,16 +48,17 @@ test('MCP delegate: progress while waiting for approval, result text, still-runn
   const h = mcpHandler(f.client, { source: 'cursor', parentRunId: 3, pollMs: 1 }, m => sent.push(m));
   const r: any = await h({ jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name: 'delegate', arguments: { target: 'claude-cli', task: 't', kind: 'review' }, _meta: { ...meta, progressToken: 'p' } } });
   assert.deepEqual(r.result.content, [{ type: 'text', text: 'the answer' }]);
-  assert.deepEqual(f.calls[0], ['delegate', { target: 'claude-cli', task: 't', kind: 'review', source: 'cursor', parentRunId: 3, waitMs: 0 }]);
-  assert.equal(sent[0].params.message, 'waiting for approval in Agent Spaghetti');
+  assert.deepEqual(f.calls.find(c => c[0] === 'delegate'), ['delegate', { target: 'claude-cli', task: 't', kind: 'review', source: 'cursor', parentRunId: 3, waitMs: 0 }]);
+  assert.equal(sent[0].params.message, 'waiting for approval (here or in Agent Spaghetti)');
+  assert.ok(!f.calls.some(c => c[0] === 'consent'), 'no elicitation declared: the tray alone asks');
   const slow = mcpHandler(fakeClient([run('running')]).client, { source: 'cursor', waitMs: 0 }, () => {});
   const s: any = await slow({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'delegate', arguments: { target: 'x', task: 't' }, _meta: meta } });
   assert.match(s.result.content[0].text, /still running\. Call run_status with id 7/);
   const denied: any = await mcpHandler(fakeClient([{ ...run('denied'), run: { ...run('denied').run, error: 'denied by the user' } }]).client, { source: 'cursor' }, () => {})(
     { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'delegate', arguments: { target: 'x', task: 't' }, _meta: meta } });
   assert.deepEqual([denied.result.isError, denied.result.content[0].text], [true, 'Run 7 on claude-cli denied: denied by the user.']);
-  const invalid: any = await h({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'delegate', arguments: { task: 't' }, _meta: meta } });
-  assert.match(invalid.result.content[0].text, /invalid arguments: \/target: required/);
+  const invalid: any = await h({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'delegate', arguments: { target: 'x' }, _meta: meta } });
+  assert.match(invalid.result.content[0].text, /invalid arguments: \/task: required/);
   const st: any = await h({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'run_status', arguments: { id: 7 }, _meta: meta } });
   assert.deepEqual(st.result.content, [{ type: 'text', text: 'the answer' }]);
   const gone: any = await h({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'run_status', arguments: { id: 1 }, _meta: meta } });
@@ -69,14 +71,23 @@ test('MCP delegate: progress while waiting for approval, result text, still-runn
   assert.equal(none.result.content[0].text, 'No new results.');
 });
 
-test('Cursor hook: >>target bypasses the model; other prompts pass; metadata only, never content', () => {
-  const p = planHook({ hook_event_name: 'beforeSubmitPrompt', prompt: '>>lmstudio write tests for utils.ts', workspace_roots: ['/w'], conversation_id: 'c1',
+test('>> hooks (Cursor, Claude Code): one parser for target[:model] and chains; workspace and attached files go along; other prompts pass; metadata only', () => {
+  const { parsePrefix } = hookMod;
+  assert.deepEqual(parsePrefix('>>openclaw do x'), { target: 'openclaw', then: [], task: 'do x' });
+  assert.deepEqual(parsePrefix('  >> lms:qwen/q:7b >>claude-cli  review\nthis'), { target: 'lms', model: 'qwen/q:7b', then: ['claude-cli'], task: 'review\nthis' });
+  assert.equal(parsePrefix('>>only'), null); assert.equal(parsePrefix('hello >>x y'), null);
+  const p = planHook({ hook_event_name: 'beforeSubmitPrompt', prompt: '>>lmstudio >>openclaw:worker write tests for utils.ts', workspace_roots: ['/w'], conversation_id: 'c1',
     attachments: [{ type: 'file', file_path: '/w/utils.ts' }, { type: 'rule', file_path: '/w/r.mdc' }] });
   assert.ok('delegate' in p);
-  assert.deepEqual(p, { reply: { continue: false }, delegate: { target: 'lmstudio', task: 'write tests for utils.ts\n\nFiles: /w/utils.ts', reason: 'sent with the >> prefix', cwd: '/w', resultDir: '/w/.agent-spaghetti/results' } });
+  assert.deepEqual(p.delegate, { target: 'lmstudio', then: ['openclaw:worker'], task: 'write tests for utils.ts', files: ['/w/utils.ts'], reason: 'sent with the >> prefix', cwd: '/w', resultDir: '/w/.agent-spaghetti/results' });
+  assert.deepEqual(p.block('sent'), { continue: false, user_message: 'sent' });
+  const cc = planHook({ hook_event_name: 'UserPromptSubmit', prompt: '>>codex fix it', cwd: 'E:\\proj', session_id: 's' });
+  assert.ok('delegate' in cc);
+  assert.deepEqual([cc.delegate.cwd, cc.block('sent')], ['E:\\proj', { decision: 'block', reason: 'sent' }]);
+  assert.deepEqual(planHook({ hook_event_name: 'UserPromptSubmit', prompt: 'plain' }), { reply: {}, report: { event: 'UserPromptSubmit', data: {} } });
   assert.deepEqual(planHook({ hook_event_name: 'beforeSubmitPrompt', prompt: 'normal SECRET-MARKER question', conversation_id: 'c1' }),
     { reply: { continue: true }, report: { event: 'beforeSubmitPrompt', data: { conversation_id: 'c1' } } });
-  assert.deepEqual(planHook({ hook_event_name: 'beforeSubmitPrompt', prompt: '>>' }).reply, { continue: true }, 'no target and task: pass through');
+  assert.deepEqual((planHook({ hook_event_name: 'beforeSubmitPrompt', prompt: '>>' }) as { reply: unknown }).reply, { continue: true }, 'no target and task: pass through');
   const mcp = planHook({ hook_event_name: 'beforeMCPExecution', tool_name: 'x', tool_input: '{"SECRET-MARKER":1}', mcp_server_name: 's' });
   assert.deepEqual(mcp, { reply: { permission: 'allow' }, report: { event: 'beforeMCPExecution', data: { tool_name: 'x', mcp_server_name: 's' } } });
   assert.ok(!JSON.stringify(planHook({ hook_event_name: 'afterAgentResponse', text: 'SECRET-MARKER' })).includes('SECRET-MARKER'));
