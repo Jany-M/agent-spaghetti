@@ -54,7 +54,7 @@
         "openai": { "type": "object", "additionalProperties": false, "required": ["base"], "properties": { "base": { "type": "string" },
           "headers": { "type": "object", "additionalProperties": { "type": "string" }, "description": "sent with every request (probe and run); {env:NAME} is read from the environment at request time (NAME must be in detect.env)" } } },
         "openaiClient": { "type": "object", "additionalProperties": false, "required": ["setup"], "description": "the tool can use a custom OpenAI-compatible endpoint: the model gateway",
-          "properties": { "setup": { "type": "string", "description": "steps for the user; {url}, {key} and {model} are filled in" } } },
+          "properties": { "setup": { "type": "string", "description": "steps for the user; {url} and {key} are filled in; the tool asks for model auto and Agent Spaghetti picks (Tools → Model)" } } },
         "mcpServer": { "type": "object", "additionalProperties": false, "required": ["command"], "properties": { "command": { "type": "array", "minItems": 1, "items": { "type": "string" } } } },
         "acp": { "type": "object", "additionalProperties": false, "required": ["command"], "properties": { "command": { "type": "array", "minItems": 1, "items": { "type": "string" } } } },
         "chat": { "type": "object", "additionalProperties": false, "required": ["command"], "description": "its chat takes a task: <command…> <prompt> - (task on stdin); results come back through report",

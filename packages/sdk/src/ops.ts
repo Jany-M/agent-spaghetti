@@ -56,6 +56,9 @@ export const OPS = {
     mcp: { name: 'report', description: 'Send the result of a task Agent Spaghetti gave you in this chat (its run_id is in the task). Only for those tasks.',
       input: { type: 'object', additionalProperties: false, required: ['run_id', 'result'], properties: {
         run_id: { type: 'integer' }, result: { type: 'string', description: 'Your complete result' }, status: { type: 'string', enum: ['done', 'failed'] } } } } },
+  gateway:      { method: 'GET',  path: '/v1/gateway', gui: 'tools',     usage: 'gateway',                  summary: 'The model gateway: its address and the tools with a key' },
+  gatewayClient: { method: 'POST', path: '/v1/gateway/client', gui: 'tools', usage: 'gateway <tool> [--model <target:model|auto>] [--key create|revoke]',
+    summary: 'A tool\'s model through the gateway, and its key (a new key is shown once, with the tool\'s setup steps)' },
   hook:         { method: 'POST', path: '/v1/hook', gui: 'machine',         usage: 'hook <client>',            summary: 'Run by client hooks (reads the hook JSON on stdin)' },
 } as const satisfies Record<string, OpSpec>;
 export type OpId = keyof typeof OPS;
@@ -81,6 +84,8 @@ export interface OpIO {
   shutdown: { in: {}; out: { stopping: true } };
   delegate: { in: RunRequest & { source?: string; waitMs?: number }; out: RunView };
   targets: { in: {}; out: Target[] };
+  gateway: { in: {}; out: GatewayStatus };
+  gatewayClient: { in: { integration: string; model?: string; key?: 'create' | 'revoke' }; out: { model: string; key?: string; setup?: string } };
   handback: { in: { run_id: number; result: string; status?: 'done' | 'failed'; source?: string }; out: { ok: true } };
   runs: { in: { id?: number; since?: number; limit?: number; watch?: boolean; unread?: boolean; source?: string };   // watch + source: the chain's caller polling
     out: { runs: RunRow[]; result?: string; final?: RunView; unread?: RunView[] } };   // final: the chain's view (id = chain); unread: given once
@@ -93,6 +98,8 @@ export interface OpIO {
 /** A delegated run as callers see it: its record and, once finished, the result text. */
 /** Every setting; `choices`: the values that make sense now (e.g. the loaded models for dispatcher.model, best first). */
 export type SettingsOut = Record<string, { value: unknown; help: string; choices?: string[] }>;
+/** The model gateway as the Tools panel and `gateway` show it (port 0 = off). */
+export interface GatewayStatus { port: number; url: string | null; clients: Array<{ id: string; since: number }> }
 export interface RunView { id: number; run: RunRow; result?: string }
 export type ConnectResult = import('./types.ts').Connected & { integration: string; envId: string };
 export const STREAM_PATH = '/v1/events/stream';

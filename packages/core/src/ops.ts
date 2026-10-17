@@ -1,6 +1,6 @@
 // Handlers for the operations declared once in sdk/ops.ts. Per-environment work goes through Services.onEnvs (core/dispatch).
 import type { EnvResult, Grant, LiveState, OpId, OpIO, RunView, SettingsOut, Snapshot, Target } from '@agent-spaghetti/sdk';
-import { OPS, declaredActions, rankTargets, levelsOf, renderConfigReport, toolRows, withGrants, withoutGrants } from '@agent-spaghetti/sdk';
+import { AUTO, OPS, declaredActions, rankTargets, levelsOf, renderConfigReport, toolRows, withGrants, withoutGrants } from '@agent-spaghetti/sdk';
 import type { Store } from './store.ts';
 import type { Bus } from './bus.ts';
 import type { Loaded } from './registry.ts';
@@ -10,10 +10,11 @@ import type { Consent } from './consent.ts';
 import type { EnvCommand, EnvResults } from './actions.ts';
 import type { Ledger } from './ledger.ts';
 import type { Runner } from './runner.ts';
+import type { Gateway } from './gateway.ts';
 import { ENGINES } from './engine/inspect.ts';
 
 export interface Services {
-  store: Store; bus: Bus; settings: Settings; consent: Consent; ledger: Ledger; runner: Runner;
+  store: Store; bus: Bus; settings: Settings; consent: Consent; ledger: Ledger; runner: Runner; gateway: Gateway;
   shutdown(): void;
   host(): import('@agent-spaghetti/sdk').Environment | null;
   /** How to run agent-spaghetti in an environment (clients start its MCP bridge with it). */
@@ -48,7 +49,8 @@ export const handlers: Handlers = {
     return { rows: toolRows({ snapshot: snapshot(s), live: s.live(), targets: handlers.targets({}, s) as Target[], consents: s.consent.pending(),
       prefs: { auto: s.settings.get('connect.auto'), never: s.settings.get('connect.never') },
       loaded: l.integrations.map(i => ({ id: i.manifest.id, name: i.manifest.name, source: i.source, roles: i.manifest.roles, levels: levelsOf(i, ENGINES), disabled: off.includes(i.manifest.id), setup: !!i.module?.setup,
-        ...(i.manifest.detect?.http?.url ? { needsEnv: i.manifest.detect.env ?? [] } : {}) })) }),
+        ...(i.manifest.detect?.http?.url ? { needsEnv: i.manifest.detect.env ?? [] } : {}), ...(i.manifest.speaks?.openaiClient ? { gatewayClient: true } : {}) })),
+      gateway: { routes: s.settings.get('gateway.routes'), keyed: s.gateway.status().clients.map(c => c.id) } }),
       rejected: l.rejected };
   },
   switches: async (_i, s) => {
@@ -93,7 +95,11 @@ export const handlers: Handlers = {
     return { grants: s.settings.grants().filter(g => g.subject === subject) };
   },
   settings: (_i, s) => settingsView(s),
-  setting: (i, s) => { s.settings.setText(need(i.key, 'key'), String(i.value ?? '')); return settingsView(s); },
+  setting: async (i, s) => {
+    s.settings.setText(need(i.key, 'key'), String(i.value ?? ''));
+    if (String(i.key).startsWith('gateway.')) await s.gateway.sync();
+    return settingsView(s);
+  },
   disable: (i, s) => toggle(s, i.id, true),
   enable: (i, s) => toggle(s, i.id, false),
   report: (_i, s) => {
@@ -129,6 +135,19 @@ export const handlers: Handlers = {
     const final = chainView(s, run.chainId);
     if (caller && final.run.outcome !== 'running' && final.run.delivered === 'unread') s.ledger.update(run.chainId, { delivered: 'read' });   // collected by id
     return { runs: s.ledger.chain(run.id), result: s.ledger.result(run), final };
+  },
+  gateway: (_i, s) => s.gateway.status(),
+  gatewayClient: (i, s) => {
+    const id = need(i.integration, 'integration'), m = s.loaded().integrations.find(x => x.manifest.id === id)?.manifest;
+    if (!m?.speaks?.openaiClient) throw new Error(`${id} cannot use a custom model endpoint (no gateway setup known)`);
+    const routes = s.settings.get('gateway.routes').filter(r => !r.startsWith(`${id}=`));
+    if (i.model !== undefined) s.settings.set('gateway.routes', i.model && i.model !== AUTO ? [...routes, `${id}=${i.model}`] : routes);
+    const model = s.settings.get('gateway.routes').find(r => r.startsWith(`${id}=`))?.slice(id.length + 1) ?? AUTO;
+    if (!i.key) return { model };
+    const key = s.gateway.key(id, i.key === 'create');
+    if (!key) return { model };
+    const url = s.gateway.status().url ?? `http://127.0.0.1:${s.settings.get('gateway.port') || '<gateway.port>'}/v1`;
+    return { model, key, setup: m.speaks.openaiClient.setup.replaceAll('{url}', url).replaceAll('{key}', key) };
   },
   handback: (i, s) => { s.runner.report(num(i.run_id, 0), need(i.source, 'source'), String(i.result ?? ''), i.status === 'failed'); return { ok: true }; },
   cancel: (i, s) => ({ cancelled: s.runner.cancel(num(i.id, 0)) }),

@@ -8,6 +8,11 @@ export async function http(req: HttpRequest): Promise<HttpResult | null> {
   } catch { return null; }
 }
 
+/** The upstream response as it comes (status, type, body stream): for passing a server's answer through unchanged. Throws when
+ *  nothing answers. */
+export async function httpRaw(req: HttpRequest): Promise<Response> {
+  return fetch(req.url, { method: req.method ?? 'GET', headers: req.headers, body: req.body, signal: req.signal });
+}
 /** Streaming body as lines (OpenAI SSE). Throws on no answer or a non-2xx status (with the start of the body). */
 export async function* httpLines(req: HttpRequest): AsyncIterable<string> {
   const r = await fetch(req.url, { method: req.method ?? 'GET', headers: req.headers, body: req.body,

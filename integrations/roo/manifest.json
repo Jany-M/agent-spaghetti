@@ -18,5 +18,10 @@
       "file": "~/.vscode/extensions/rooveterinaryinc.roo-cline-*/package.json",
       "json": "version"
     }
+  },
+  "speaks": {
+    "openaiClient": {
+      "setup": "In Roo Code's settings: API Provider = OpenAI Compatible, Base URL = {url}, API Key = {key}, Model = auto.\nWhich LLM answers is chosen in Agent Spaghetti (Tools \u2192 Roo Code \u2192 Model). The model must support tool calls for agent work."
+    }
   }
 }

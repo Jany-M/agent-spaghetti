@@ -56,7 +56,7 @@ export interface Manifest {
   models?: { path?: string; list: string; id: string; filter?: Array<{ field: string; in: Array<string | boolean> }>; context?: string[] };
   speaks?: {
     openai?: { base: string; headers?: Record<string, string> };   // headers: {env:NAME} read at request time
-    openaiClient?: { setup: string };                                // takes a custom OpenAI endpoint (the gateway): steps with {url} {key} {model}
+    openaiClient?: { setup: string };                                // takes a custom OpenAI endpoint (the gateway): steps with {url} {key}; the tool asks for model `auto`
     mcpServer?: { command: string[] };
     acp?: { command: string[] };
     chat?: { command: string[] };   // its chat takes a task: <command…> <prompt> - (task on stdin); the result comes back through `report`

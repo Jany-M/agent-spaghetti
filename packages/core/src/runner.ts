@@ -10,7 +10,7 @@ import type { Bus } from './bus.ts';
 import type { Consent } from './consent.ts';
 import type { Ledger } from './ledger.ts';
 import type { Settings } from './settings.ts';
-import { openaiHeaders, openaiRun } from './engine/openai.ts';
+import { openaiHeaders, openaiRun, type OpenAiTarget } from './engine/openai.ts';
 import { chatTask } from './engine/chat.ts';
 import { deliver } from './returns.ts';
 
@@ -22,6 +22,7 @@ export interface RunnerDeps {
   /** An agent's run in the environment where it was found (core/dispatch.ts runOnEnv). */
   runOn(envId: string, id: string, req: RunRequest, o: { signal: AbortSignal; runId: number }): AsyncIterable<RunEvent>;
 }
+export interface StartOpts { preapproved?: boolean; engine?(signal: AbortSignal): AsyncIterable<RunEvent> }
 /** What the runner keeps about a hand-off chain while it runs: who asked and where the result goes. */
 export interface Chain { id: number; source: string; returnTo: 'caller' | 'none'; returnSession?: string; parentRunId?: number; watchedAt?: number }
 /** What `delegate` can use right now on this machine (from the last scan). Models: servers the host reaches. Agents: tools that speak
@@ -60,8 +61,9 @@ export class Runner {
   constructor(d: RunnerDeps) { this.d = d; }
 
   /** Starts a hand-off and returns its id at once; `done` settles with the chain's last run record.
-   *  `preapproved`: a result going back to its caller (no new question, still recorded). */
-  start(source: string, req: RunRequest, o: { preapproved?: boolean } = {}): { id: number; done: Promise<RunRow> } {
+   *  `preapproved`: a result going back to its caller (no new question, still recorded). `engine`: the caller does the work itself
+   *  once allowed (the model gateway passing a client's own request); such a run stands alone (no parent, no chain after it). */
+  start(source: string, req: RunRequest, o: StartOpts = {}): { id: number; done: Promise<RunRow> } {
     const t = this.targets().find(x => x.id === req.target);
     if (!t) throw new Error(`unknown or unavailable target ${req.target} (see: targets)`);
     if (req.model && t.models.length && !t.models.includes(req.model))
@@ -70,7 +72,7 @@ export class Runner {
     const kind = req.kind && (TASK_KINDS as readonly string[]).includes(req.kind) ? req.kind : 'other';
     // An agent that delegates while it runs a delegated task works on that task (one such run: it is the parent).
     const busy = [...this.running].filter(([, r]) => r.target === source);
-    req = { ...req, kind, parentRunId: req.parentRunId ?? (busy.length === 1 ? busy[0][0] : undefined) };
+    req = { ...req, kind, parentRunId: req.parentRunId ?? (busy.length === 1 && !o.engine ? busy[0][0] : undefined) };
     const max = this.d.settings.get('delegate.maxHops');
     if (!o.preapproved && this.d.ledger.depth(req.parentRunId) + 1 > max) throw new Error(`hop budget reached: ${max} hand-offs in one chain (setting delegate.maxHops)`);
     const id = this.d.ledger.record({ ts: Date.now(), source, target: t.id, kind, reason: req.reason, parentRunId: req.parentRunId, jobId: req.jobId,
@@ -84,7 +86,7 @@ export class Runner {
     req = { ...req, chainId, jobId: req.jobId ?? `chain-${chainId}` };      // "Allow for this job" covers the whole chain
     const ac = new AbortController();
     this.emit('run.started', id, { source, target: t.id, kind, reason: req.reason ?? null, parentRunId: req.parentRunId ?? null, chainId });
-    const hop = this.run(id, source, t, req, ac, !!o.preapproved).finally(() => this.running.delete(id));
+    const hop = this.run(id, source, t, req, ac, o).finally(() => this.running.delete(id));
     this.running.set(id, { ac, done: hop, target: t.id, source, chainId, at: Date.now() });
     void hop.then(r => this.next(r, req));
     return { id, done: this.chains.get(chainId)!.done };
@@ -98,7 +100,7 @@ export class Runner {
   }
   targets(): Target[] { return targets(this.d); }
   /** start(), after the dispatcher picked a target when the request names `auto` or one that is not available. */
-  async begin(source: string, req: RunRequest, o: { preapproved?: boolean } = {}) {
+  async begin(source: string, req: RunRequest, o: StartOpts = {}) {
     const known = this.targets().some(t => t.id === req.target);
     return this.start(source, known || !this.d.route ? req : await this.d.route(source, req), o);
   }
@@ -141,7 +143,7 @@ export class Runner {
     this.d.bus.emit({ ts: Date.now(), type: 'run.delivered', envId: 'hub', source: 'runner', data: { id: chainId, how } });
   }
 
-  private async run(id: number, source: string, t: Target, req: RunRequest, ac: AbortController, preapproved: boolean): Promise<RunRow> {
+  private async run(id: number, source: string, t: Target, req: RunRequest, ac: AbortController, o: StartOpts): Promise<RunRow> {
     const t0 = Date.now();
     const finish = (outcome: RunOutcome, patch: Partial<RunRow> = {}) => {
       this.d.ledger.update(id, { outcome, durationMs: Date.now() - t0, ...patch });
@@ -149,7 +151,7 @@ export class Runner {
       return this.d.ledger.get(id)!;
     };
     const s = this.d.settings;
-    const decision = preapproved ? { mode: 'allow' as const, why: 'a result going back to its caller' }
+    const decision = o.preapproved ? { mode: 'allow' as const, why: 'a result going back to its caller' }
       : runDecision(s.grants(), source, t.id, t.cost, { jobId: req.jobId, spentUsd: g => this.d.ledger.spentUsd(g) });
     if (decision.mode === 'deny') return finish('denied', { error: decision.why });
     if (decision.mode === 'ask') {
@@ -163,7 +165,7 @@ export class Runner {
     const deadline = setTimeout(() => ac.abort(new Error('deadline reached')), req.deadlineMs ?? s.get('delegate.deadlineSec') * 1000);
     let result = '', usage: Extract<RunEvent, { type: 'usage' }> | undefined, error: string | undefined, model = req.model;
     try {
-      for await (const e of this.engine(id, t, { ...req, task: withContext(req) }, ac.signal, m => { model = m; })) {
+      for await (const e of o.engine ? o.engine(ac.signal) : this.engine(id, t, { ...req, task: withContext(req) }, ac.signal, m => { model = m; })) {
         const r = this.running.get(id); if (r) r.at = Date.now();
         if (e.type === 'text') result += e.text;
         else if (e.type === 'tool') this.emit('run.event', id, { tool: e.name, summary: e.summary });
@@ -180,16 +182,20 @@ export class Runner {
   }
   private engine(id: number, t: Target, req: RunRequest, signal: AbortSignal, onModel: (m: string) => void): AsyncIterable<RunEvent> {
     if (t.kind === 'model') {
-      const host = this.d.host(), i = this.d.integrations().find(x => x.manifest.id === t.id);
-      if (!host || !i) throw new Error(`${t.id} is not available`);
-      const model = req.model ?? t.models[0];
-      const b = this.d.snapshot()!.backends.find(x => x.integration === t.id && x.model === model)!;
-      onModel(model);
-      const headers = openaiHeaders(i.manifest);
-      return openaiRun(host, { endpoint: b.endpoint, base: i.manifest.speaks!.openai!.base, model, concurrency: this.d.settings.get('backend.concurrency'), headers }, req,
-        { signal, onQueue: (waiting, running) => this.d.bus.emit({ ts: Date.now(), type: 'backend.queue', envId: host.id, source: t.id, data: { endpoint: b.endpoint, waiting, running } }) });
+      const s = this.server(t, req.model);
+      onModel(s.target.model);
+      return openaiRun(s.host, s.target, req, { signal, onQueue: s.onQueue });
     }
     return t.engine === 'chat' ? this.chatRun(id, t, req, signal) : this.d.runOn(t.envId, t.id, req, { signal, runId: id });
+  }
+  /** A model target's server as the OpenAI engine needs it (the run engine and the gateway's pass-through), and its queue reports. */
+  server(t: Target, model = t.models[0]) {
+    const host = this.d.host(), i = this.d.integrations().find(x => x.manifest.id === t.id);
+    const b = this.d.snapshot()?.backends.find(x => x.integration === t.id && x.model === model);
+    if (!host || !i || !b) throw new Error(`${t.id}${model ? `:${model}` : ''} is not available`);
+    const target: OpenAiTarget = { endpoint: b.endpoint, base: i.manifest.speaks!.openai!.base, model, concurrency: this.d.settings.get('backend.concurrency'), headers: openaiHeaders(i.manifest) };
+    const onQueue = (waiting: number, running: number) => this.d.bus.emit({ ts: Date.now(), type: 'backend.queue', envId: host.id, source: t.id, data: { endpoint: b.endpoint, waiting, running } });
+    return { host, target, onQueue };
   }
   /** Opens the task in the tool's chat, then waits for its `report` (a report run, a result handed back, waits for nothing). */
   private async *chatRun(id: number, t: Target, req: RunRequest, signal: AbortSignal): AsyncIterable<RunEvent> {

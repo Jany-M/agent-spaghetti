@@ -10,6 +10,7 @@ import { fakeEnv } from '@agent-spaghetti/sdk/testing';
 import { Consent } from '../../packages/core/src/consent.ts';
 import { Ledger } from '../../packages/core/src/ledger.ts';
 import { Runner } from '../../packages/core/src/runner.ts';
+import { Gateway } from '../../packages/core/src/gateway.ts';
 import { BUILTINS } from '@agent-spaghetti/integrations';
 import { Store } from '../../packages/core/src/store.ts';
 import { Bus } from '../../packages/core/src/bus.ts';
@@ -37,7 +38,7 @@ async function boot(scan: () => Promise<Snapshot> = async () => SNAP) {
   const resultsDir = mkdtempSync(join(tmpdir(), 'as-results-'));
   const runner = new Runner({ bus, consent, ledger, settings, resultsDir, host: () => host, snapshot: () => store.loadSnapshot('scan'), integrations: () => integrations,
     runOn: () => { throw new Error('no agents in this test'); } });
-  const services: Services = { store, bus, settings, consent, ledger, runner, host: () => host, cli: () => ({ command: 'node', args: ['/x/cli.ts'] }),
+  const services: Services = { store, bus, settings, consent, ledger, runner, gateway: new Gateway({ settings, store, runner }), host: () => host, cli: () => ({ command: 'node', args: ['/x/cli.ts'] }),
     shutdown: () => { stopped++; }, live: () => live, scan: async () => { const snap = await scan(); store.saveSnapshot('scan', snap); return snap; },
     loaded: () => ({ integrations, rejected: [] }),
     onEnvs: async (cmd, args, envIds) => {
@@ -208,7 +209,7 @@ test('runDaemon: concurrent scans share one; a tool starting or stopping trigger
     assert.equal(scans(), 2, 'first reports do not rescan; several changes → one rescan');
   } finally { await d.close(); }
 });
-test('CLI 3: targets, delegate to a free local model (result printed), runs, runs <id>, verdict, cancel', async () => {
+test('CLI 3: targets, delegate to a free local model (result printed), runs, runs <id>, verdict, cancel, gateway', async () => {
   const b = await boot();
   const cli = async (...a: string[]) => { const t = io(); const code = await run(a, t.io, b.env); return { code, out: t.o.join('\n'), err: t.e.join('\n') }; };
   try {
@@ -221,6 +222,9 @@ test('CLI 3: targets, delegate to a free local model (result printed), runs, run
     r = await cli('verdict', '1', 'meh'); assert.equal(r.code, 1);
     r = await cli('cancel', '1'); assert.match(r.out, /run 1 is not running/);
     r = await cli('delegate', 'nope', 'x'); assert.equal(r.code, 1); assert.match(r.err, /unknown or unavailable target nope/);
+    r = await cli('gateway'); assert.equal(r.out, 'Model gateway: off (set gateway.port, e.g. 4141)');
+    r = await cli('gateway', 'lmstudio', '--key', 'create'); assert.equal(r.code, 1); assert.match(r.err, /lmstudio cannot use a custom model endpoint/);
+    r = await cli('gateway', 'lmstudio', '--key', 'maybe'); assert.equal(r.code, 1); assert.match(r.err, /usage: .*gateway <tool>/);
     b.services.store.saveSnapshot('scan', { ...SNAP, detections: [...SNAP.detections, ...['windows', 'wsl:TestDistro'].map(envId => ({ ...SNAP.detections[0], integration: 'openclaw', name: 'OpenClaw', envId }))] });
     r = await cli('connect', 'openclaw', '--dry-run'); assert.equal(r.code, 0, r.err); assert.match(r.out, /^Would: add it \(wsl:TestDistro\)\n  x$/);
     assert.ok(b.calls.includes('connect openclaw {"command":"node","args":["/x/cli.ts"]} on dry-run windows'), 'tried the Windows install first');

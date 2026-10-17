@@ -37,6 +37,9 @@
       "entry": {
         "type": "stdio"
       }
+    },
+    "openaiClient": {
+      "setup": "In VS Code: Chat: Manage Language Models \u2192 Add Models \u2192 Custom Endpoint. Group name: Agent Spaghetti, API key: {key}, API type: Chat Completions.\nIn the chatLanguageModels.json that opens, add a model: { \"id\": \"auto\", \"name\": \"Agent Spaghetti (auto)\", \"url\": \"{url}/chat/completions\", \"toolCalling\": true, \"vision\": false, \"maxInputTokens\": 32768, \"maxOutputTokens\": 4096 }, save, and pick it in the chat's model picker.\nWhich LLM answers is chosen in Agent Spaghetti (Tools \u2192 VS Code \u2192 Model). Inline completions stay with GitHub (VS Code docs)."
     }
   }
 }

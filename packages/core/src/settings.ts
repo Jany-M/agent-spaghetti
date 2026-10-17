@@ -17,6 +17,8 @@ export const SETTINGS = {
   'delegate.deadlineSec': { default: 1800, help: 'Longest a delegated run may take' },
   'delegate.maxHops': { default: 8, help: 'Most hand-offs in one chain (hops plus nested delegations); stops loops' },
   'dispatcher.model': { default: '', help: 'Model the dispatcher thinks with: <target>:<model> from targets (empty = off: auto hand-offs go to the best-ranked target)' },
+  'gateway.port': { default: 0, help: 'Port of the model gateway on 127.0.0.1, the OpenAI-compatible endpoint tools can use (0 = off; e.g. 4141)' },
+  'gateway.routes': { default: [] as string[], help: 'Each tool\'s model through the gateway: <tool>=<target>:<model> or <tool>=auto (Tools → the tool → Model)' },
   'dispatcher.stuckMin': { default: 10, help: 'Minutes without progress before the dispatcher hands a run to another target (once per chain)' },
 } as const;
 export type SettingKey = keyof typeof SETTINGS;

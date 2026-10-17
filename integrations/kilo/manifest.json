@@ -46,6 +46,9 @@
         "enabled": true
       },
       "commandArray": true
+    },
+    "openaiClient": {
+      "setup": "In ~/.config/kilo/kilo.jsonc (the global one), add a provider:\n\"provider\": { \"agent-spaghetti\": { \"npm\": \"@ai-sdk/openai-compatible\", \"name\": \"Agent Spaghetti\", \"options\": { \"baseURL\": \"{url}\", \"apiKey\": \"{key}\" }, \"models\": { \"auto\": { \"name\": \"Agent Spaghetti (auto)\" } } } }\nThen pick agent-spaghetti/auto as the model in Kilo. Which LLM answers is chosen in Agent Spaghetti (Tools \u2192 Kilo \u2192 Model)."
     }
   }
 }

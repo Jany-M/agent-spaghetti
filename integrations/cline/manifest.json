@@ -40,6 +40,9 @@
     "mcpClient": {
       "config": "~/.cline/data/settings/cline_mcp_settings.json",
       "key": "mcpServers"
+    },
+    "openaiClient": {
+      "setup": "In Cline's settings: API Provider = OpenAI Compatible, Base URL = {url}, API Key = {key}, Model = auto.\nWhich LLM answers is chosen in Agent Spaghetti (Tools \u2192 Cline \u2192 Model). The model must support tool calls for agent work."
     }
   }
 }

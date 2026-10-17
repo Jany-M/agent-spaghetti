@@ -18,5 +18,10 @@
       "file": "~/.vscode/extensions/continue.continue-*/package.json",
       "json": "version"
     }
+  },
+  "speaks": {
+    "openaiClient": {
+      "setup": "In Continue's config.yaml, add under models:\n  - name: Agent Spaghetti (auto)\n    provider: openai\n    model: auto\n    apiBase: {url}\n    apiKey: {key}\nWhich LLM answers is chosen in Agent Spaghetti (Tools \u2192 Continue \u2192 Model)."
+    }
   }
 }

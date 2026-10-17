@@ -56,8 +56,8 @@ test('tools panel: blocks by type with counts, found first, missing folded; clie
   const { ToolsView, preferenceLists } = await import('@agent-spaghetti/ui');
   const row = (id: string, o: Record<string, unknown>) => ({ id, name: id.toUpperCase(), group: 'apps', source: 'builtin', levels: [], envs: ['windows'], state: 'installed', why: 'w', asks: 0, ...o }) as never;
   const props = { busy: null, error: null, closed: new Set(['apps', 'models']), tests: { ed: ['OK    detect'] }, details: {},
-    onToggleGroup: noop, onExpand: noop, onConnect: noop, onPreference: noop, onTest: noop, onSkip: noop, onSwitch: noop, onGrant: noop, onSetup: noop,
-    rows: [row('oc', { group: 'agents', setup: true }), row('ed', { connection: 'not connected', preference: 'ask', asks: 1 }), row('cur', { connection: 'connected', preference: 'always' }),
+    onToggleGroup: noop, onExpand: noop, onConnect: noop, onPreference: noop, onTest: noop, onSkip: noop, onSwitch: noop, onGrant: noop, onSetup: noop, onModel: noop, onKey: noop, gatewayUrl: null, models: ['lms:m1'],
+    rows: [row('oc', { group: 'agents', setup: true }), row('ed', { connection: 'not connected', preference: 'ask', asks: 1, gateway: { model: 'auto', key: false } }), row('cur', { connection: 'connected', preference: 'always' }),
       row('lms', { group: 'models', state: 'ready', receives: 'acp' }), row('gone', { state: 'not found' })] };
   const a = html(h(ToolsView, props));
   assert.match(a, /<details class="group" open="">.*?Editors &amp; apps · 2.*?1 in use/s, 'a waiting question opens a closed block');
@@ -66,6 +66,9 @@ test('tools panel: blocks by type with counts, found first, missing folded; clie
   assert.match(a, /ED<\/span>.*?installed.*?not connected.*?<button class="allow">Connect<\/button>/s);
   assert.match(a, /CUR<\/span>.*?<button class="">Disconnect<\/button>.*?<option value="always" selected="">Always connect/s);
   assert.match(a, /<pre>OK {4}detect<\/pre>/);
+  assert.match(a, /ED<\/span>.*?<label>Model <select aria-label="ED&#x27;s model through the gateway"><option value="auto" selected="">auto \(best free first\)<\/option><option value="lms:m1">lms:m1<\/option><\/select>.*?Model gateway off/s);
+  const on = html(h(ToolsView, { ...props, gatewayUrl: 'http://127.0.0.1:4141/v1', rows: [row('ed', { gateway: { model: 'lms:m1', key: true } })] }));
+  assert.match(on, />New gateway key<\/button>.*?>Revoke key<\/button>/s); assert.match(on, /<option value="lms:m1" selected="">/);
   assert.match(a, /LMS<\/span>.*?<span class="state ready" title="Tasks can be handed to it now">takes tasks \(ACP\)<\/span>/s);
   assert.match(a, /OC<\/span>.*?>Set up<\/button>.*?>Dry run<\/button>.*?>Check<\/button>/s, 'tools with setup offer it');
   assert.ok(!/ED<\/span>.*?>Set up</s.test(a.slice(a.indexOf('ED</span>'), a.indexOf('CUR</span>'))));

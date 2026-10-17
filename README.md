@@ -44,6 +44,16 @@ Status keeps itself current: running tools and model servers are re-checked ever
 - **Runs** shows each hand-off chain, where its result went and the result; rate it or cancel it there.
 - Third-party integrations (JSON files in the data folder's `integrations/`) do nothing until you allow each action (Tools → More).
 
+## Choose the LLM per tool (model gateway)
+
+Tools that accept a custom OpenAI-compatible endpoint (VS Code chat, OpenCode, Kilo, Cline, Roo Code, Continue) can use Agent Spaghetti's model gateway, so you pick each tool's LLM in one place, local or online.
+
+1. Settings → `gateway.port` (e.g. `4141`): the gateway listens on `127.0.0.1` only.
+2. Tools → the tool → **Use the gateway**: a key for that tool, shown once, with the exact steps for it. The tool asks for model `auto`.
+3. Tools → the tool → **Model**: `auto` (the best free model loaded) or a specific one. Change it here any time; the tool needs no change.
+
+Local models answer at once; a paid one (OpenAI or Anthropic API, found when `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` is set) asks you first, as hand-offs do. Every request is in **Runs** (no prompt text is stored). Limits: VS Code's inline completions stay with GitHub; Cursor cannot reach a local endpoint (its requests go through its servers), so it works through hand-offs instead.
+
 ## Per-tool notes
 
 - **OpenClaw:** Tools → OpenClaw → **Set up** installs its multi-step workflow pack (roles, settings, helpers; **Dry run** first if you like, **Check** any time). It needs a running gateway and `python3` on the gateway host. The model it uses is the setting `openclaw.model`: `auto` (keep the current one while it answers, else the best loaded local model), `keep`, or `<server>:<model>` from `targets`.

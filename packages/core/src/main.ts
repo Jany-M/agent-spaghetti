@@ -20,6 +20,7 @@ import { CONNECT_LABELS, connectionPlan } from './connections.ts';
 import { Ledger } from './ledger.ts';
 import { Runner } from './runner.ts';
 import { Dispatcher } from './dispatcher.ts';
+import { Gateway } from './gateway.ts';
 import { fileURLToPath } from 'node:url';
 
 /** How a client on the host runs agent-spaghetti (Agent Plugins need a bare command: node from PATH). */
@@ -81,6 +82,7 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
       yield* runOnEnv(e, await ctx(), id, req, ro);
     } });
   const dispatcher = new Dispatcher({ runner, settings, bus, ledger });
+  const gateway = new Gateway({ settings, store, runner });
   const watchdog = dispatcher.watch();
   const hubFiles = new Map<string, string>();
   /** Running distros reach the daemon on the Windows side of their network: listen there and tell them where (hub.json, user-only). */
@@ -135,7 +137,7 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
     }
   }
   const services: Services = {
-    store, bus, settings, consent, ledger, runner, host, loaded: () => loaded, live: () => live,
+    store, bus, settings, consent, ledger, runner, gateway, host, loaded: () => loaded, live: () => live,
     cli: envId => {
       const e = entries.find(x => x.status.id === envId);
       const p = e?.distro ? prepared(e.distro) : null;
@@ -167,7 +169,8 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
   const close = async () => {
     for (const id of session()) await connect(id, false);    // "Connect for this session" ends here
     setSession([]);
-    clearTimeout(rescan); clearInterval(autoScan); observers?.dispose(); watchdog.dispose(); clearInterval(pruneTimer); removeDiscovery(); await server.close(); store.close(); };
+    clearTimeout(rescan); clearInterval(autoScan); observers?.dispose(); watchdog.dispose(); await gateway.close(); clearInterval(pruneTimer); removeDiscovery(); await server.close(); store.close(); };
+  await gateway.sync().catch(e => process.stderr.write(`model gateway not started: ${(e as Error).message}\n`));   // e.g. its port is taken
   if (o.scanOnStart !== false) void services.scan().catch(e => process.stderr.write(`first scan failed: ${(e as Error).message}\n`));
   return { port: server.port, dir, services, close };
 }
