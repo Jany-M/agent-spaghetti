@@ -1,7 +1,7 @@
 // Tools panel (ADR 0009): every found tool, grouped by type in collapsible blocks; connect/disconnect, preference,
 // test, skip in scans; "More" shows its switches and, for third-party tools, what it may do.
 import { createElement as h, useState, type ReactNode } from 'react';
-import { ACTION_LABEL, TOOL_GROUPS, testLines, type DeclaredAction, type Grant, type Mode, type Switch, type ToolRow } from '@agent-spaghetti/sdk/web';
+import { ACTION_LABEL, ENGINE_LABEL, TOOL_GROUPS, testLines, type DeclaredAction, type Grant, type Mode, type Switch, type ToolRow } from '@agent-spaghetti/sdk/web';
 import type { Bridge } from './bridge.ts';
 import { useAct, useOp } from './hooks.ts';
 
@@ -33,7 +33,8 @@ function Row({ r, p }: { r: ToolRow; p: ToolsProps }) {
   return h('div', { className: `card tool${r.asks ? ' asking' : ''}` },
     h('div', { className: 'top' }, h('span', { className: 'name' }, r.name), r.version ? h('span', { className: 'meta' }, ` ${r.version}`) : null,
       h('span', { className: `state ${r.state.replace(' ', '-')}` }, r.state),
-      r.connection ? h('span', { className: `state ${r.connection === 'connected' ? 'ready' : 'installed'}` }, r.connection) : null),
+      r.connection ? h('span', { className: `state ${r.connection === 'connected' ? 'ready' : 'installed'}` }, r.connection) : null,
+      r.receives ? h('span', { className: 'state ready', title: 'Tasks can be handed to it now' }, `takes tasks (${ENGINE_LABEL[r.receives]})`) : null),
     h('div', { className: 'why' }, [r.why, r.envs.join(', ')].filter(Boolean).join(' · ')),
     h('div', { className: 'row' },
       r.connection ? h('button', { className: r.connection === 'connected' ? '' : 'allow', disabled: busy, onClick: () => p.onConnect(r.id, r.connection !== 'connected') },

@@ -213,9 +213,9 @@ test('CLI 3: targets, delegate to a free local model (result printed), runs, run
   const cli = async (...a: string[]) => { const t = io(); const code = await run(a, t.io, b.env); return { code, out: t.o.join('\n'), err: t.e.join('\n') }; };
   try {
     await cli('scan');
-    let r = await cli('targets'); assert.match(r.out, /lmstudio\s+LM Studio\s+model\s+free\s+m/);
+    let r = await cli('targets'); assert.match(r.out, /lmstudio\s+LM Studio\s+model\s+free\s+model API\s+m$/m);
     r = await cli('delegate', 'lmstudio', 'say', 'hi', '--kind', 'summarize', '--reason', 'test'); assert.equal(r.code, 0, r.err); assert.equal(r.out, 'Hi');
-    r = await cli('runs'); assert.match(r.out, /^\s+1 .+ cli → lmstudio \(m\)\s+summarize\s+done/m); assert.match(r.out, /· test$/m);
+    r = await cli('runs'); assert.match(r.out, /^\s+1 .+ cli → lmstudio \(m\)\s+summarize\s+done/m); assert.match(r.out, /done .*↩ returned  · test$/m);
     r = await cli('runs', '1'); assert.match(r.out, /\n\nHi$/);
     r = await cli('verdict', '1', 'redo'); assert.equal(r.code, 0); assert.match((await cli('runs')).out, /\[redo\]/);
     r = await cli('verdict', '1', 'meh'); assert.equal(r.code, 1);

@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ConsentScope, Delivery, Environment, Integration, RunEvent, RunOutcome, RunRequest, RunRow, Snapshot, Target } from '@agent-spaghetti/sdk';
-import { TASK_KINDS, programOf, runDecision, withGrants } from '@agent-spaghetti/sdk';
+import { AUTO, TASK_KINDS, programOf, runDecision, withGrants } from '@agent-spaghetti/sdk';
 import type { Bus } from './bus.ts';
 import type { Consent } from './consent.ts';
 import type { Ledger } from './ledger.ts';
@@ -49,9 +49,7 @@ const SCOPES = (jobId?: string): ConsentScope[] => (jobId ? ['once', 'job', 'alw
 /** `target[:model]` (target ids never contain ':'; models may). */
 export const parseHop = (hop: string) => { const i = hop.indexOf(':'); return i < 0 ? { target: hop } : { target: hop.slice(0, i), model: hop.slice(i + 1) || undefined }; };
 const withContext = (req: RunRequest) => (req.context ? `${req.task}\n\n## Context from the previous step\n${req.context}` : req.task);
-const INLINE_MS = 5000;
-/** The target that means "let Agent Spaghetti choose". */
-export const AUTO = 'auto';   // a caller that polled this recently is still waiting for the result
+const INLINE_MS = 5000;   // a caller that polled this recently is still waiting for the result
 
 export class Runner {
   private d: RunnerDeps;

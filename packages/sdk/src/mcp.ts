@@ -40,12 +40,12 @@ export function mcpHandler(client: HubClient, o: BridgeOpts, send: Send) {
           message: asking ? 'waiting for approval in Agent Spaghetti' : `running on ${v.run.target}` } });
       }
       await new Promise(r => setTimeout(r, o.pollMs ?? 1500));
-      v = (await client.call('runs', { id: v.id, watch: true })).final!;
+      v = (await client.call('runs', { id: v.id, watch: true, source: o.source })).final!;
     }
   }
   /** One run (its chain's final state), or every result waiting for this caller. */
   async function status(id: number | undefined): Promise<object> {
-    if (id !== undefined) return describeRun((await client.call('runs', { id, watch: true })).final!);
+    if (id !== undefined) return describeRun((await client.call('runs', { id, watch: true, source: o.source })).final!);
     const waiting = (await client.call('runs', { unread: true, source: o.source })).unread ?? [];
     return text(waiting.length ? waiting.map(v => `## Run ${v.id} (${v.run.target}): ${v.run.outcome}\n\n${v.result ?? v.run.error ?? '(no output)'}`).join('\n\n') : 'No new results.');
   }

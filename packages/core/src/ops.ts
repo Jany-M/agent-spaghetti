@@ -1,6 +1,6 @@
 // Handlers for the operations declared once in sdk/ops.ts. Per-environment work goes through Services.onEnvs (core/dispatch).
-import type { EnvResult, Grant, LiveState, OpId, OpIO, RunView, Snapshot, Target } from '@agent-spaghetti/sdk';
-import { OPS, declaredActions, levelsOf, renderConfigReport, toolRows, withGrants, withoutGrants } from '@agent-spaghetti/sdk';
+import type { EnvResult, Grant, LiveState, OpId, OpIO, RunView, SettingsOut, Snapshot, Target } from '@agent-spaghetti/sdk';
+import { OPS, declaredActions, rankTargets, levelsOf, renderConfigReport, toolRows, withGrants, withoutGrants } from '@agent-spaghetti/sdk';
 import type { Store } from './store.ts';
 import type { Bus } from './bus.ts';
 import type { Loaded } from './registry.ts';
@@ -91,8 +91,8 @@ export const handlers: Handlers = {
     s.settings.setGrants(withoutGrants(s.settings.grants(), subject, i.action, i.resource));
     return { grants: s.settings.grants().filter(g => g.subject === subject) };
   },
-  settings: (_i, s) => s.settings.all(),
-  setting: (i, s) => { s.settings.setText(need(i.key, 'key'), String(i.value ?? '')); return s.settings.all(); },
+  settings: (_i, s) => settingsView(s),
+  setting: (i, s) => { s.settings.setText(need(i.key, 'key'), String(i.value ?? '')); return settingsView(s); },
   disable: (i, s) => toggle(s, i.id, true),
   enable: (i, s) => toggle(s, i.id, false),
   report: (_i, s) => {
@@ -109,7 +109,8 @@ export const handlers: Handlers = {
     const { source, waitMs, ...req } = i;
     need(req.target, 'target'); need(req.task, 'task');
     const { id, done } = await s.runner.begin(source || 'cli', { ...req, parentRunId: req.parentRunId ? Number(req.parentRunId) : undefined, chainId: undefined });
-    if (Number(waitMs) > 0) { s.runner.watch(id); await Promise.race([done, new Promise(r => setTimeout(r, Number(waitMs)))]); s.runner.watch(id); }
+    s.runner.watch(id);                                       // the caller waits or polls next: a quick result is returned to it
+    if (Number(waitMs) > 0) { await Promise.race([done, new Promise(r => setTimeout(r, Number(waitMs)))]); s.runner.watch(id); }
     return chainView(s, id);
   },
   targets: (_i, s) => s.runner.targets(),
@@ -122,9 +123,10 @@ export const handlers: Handlers = {
     if (i.id === undefined || i.id === null || String(i.id) === '') return { runs: s.ledger.list({ since: num(i.since, 0), limit: num(i.limit, 50) }) };
     const run = s.ledger.get(num(i.id, 0));
     if (!run) throw new Error(`no run ${i.id}`);
-    if (i.watch) s.runner.watch(run.chainId);
+    const caller = i.watch && i.source === s.ledger.get(run.chainId)?.source;   // the chain's caller is polling: it gets the result inline
+    if (caller) s.runner.watch(run.chainId);
     const final = chainView(s, run.chainId);
-    if (i.watch && final.run.outcome !== 'running' && final.run.delivered === 'unread') s.ledger.update(run.chainId, { delivered: 'read' });   // collected by id
+    if (caller && final.run.outcome !== 'running' && final.run.delivered === 'unread') s.ledger.update(run.chainId, { delivered: 'read' });   // collected by id
     return { runs: s.ledger.chain(run.id), result: s.ledger.result(run), final };
   },
   handback: (i, s) => { s.runner.report(num(i.run_id, 0), need(i.source, 'source'), String(i.result ?? ''), i.status === 'failed'); return { ok: true }; },
@@ -175,6 +177,12 @@ export const handlers: Handlers = {
     return { ok: true };
   },
 };
+/** Settings plus the choices the GUI offers: the dispatcher thinks with a loaded model (free first). */
+function settingsView(s: Services): SettingsOut {
+  const all: SettingsOut = s.settings.all();
+  all['dispatcher.model'].choices = rankTargets(s.runner.targets().filter(t => t.kind === 'model')).flatMap(t => t.models.map(m => `${t.id}:${m}`));
+  return all;
+}
 /** A hand-off chain as its caller sees it: the last hop's record and result, still `running` until the chain has ended. */
 function chainView(s: Services, chainId: number): RunView {
   const hops = s.ledger.hops(chainId), first = hops[0];

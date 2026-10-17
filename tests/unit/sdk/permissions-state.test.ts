@@ -85,7 +85,7 @@ test('toolRows: group by first role in TOOL_GROUPS order; state, connection, pre
     loaded: [L('oc', ['agent', 'client']), L('lms', ['backend']), L('ed', ['client']), L('srv', ['backend']), L('gone', ['tool']), L('nope', ['client']), L('off', ['client'], true)] });
   const by = Object.fromEntries(rows.map(r => [r.id, r]));
   assert.deepEqual([by.oc.group, by.oc.connection, by.oc.preference, by.oc.envs.join()], ['agents', 'connected', 'always', 'wsl:T,windows']);
-  assert.deepEqual([by.lms.group, by.lms.state, by.lms.connection], ['models', 'ready', undefined]);
+  assert.deepEqual([by.lms.group, by.lms.state, by.lms.connection, by.lms.receives], ['models', 'ready', undefined, 'openai']);
   assert.deepEqual([by.ed.state, by.ed.connection, by.ed.preference, by.ed.asks], ['running', 'not connected', 'ask', 1]);
   assert.deepEqual([by.srv.state, by.gone.state, by.nope.state, by.off.state, by.off.why], ['stopped', 'stopped', 'not found', 'skipped', 'skipped in scans']);
   const text = renderToolRows(rows);

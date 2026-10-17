@@ -61,7 +61,7 @@ test('MCP delegate: progress while waiting for approval, result text, still-runn
   assert.deepEqual(st.result.content, [{ type: 'text', text: 'the answer' }]);
   const gone: any = await h({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'run_status', arguments: { id: 1 }, _meta: meta } });
   assert.deepEqual([gone.result.isError, gone.result.content[0].text], [true, 'no run 1']);
-  assert.ok(f.calls.filter(c => c[0] === 'runs' && c[1].id).every(c => c[1].watch), 'polling marks the caller as waiting (result inline)');
+  assert.ok(f.calls.filter(c => c[0] === 'runs' && c[1].id).every(c => c[1].watch && c[1].source === 'cursor'), 'polling marks the caller as waiting (result inline)');
   const un: any = await h({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'run_status', arguments: {}, _meta: meta } });
   assert.deepEqual(f.calls.at(-1), ['runs', { unread: true, source: 'cursor' }]);
   assert.equal(un.result.content[0].text, '## Run 7 (claude-cli): done\n\nthe answer');

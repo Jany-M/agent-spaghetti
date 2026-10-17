@@ -72,8 +72,8 @@ export interface OpIO {
   permissions: { in: {}; out: { subjects: Array<{ subject: string; declared: DeclaredAction[] }>; grants: Grant[]; pending: NonNullable<Snapshot['pending']> } };
   grant: { in: GrantIn; out: { grants: Grant[] } };
   revoke: { in: Omit<GrantIn, 'mode'>; out: { grants: Grant[] } };
-  settings: { in: {}; out: Record<string, { value: unknown; help: string }> };
-  setting: { in: { key: string; value: string }; out: Record<string, { value: unknown; help: string }> };
+  settings: { in: {}; out: SettingsOut };
+  setting: { in: { key: string; value: string }; out: SettingsOut };
   disable: { in: { id: string }; out: { disabled: string[] } };
   enable: { in: { id: string }; out: { disabled: string[] } };
   report: { in: {}; out: { markdown: string } };
@@ -82,7 +82,7 @@ export interface OpIO {
   delegate: { in: RunRequest & { source?: string; waitMs?: number }; out: RunView };
   targets: { in: {}; out: Target[] };
   handback: { in: { run_id: number; result: string; status?: 'done' | 'failed'; source?: string }; out: { ok: true } };
-  runs: { in: { id?: number; since?: number; limit?: number; watch?: boolean; unread?: boolean; source?: string };
+  runs: { in: { id?: number; since?: number; limit?: number; watch?: boolean; unread?: boolean; source?: string };   // watch + source: the chain's caller polling
     out: { runs: RunRow[]; result?: string; final?: RunView; unread?: RunView[] } };   // final: the chain's view (id = chain); unread: given once
   cancel: { in: { id: number }; out: { cancelled: boolean } };
   verdict: { in: { id: number; value: 'up' | 'down' | 'redo' }; out: { ok: true } };
@@ -91,6 +91,8 @@ export interface OpIO {
   hook: { in: { client: string; event: string; data?: Record<string, unknown> }; out: { ok: true } };
 }
 /** A delegated run as callers see it: its record and, once finished, the result text. */
+/** Every setting; `choices`: the values that make sense now (e.g. the loaded models for dispatcher.model, best first). */
+export type SettingsOut = Record<string, { value: unknown; help: string; choices?: string[] }>;
 export interface RunView { id: number; run: RunRow; result?: string }
 export type ConnectResult = import('./types.ts').Connected & { integration: string; envId: string };
 export const STREAM_PATH = '/v1/events/stream';

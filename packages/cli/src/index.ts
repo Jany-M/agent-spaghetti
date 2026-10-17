@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // `agent-spaghetti` CLI: thin. Every command is an op through HubClient, rendered by sdk/format. No logic of its own.
 import { writeFileSync } from 'node:fs';
-import { DaemonDown, HubClient, OPS, SCOPE_LABEL, detectionRows, describeRun, eventLine, permissionRows, runLine, renderStats, renderTable, renderToolRows, renderTree, serveMcpStdio, switchRows, testLines,
+import { DaemonDown, ENGINE_LABEL, HubClient, OPS, SCOPE_LABEL, detectionRows, describeRun, eventLine, permissionRows, runLine, renderStats, renderTable, renderToolRows, renderTree, serveMcpStdio, switchRows, testLines,
   type Action, type ConsentRequest, type ConsentScope, type OpId, type TaskKind } from '@agent-spaghetti/sdk';
 import { planHook } from './hook.ts';
 
@@ -119,12 +119,12 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
         const [, target, ...task] = args;
         if (!target || !task.length) { io.err(`usage: agent-spaghetti ${OPS.delegate.usage}`); return 1; }
         let v = await c.call('delegate', { target, task: task.join(' '), kind, reason, model, then: then?.split(',').filter(Boolean), source: 'cli', waitMs: 0 });
-        while (v.run.outcome === 'running') { await new Promise(r => setTimeout(r, 1000)); v = (await c.call('runs', { id: v.id, watch: true })).final!; }
+        while (v.run.outcome === 'running') { await new Promise(r => setTimeout(r, 1000)); v = (await c.call('runs', { id: v.id, watch: true, source: 'cli' })).final!; }
         const d = describeRun(v);
         print(v, () => d.content[0].text);
         return 'isError' in d ? 1 : 0;
       }
-      case 'targets': { const r = await c.call('targets'); print(r, () => r.length ? renderTable([['Target', 'Name', 'Kind', 'Cost', 'Models / agents'], ...r.map(t => [t.id, t.name, t.kind, t.cost, t.models.join(', ') || '-'])]) : 'Nothing to delegate to yet (scan first; start a local model server or install an agent).'); break; }
+      case 'targets': { const r = await c.call('targets'); print(r, () => r.length ? renderTable([['Target', 'Name', 'Kind', 'Cost', 'Takes tasks via', 'Models / agents'], ...r.map(t => [t.id, t.name, t.kind, t.cost, ENGINE_LABEL[t.engine], t.models.join(', ') || '-'])]) : 'Nothing to delegate to yet (scan first; start a local model server or install an agent).'); break; }
       case 'runs': {
         const r = await c.call('runs', a1 ? { id: Number(a1) } : {});
         print(r, () => [...r.runs.map(runLine), ...(r.result ? ['', r.result] : [])].join('\n') || 'No runs yet.');

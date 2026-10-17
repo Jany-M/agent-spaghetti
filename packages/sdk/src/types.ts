@@ -100,6 +100,8 @@ export type TaskKind = (typeof TASK_KINDS)[number];
 export const HANDOFF_KINDS = TASK_KINDS.filter(k => k !== 'report');
 /** One hand-off (ADR 0010 envelope). `then` = the next hops (`target[:model]`), each getting the previous result as `context`;
  *  the last result goes back to the caller (`returnTo`, default 'caller'), into `returnSession` when the caller knows its session. */
+/** The target that means "let Agent Spaghetti choose" (core/dispatcher.ts). */
+export const AUTO = 'auto';
 export interface RunRequest {
   target: string; task: string; kind?: TaskKind; reason?: string; model?: string;
   cwd?: string; resultDir?: string; jobId?: string; parentRunId?: number; deadlineMs?: number;

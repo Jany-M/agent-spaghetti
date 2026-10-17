@@ -1,4 +1,4 @@
-// Settings panel: one field per setting from the `settings` op (lists as comma separated text, numbers as numbers),
+// Settings panel: one field per setting from the `settings` op (lists as comma separated text, numbers as numbers, a pick list when it offers choices),
 // saved when the field is left; the machine report as a file download.
 import { createElement as h } from 'react';
 import type { OpIO } from '@agent-spaghetti/sdk/web';
@@ -14,7 +14,9 @@ export function SettingsView({ settings, busy, error, onSave, onReport }: { sett
     error ? h('div', { className: 'card error', role: 'alert' }, error) : null,
     h('div', { className: 'card form' }, ...Object.entries(settings ?? {}).map(([k, s]) => h('label', { key: k, className: 'setting' },
       h('span', { className: 'name' }, k), h('span', { className: 'why' }, s.help),
-      h('input', { name: k, defaultValue: settingText(s.value), key: settingText(s.value), type: typeof s.value === 'number' ? 'number' : 'text', disabled: busy === k,
+      s.choices ? h('select', { name: k, value: settingText(s.value), disabled: busy === k, onChange: (e: { target: { value: string } }) => onSave(k, e.target.value) },
+        h('option', { value: '' }, 'off'), ...[...new Set([...s.choices, settingText(s.value)])].filter(Boolean).map(c => h('option', { key: c, value: c }, c)))
+      : h('input', { name: k, defaultValue: settingText(s.value), key: settingText(s.value), type: typeof s.value === 'number' ? 'number' : 'text', disabled: busy === k,
         onBlur: (e: { target: { value: string } }) => { if (e.target.value !== settingText(s.value)) onSave(k, e.target.value); },
         onKeyDown: (e: { key: string; currentTarget: { blur(): void } }) => { if (e.key === 'Enter') e.currentTarget.blur(); } })))),
     h('div', { className: 'card' }, h('h2', null, 'Machine report'),

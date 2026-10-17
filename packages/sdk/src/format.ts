@@ -1,5 +1,5 @@
 // The one place that turns data into text (CLI, tray tooltip, app). Names always come from manifests.
-import type { AgentInfo, BackendInfo, Level, Role, RunRow, Snapshot, StoredEvent, Switch, Target, TestResult } from './types.ts';
+import type { AgentInfo, BackendInfo, Delivery, Level, Role, RunRow, Snapshot, StoredEvent, Switch, Target, TestResult } from './types.ts';
 import type { LiveState } from './state.ts';
 import type { ConsentRequest, DeclaredAction, Grant } from './permissions.ts';
 
@@ -92,7 +92,12 @@ export function renderStats(up: boolean, snap: Snapshot | null, live: LiveState,
 
 /** One run as a line (CLI `runs`, the Runs panel). */
 export const runLine = (r: RunRow) => `${String(r.id).padStart(4)}  ${new Date(r.ts).toLocaleString()}  ${r.source} → ${r.target}${r.model ? ` (${r.model})` : ''}  ${r.kind}  ${r.outcome}`
-  + `${r.durationMs ? ` ${Math.round(r.durationMs / 1000)}s` : ''}${r.costUsd ? ` $${r.costUsd.toFixed(4)}` : ''}${r.verdict ? ` [${r.verdict}]` : ''}${r.reason ? `  · ${r.reason}` : ''}`;
+  + `${r.durationMs ? ` ${Math.round(r.durationMs / 1000)}s` : ''}${r.costUsd ? ` $${r.costUsd.toFixed(4)}` : ''}${r.verdict ? ` [${r.verdict}]` : ''}`
+  + `${r.delivered ? `  ↩ ${DELIVERY_LABEL[r.delivered]}` : ''}${r.reason ? `  · ${r.reason}` : ''}`;
+/** How a target takes tasks (ADR 0010 §2), as people read it. */
+export const ENGINE_LABEL: Record<Target['engine'], string> = { openai: 'model API', acp: 'ACP', module: 'its CLI', chat: 'its chat' };
+/** Where a chain's result went (ADR 0010), as people read it. */
+export const DELIVERY_LABEL: Record<Delivery, string> = { inline: 'returned', resumed: 'resumed in its session', injected: 'sent to its chat', unread: 'waiting to be read', read: 'read' };
 /** One event as a line (CLI `events`, the Activity panel). */
 export const eventLine = (e: StoredEvent) => `${new Date(e.ts).toTimeString().slice(0, 8)}  ${e.type}  ${e.source}  ${e.envId}`;
 
@@ -110,6 +115,7 @@ export interface ToolRow {
   preference?: 'always' | 'never' | 'ask';                  // clients only (ADR 0009)
   asks: number;                                             // questions about this tool waiting for the user
   setup?: true;                                             // has tool-side setup (Set up / Check)
+  receives?: Target['engine'];                              // can take tasks now, through this engine
 }
 export interface ToolInput {
   loaded: Array<{ id: string; name: string; source: 'builtin' | 'user'; roles: Role[]; levels: Level[]; disabled: boolean; setup?: boolean }>;
@@ -120,8 +126,8 @@ export function toolRows(x: ToolInput): ToolRow[] {
   return x.loaded.map((i): ToolRow => {
     const dets = x.snapshot?.detections.filter(d => d.integration === i.id) ?? [];
     const live = Object.values(x.live.tools).filter(t => t.integration === i.id);
-    const client = dets.filter(d => d.connected !== undefined);
-    const state: ToolState = i.disabled ? 'skipped' : !dets.length ? 'not found' : x.targets.some(t => t.id === i.id) ? 'ready'
+    const client = dets.filter(d => d.connected !== undefined), target = x.targets.find(t => t.id === i.id);
+    const state: ToolState = i.disabled ? 'skipped' : !dets.length ? 'not found' : target ? 'ready'
       : live.some(t => t.running) ? 'running' : live.length || dets.every(d => d.connectable === 'needs-setup') ? 'stopped'
       : dets.some(d => d.installs.some(n => n.via === 'process')) ? 'running' : 'installed';
     return {
@@ -131,6 +137,7 @@ export function toolRows(x: ToolInput): ToolRow[] {
       ...(client.length ? { connection: client.some(d => d.connected) ? 'connected' as const : 'not connected' as const,
         preference: x.prefs.auto.includes(i.id) ? 'always' as const : x.prefs.never.includes(i.id) ? 'never' as const : 'ask' as const } : {}),
       asks: x.consents.filter(c => c.subject === i.id).length, ...(i.setup ? { setup: true as const } : {}),
+      ...(target ? { receives: target.engine } : {}),
     };
   }).sort((a, b) => a.name.localeCompare(b.name));   // alphabetical: no tool comes first by design (ADR 0010)
 }
