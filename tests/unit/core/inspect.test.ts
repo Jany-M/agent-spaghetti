@@ -95,3 +95,10 @@ test('processNotIn: a copy bundled inside another tool (any slash, any case) is 
   assert.equal(await inspect(llama, fakeEnv(), ctx('C:\\Users\\u\\.LMStudio\\extensions\\backends\\x\\llama-server.exe')), null);
   assert.equal((await inspect(llama, fakeEnv(), ctx('/home/u/llama.cpp/build/bin/llama-server')))!.detection.installs[0].via, 'process');
 });
+test('a running program at the manifest path is the program (bundled CLI), a desktop app exe is not', async () => {
+  const exe = '%LOCALAPPDATA%/App/app-*/bin/tool.exe';   // the fake glob() returns the pattern itself as the match
+  const { r } = await run({ roles: ['agent'], detect: { process: ['tool', 'App'], paths: ['%LOCALAPPDATA%/App/app-*/bin/tool.exe'] } }, {
+    inventory: { processes: [{ name: 'tool', pid: 7, path: exe }, { name: 'App', pid: 8, path: 'C:/Users/u/AppData/Local/App/App.exe' }] },
+    files: { [exe]: '' } });
+  assert.deepEqual(r!.detection.installs.map(i => [i.via, i.path]), [['path', exe], ['process', 'C:/Users/u/AppData/Local/App/App.exe']]);
+});

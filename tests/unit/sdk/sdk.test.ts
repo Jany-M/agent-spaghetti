@@ -23,8 +23,7 @@ test('programOf: the tool\'s own program by name (any extension); never an app o
     { path: 'C:\\u\\AppData\\Local\\KiloDesktop\\app-1\\resources\\kilo\\win\\bin\\kilo.exe', via: 'path' as const }] };
   assert.match(programOf(det, 'kilo')!, /kilo\.exe$/);
   assert.equal(programOf(det, 'cline'), undefined);
-  assert.equal(programOf({ installs: [{ path: 'C:/Apps/Kilo/kilo-desktop.exe', via: 'process' }, { path: 'C:/Apps/Kilo/bin/kilo.exe', via: 'process' }] }, 'kilo'), 'C:/Apps/Kilo/bin/kilo.exe', 'a running program counts');
-  assert.equal(programOf({ installs: [{ path: 'C:/Apps/Kilo/bin/kilo.exe', via: 'process' }] }), undefined, 'without a name only PATH or manifest paths');
+  assert.equal(programOf({ installs: [{ path: 'C:/Apps/OpenCode/OpenCode.exe', via: 'process' }] }, 'opencode'), undefined, 'a desktop app\'s own exe is not its CLI');
   assert.equal(programOf({ installs: [{ path: '/usr/bin/x', via: 'bin' }] }), '/usr/bin/x');
 });
 const ok = { manifest: 1, id: 'x-y', name: 'X', roles: ['backend'], detect: { http: { port: 1, path: '/v1' }, paths: { linux: ['~/x'] }, version: { from: 'installed' } } };

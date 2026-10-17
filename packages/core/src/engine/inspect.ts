@@ -18,8 +18,9 @@ async function findInstalls(env: Environment, d: Detect, inv: Inventory): Promis
   const out: Install[] = [];
   const add = (x: Install) => {
     if (!x.path && x.via !== 'process') return;
-    if (x.path && out.some(o => o.path && samePath(o.path, x.path!, env.kind))) return;
-    out.push(x);
+    const same = x.path ? out.find(o => o.path && samePath(o.path, x.path!, env.kind)) : undefined;
+    if (!same) out.push(x);
+    else if (same.via === 'process' && (x.via === 'bin' || x.via === 'path')) same.via = x.via;   // a running program found where the manifest says: it is the program
   };
   for (const a of inv.installed) if (d.installed?.some(p => wildcard(p, a.name))) add({ path: a.location, version: a.version, via: 'installed' });
   for (const x of processInstalls(d, inv)) add(x);
