@@ -208,7 +208,7 @@ function settingsView(s: Services): SettingsOut {
   const tools = s.loaded().integrations.map(i => ({ value: i.manifest.id, label: i.manifest.name })).sort((a, b) => a.label.localeCompare(b.label));
   const from = {
     tools: () => tools,
-    clients: () => tools.filter(t => s.loaded().integrations.find(i => i.manifest.id === t.value)!.manifest.roles.includes('client')),
+    clients: () => tools.filter(t => snapshot(s)?.detections.some(d => d.integration === t.value && d.connected !== undefined)),   // found and connectable here
     models: () => rankTargets(s.runner.targets().filter(t => t.kind === 'model')).flatMap(t => t.models.map(m => ({ value: `${t.id}:${m}`, label: `${t.name}: ${m}` }))),
   };
   return Object.fromEntries(Object.entries(s.settings.all()).map(([k, { choices, ...v }]) => [k, choices

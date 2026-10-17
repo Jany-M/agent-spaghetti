@@ -237,6 +237,13 @@ test('CLI 3: targets, delegate to a free local model (result printed), runs, run
     r = await cli('verdict', '1', 'meh'); assert.equal(r.code, 1);
     r = await cli('cancel', '1'); assert.match(r.out, /run 1 is not running/);
     r = await cli('delegate', 'nope', 'x'); assert.equal(r.code, 1); assert.match(r.err, /unknown or unavailable target nope/);
+    b.services.store.saveSnapshot('scan', { ...SNAP, detections: [...SNAP.detections, { ...SNAP.detections[0], integration: 'acme', name: 'Acme', connected: false }] });
+    const set = await b.client.call('settings');
+    assert.deepEqual(set['connect.auto'].choices, [{ value: 'acme', label: 'Acme' }], 'clients found and connectable here');
+    assert.deepEqual(set.disabled.choices!.map(c => c.value), ['acme', 'lmstudio'], 'any loaded tool, by name');
+    assert.deepEqual(set['dispatcher.model'].choices, [{ value: '', label: 'off' }, { value: 'lmstudio:m', label: 'LM Studio: m' }], 'loaded models');
+    assert.equal(set['scan.everyMin'].choices, undefined);
+    b.services.store.saveSnapshot('scan', SNAP);
     r = await cli('gateway'); assert.equal(r.out, 'Model gateway: off (set gateway.port, e.g. 4141)');
     r = await cli('gateway', 'lmstudio', '--key', 'create'); assert.equal(r.code, 1); assert.match(r.err, /lmstudio cannot use a custom model endpoint/);
     r = await cli('gateway', 'lmstudio', '--key', 'maybe'); assert.equal(r.code, 1); assert.match(r.err, /usage: .*gateway <tool>/);
