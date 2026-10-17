@@ -13,7 +13,7 @@ Your AI tools each live in their own world. Agent Spaghetti untangles them: it m
 Agent Spaghetti is a **switchboard** for the AI tools on your machine. Any tool can hand a task to any other tool, and the result comes back to the one that asked: coding agents (Claude Code, Codex, OpenCode, Cline, Kilo, OpenClaw, …), IDE chats (VS Code, Cursor, …), desktop apps (Claude Desktop, AnythingLLM, …) and models (LM Studio, Ollama, llama.cpp, vLLM or a hosted API). No tool sits in the middle and none is preferred: you decide who does what.
 
 - **See** what is installed and running, on Windows and in your WSL distros, and which model each agent uses.
-- **Connect** your tools once (one click each): they get the `agent-spaghetti` tools (`delegate`, `targets`, `run_status`).
+- **Connect** your tools once (one click each): they get the `agent-spaghetti` tools (`delegate`, `targets`, `run_status`, `report`).
 - **Hand off** a task from any connected tool, or from the tray, to any target. Free local models run at once; anything that may cost money asks you first. Every hand-off is recorded (who, what kind, why, outcome, cost, result).
 
 <div align="center">
@@ -36,9 +36,12 @@ Status keeps itself current: running tools and model servers are re-checked ever
 
 ## Hand off work and get results back
 
-- From a connected tool: ask its agent to delegate (for example "have the local model write the tests"), or in Cursor start a prompt with `>>target ` to send it without using Cursor's model.
-- From the tray: **Runs → New task**. From a terminal: `delegate <target> <task> [--model <model or agent>]`.
-- **Runs** shows each hand-off chain (an agent that delegates further while it works is part of the same chain) and its result; rate it or cancel it there.
+- From a connected tool: ask its agent to delegate (for example "have the local model write the tests, then Claude Code review them"), or in Cursor start a prompt with `>>target ` to send it without using Cursor's model.
+- From the tray: **Runs → New task**. From a terminal: `delegate <target> <task> [--model <m>] [--then <target>,…]`.
+- **Chains:** a hand-off can name next steps (`then`); each step gets the previous result, and the last result goes back to whoever asked: straight into the waiting call, into the caller's own session when it can continue one, into its chat (VS Code), or as a result waiting for it (`run_status`, the tray tells you).
+- **`auto`** lets Agent Spaghetti pick the target: the best free one, or the one its dispatcher model chooses (Settings → `dispatcher.model`, off by default). With a dispatcher model set, a hand-off that stops progressing is passed to another target once.
+- Targets take tasks through the standard each tool offers: the model API (LM Studio, Ollama, …), ACP (OpenCode, Kilo, Cline), their own CLI (Claude Code, Codex, OpenClaw) or their chat (VS Code). **Tools** shows which ones can take tasks now.
+- **Runs** shows each hand-off chain, where its result went and the result; rate it or cancel it there.
 - Third-party integrations (JSON files in the data folder's `integrations/`) do nothing until you allow each action (Tools → More).
 
 ## Per-tool notes
