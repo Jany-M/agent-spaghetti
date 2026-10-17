@@ -46,7 +46,8 @@ async function follow() {
     try {
       client = await connect(); up = true; wait = 1000;
       send({ type: 'hub.up' }); refreshSoon();
-      for await (const e of client.stream()) { send(e); refreshSoon(); if (e.type === 'run.delivered' && e.data.how === 'unread') notify(`Result of run ${e.data.id} is waiting`, 'Its caller was no longer waiting: see Runs.'); }
+      for await (const e of client.stream()) { send(e); refreshSoon(); if (e.type === 'run.delivered' && e.data.how === 'unread') notify(`Result of run ${e.data.id} is waiting`, 'Its caller was no longer waiting: see Runs.');
+        if (e.type === 'dispatcher.action' && e.data.what === 'stuck') notify(`Run ${e.data.id} on ${e.data.target} is not progressing`, 'Cancel it in Runs, or let its deadline end it.'); }
     } catch (e) { if (!(e instanceof DaemonDown)) console.error(e); }
     if (up) { up = false; client = null; send({ type: 'hub.down' }); void refresh(); }
     await new Promise(r => setTimeout(r, wait));

@@ -17,6 +17,8 @@ import { deliver } from './returns.ts';
 export interface RunnerDeps {
   bus: Bus; consent: Consent; ledger: Ledger; settings: Settings; resultsDir: string;
   host(): Environment | null; snapshot(): Snapshot | null; integrations(): Integration[];
+  /** A target for a hop that names `auto` or an unavailable one (core/dispatcher.ts); without it such hops are refused. */
+  route?(source: string, req: RunRequest): Promise<RunRequest>;
   /** An agent's run in the environment where it was found (core/dispatch.ts runOnEnv). */
   runOn(envId: string, id: string, req: RunRequest, o: { signal: AbortSignal; runId: number }): AsyncIterable<RunEvent>;
 }
@@ -47,11 +49,14 @@ const SCOPES = (jobId?: string): ConsentScope[] => (jobId ? ['once', 'job', 'alw
 /** `target[:model]` (target ids never contain ':'; models may). */
 export const parseHop = (hop: string) => { const i = hop.indexOf(':'); return i < 0 ? { target: hop } : { target: hop.slice(0, i), model: hop.slice(i + 1) || undefined }; };
 const withContext = (req: RunRequest) => (req.context ? `${req.task}\n\n## Context from the previous step\n${req.context}` : req.task);
-const INLINE_MS = 5000;   // a caller that polled this recently is still waiting for the result
+const INLINE_MS = 5000;
+/** The target that means "let Agent Spaghetti choose". */
+export const AUTO = 'auto';   // a caller that polled this recently is still waiting for the result
 
 export class Runner {
   private d: RunnerDeps;
-  private running = new Map<number, { ac: AbortController; done: Promise<RunRow>; target: string }>();
+  private running = new Map<number, { ac: AbortController; done: Promise<RunRow>; target: string; source: string; chainId: number; at: number }>();
+  private retries = new Map<number, string>();                                               // stuck hop → the target that takes it over
   private chains = new Map<number, Chain & { done: Promise<RunRow>; resolve(r: RunRow): void }>();
   private reports = new Map<number, (r: { result: string; failed: boolean }) => void>();   // chat runs waiting for `report`
   constructor(d: RunnerDeps) { this.d = d; }
@@ -59,11 +64,11 @@ export class Runner {
   /** Starts a hand-off and returns its id at once; `done` settles with the chain's last run record.
    *  `preapproved`: a result going back to its caller (no new question, still recorded). */
   start(source: string, req: RunRequest, o: { preapproved?: boolean } = {}): { id: number; done: Promise<RunRow> } {
-    const t = targets(this.d).find(x => x.id === req.target);
+    const t = this.targets().find(x => x.id === req.target);
     if (!t) throw new Error(`unknown or unavailable target ${req.target} (see: targets)`);
     if (req.model && t.models.length && !t.models.includes(req.model))
       throw new Error(`${t.name} has no ${t.kind === 'model' ? 'loaded model' : 'agent'} ${req.model} (${t.kind === 'model' ? 'loaded' : 'agents'}: ${t.models.join(', ')})`);
-    for (const hop of req.then ?? []) if (!targets(this.d).some(x => x.id === parseHop(hop).target)) throw new Error(`unknown or unavailable target ${parseHop(hop).target} in then (see: targets)`);
+    for (const hop of req.then ?? []) if (parseHop(hop).target !== AUTO && !this.targets().some(x => x.id === parseHop(hop).target)) throw new Error(`unknown or unavailable target ${parseHop(hop).target} in then (see: targets)`);
     const kind = req.kind && (TASK_KINDS as readonly string[]).includes(req.kind) ? req.kind : 'other';
     // An agent that delegates while it runs a delegated task works on that task (one such run: it is the parent).
     const busy = [...this.running].filter(([, r]) => r.target === source);
@@ -82,7 +87,7 @@ export class Runner {
     const ac = new AbortController();
     this.emit('run.started', id, { source, target: t.id, kind, reason: req.reason ?? null, parentRunId: req.parentRunId ?? null, chainId });
     const hop = this.run(id, source, t, req, ac, !!o.preapproved).finally(() => this.running.delete(id));
-    this.running.set(id, { ac, done: hop, target: t.id });
+    this.running.set(id, { ac, done: hop, target: t.id, source, chainId, at: Date.now() });
     void hop.then(r => this.next(r, req));
     return { id, done: this.chains.get(chainId)!.done };
   }
@@ -93,17 +98,33 @@ export class Runner {
     if (run.target !== source) throw new Error(`only ${run.target} can report run ${id}`);
     done({ result, failed });
   }
-  cancel(id: number): boolean { const r = this.running.get(id); r?.ac.abort(new Error('cancelled')); return !!r; }
+  targets(): Target[] { return targets(this.d); }
+  /** start(), after the dispatcher picked a target when the request names `auto` or one that is not available. */
+  async begin(source: string, req: RunRequest, o: { preapproved?: boolean } = {}) {
+    const known = this.targets().some(t => t.id === req.target);
+    return this.start(source, known || !this.d.route ? req : await this.d.route(source, req), o);
+  }
+  cancel(id: number, why = 'cancelled'): boolean { const r = this.running.get(id); r?.ac.abort(new Error(why)); return !!r; }
+  /** Runs in progress and when each last showed progress (the dispatcher's watchdog). */
+  active() { return [...this.running].map(([id, r]) => ({ id, target: r.target, source: r.source, chainId: r.chainId, at: r.at })); }
+  /** A stuck hop goes to another target: cancelled here, started again there in the same chain. */
+  handOver(id: number, target: string): boolean { if (!this.running.has(id)) return false; this.retries.set(id, target); return this.cancel(id, `no progress: handed to ${target}`); }
   /** The caller is polling this chain: it gets the result inline when the chain ends. */
   watch(chainId: number): void { const c = this.chains.get(chainId); if (c) c.watchedAt = Date.now(); }
   wait(chainId: number): Promise<RunRow> | null { return this.chains.get(chainId)?.done ?? null; }
 
   /** After a hop: the next one (previous result as context, same chain), or the chain ends and its result goes back. */
   private async next(row: RunRow, req: RunRequest) {
+    const over = this.retries.get(row.id);
+    if (over) {
+      this.retries.delete(row.id);
+      try { this.start(row.source, { ...req, target: over, model: undefined, session: undefined }); return; }
+      catch (e) { this.d.ledger.update(row.id, { error: `${row.error}; not handed over: ${(e as Error).message}` }); }
+    }
     const [hop, ...rest] = req.then ?? [];
     if (row.outcome === 'done' && hop) {
       try {
-        this.start(row.target, { ...req, ...parseHop(hop), session: undefined, context: this.d.ledger.result(row), then: rest, parentRunId: row.id }); return;
+        await this.begin(row.target, { ...req, ...parseHop(hop), session: undefined, context: this.d.ledger.result(row), then: rest, parentRunId: row.id }); return;
       } catch (e) { this.d.ledger.update(row.id, { error: `next hop not started: ${(e as Error).message}` }); }
     }
     const c = this.chains.get(req.chainId!);
@@ -113,7 +134,7 @@ export class Runner {
     c.resolve(last);
     if (c.returnTo === 'none') return;
     if (c.watchedAt && Date.now() - c.watchedAt < INLINE_MS) return this.setDelivered(c.id, 'inline');
-    try { this.setDelivered(c.id, deliver(c, last, targets(this.d).find(t => t.id === c.source), this.d.ledger, this)); }
+    try { this.setDelivered(c.id, deliver(c, last, this.targets().find(t => t.id === c.source), this.d.ledger, this)); }
     catch (e) { this.d.ledger.update(c.id, { error: `result not delivered: ${(e as Error).message}` }); }
   }
   /** Where the chain's result went (on the chain's first row, the one its caller knows). */
@@ -145,6 +166,7 @@ export class Runner {
     let result = '', usage: Extract<RunEvent, { type: 'usage' }> | undefined, error: string | undefined, model = req.model;
     try {
       for await (const e of this.engine(id, t, { ...req, task: withContext(req) }, ac.signal, m => { model = m; })) {
+        const r = this.running.get(id); if (r) r.at = Date.now();
         if (e.type === 'text') result += e.text;
         else if (e.type === 'tool') this.emit('run.event', id, { tool: e.name, summary: e.summary });
         else if (e.type === 'usage') usage = e;

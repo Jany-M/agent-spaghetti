@@ -84,7 +84,7 @@ export const EVENT_TYPES = [
   'scan.completed', 'scan.integration_error', 'env.status', 'backend.detected', 'agent.detected',
   'session.started', 'session.updated', 'session.ended', 'backend.changed', 'tool.changed', 'switch.changed', 'permission.pending',
   'consent.requested', 'consent.answered', 'consent.expired',
-  'run.started', 'run.event', 'run.finished', 'run.delivered', 'backend.queue', 'client.hook', 'client.connected',
+  'run.started', 'run.event', 'run.finished', 'run.delivered', 'dispatcher.action', 'backend.queue', 'client.hook', 'client.connected',
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 export interface HubEvent { ts: number; type: EventType; envId: string; source: string; data: Record<string, unknown> }

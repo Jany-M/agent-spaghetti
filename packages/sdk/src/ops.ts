@@ -35,12 +35,12 @@ export const OPS = {
       + 'targets that may cost money ask the user first. `then` hands the result on to further targets in order; the last result comes back to you. '
       + 'Returns the result, or a run id to check with `run_status` if it takes long.',
       input: { type: 'object', additionalProperties: false, required: ['target', 'task'], properties: {
-        target: { type: 'string', description: 'Target id from `targets`' }, task: { type: 'string', description: 'The full task, self-contained' },
+        target: { type: 'string', description: 'Target id from `targets`, or `auto` to let Agent Spaghetti choose' }, task: { type: 'string', description: 'The full task, self-contained' },
         kind: { type: 'string', enum: HANDOFF_KINDS }, reason: { type: 'string', description: 'One line: why this is handed off' },
         model: { type: 'string', description: 'A loaded model of a model target, or an agent of an agent target (see `targets`; default: the first model / the default agent)' },
         cwd: { type: 'string', description: 'Working folder for agents that edit files' },
         context: { type: 'string', description: 'Findings or instructions the target needs besides the task' },
-        then: { type: 'array', items: { type: 'string' }, description: 'Next targets (`target` or `target:model`), each getting the previous result' },
+        then: { type: 'array', items: { type: 'string' }, description: 'Next targets (`target`, `target:model` or `auto`), each getting the previous result' },
         returnTo: { type: 'string', enum: ['caller', 'none'], description: 'caller (default): the last result comes back to you; none: nothing comes back' },
         returnSession: { type: 'string', description: 'Your own session id, so a late result can be resumed into it' } } } } },
   targets:      { method: 'GET',  path: '/v1/targets', gui: 'runs',      usage: 'targets',                  summary: 'What tasks can be handed to right now',

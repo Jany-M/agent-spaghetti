@@ -9,7 +9,7 @@ import type { Settings } from './settings.ts';
 import type { Consent } from './consent.ts';
 import type { EnvCommand, EnvResults } from './actions.ts';
 import type { Ledger } from './ledger.ts';
-import { targets, type Runner } from './runner.ts';
+import type { Runner } from './runner.ts';
 import { ENGINES } from './engine/inspect.ts';
 
 export interface Services {
@@ -108,11 +108,11 @@ export const handlers: Handlers = {
   delegate: async (i, s) => {
     const { source, waitMs, ...req } = i;
     need(req.target, 'target'); need(req.task, 'task');
-    const { id, done } = s.runner.start(source || 'cli', { ...req, parentRunId: req.parentRunId ? Number(req.parentRunId) : undefined, chainId: undefined });
+    const { id, done } = await s.runner.begin(source || 'cli', { ...req, parentRunId: req.parentRunId ? Number(req.parentRunId) : undefined, chainId: undefined });
     if (Number(waitMs) > 0) { s.runner.watch(id); await Promise.race([done, new Promise(r => setTimeout(r, Number(waitMs)))]); s.runner.watch(id); }
     return chainView(s, id);
   },
-  targets: (_i, s) => targets({ host: s.host, snapshot: () => snapshot(s), integrations: () => s.loaded().integrations.filter(x => !s.settings.get('disabled').includes(x.manifest.id)) }),
+  targets: (_i, s) => s.runner.targets(),
   runs: (i, s) => {
     if (i.unread) {                                           // results waiting for their caller: given once, then read
       const rows = s.ledger.unread(need(i.source, 'source'));

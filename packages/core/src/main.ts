@@ -1,6 +1,6 @@
 // Daemon wiring (no logic of its own). Started by `agent-spaghetti daemon`.
 import { join } from 'node:path';
-import { dataDir, declaredActions, emptyLive, liveState, userIntegrationsDir, withGrants, type Disposable, type LiveState, type Snapshot } from '@agent-spaghetti/sdk';
+import { dataDir, declaredActions, emptyLive, liveState, userIntegrationsDir, withGrants, type Disposable, type LiveState, type RunRequest, type Snapshot } from '@agent-spaghetti/sdk';
 import { BUILTINS } from '@agent-spaghetti/integrations';
 import { Store } from './store.ts';
 import { Bus } from './bus.ts';
@@ -19,6 +19,7 @@ import { handlers, type Services } from './ops.ts';
 import { CONNECT_LABELS, connectionPlan } from './connections.ts';
 import { Ledger } from './ledger.ts';
 import { Runner } from './runner.ts';
+import { Dispatcher } from './dispatcher.ts';
 import { fileURLToPath } from 'node:url';
 
 /** How a client on the host runs agent-spaghetti (Agent Plugins need a bare command: node from PATH). */
@@ -71,13 +72,16 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
     }
   };
   const host = () => entries.find(e => e.env)?.env ?? null;
-  const runner = new Runner({ bus, consent, ledger, settings, resultsDir: join(dir, 'results'), host, snapshot: () => store.loadSnapshot<Snapshot>('scan'),
+  const runner: Runner = new Runner({ bus, consent, ledger, settings, resultsDir: join(dir, 'results'), host, snapshot: () => store.loadSnapshot<Snapshot>('scan'),
     integrations: () => loaded.integrations.filter(i => !settings.get('disabled').includes(i.manifest.id)),
+    route: (source, req): Promise<RunRequest> => dispatcher.route(source, req),
     async *runOn(envId, id, req, ro) {
       const e = entries.find(x => x.status.id === envId);
       if (!e) throw new Error(`environment ${envId} is gone (rescan)`);
       yield* runOnEnv(e, await ctx(), id, req, ro);
     } });
+  const dispatcher = new Dispatcher({ runner, settings, bus, ledger });
+  const watchdog = dispatcher.watch();
   const hubFiles = new Map<string, string>();
   /** Running distros reach the daemon on the Windows side of their network: listen there and tell them where (hub.json, user-only). */
   const shareWithDistros = async () => {
@@ -163,7 +167,7 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
   const close = async () => {
     for (const id of session()) await connect(id, false);    // "Connect for this session" ends here
     setSession([]);
-    clearTimeout(rescan); clearInterval(autoScan); observers?.dispose(); clearInterval(pruneTimer); removeDiscovery(); await server.close(); store.close(); };
+    clearTimeout(rescan); clearInterval(autoScan); observers?.dispose(); watchdog.dispose(); clearInterval(pruneTimer); removeDiscovery(); await server.close(); store.close(); };
   if (o.scanOnStart !== false) void services.scan().catch(e => process.stderr.write(`first scan failed: ${(e as Error).message}\n`));
   return { port: server.port, dir, services, close };
 }
