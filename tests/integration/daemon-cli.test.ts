@@ -175,6 +175,16 @@ test('CLI 2: questions show in status with their id; answer allow resolves the a
   assert.equal(b.stopped(), 1);
   await b.close();
 });
+test('runDaemon: settings and connection choices survive a restart', async () => {
+  const { runDaemon } = await import('../../packages/core/src/main.ts');
+  const dir = mkdtempSync(join(tmpdir(), 'as-'));
+  const env = { AGENT_SPAGHETTI_DATA_DIR: dir }, o = { scanOnStart: false, observe: false, discover: fakeMachine };
+  let d = await runDaemon(env, o);
+  await HubClient.fromDiscovery(env).call('setting', { key: 'connect.auto', value: 'cursor,vscode' });
+  await d.close();
+  d = await runDaemon(env, o);
+  try { assert.deepEqual((await HubClient.fromDiscovery(env).call('settings'))['connect.auto'].value, ['cursor', 'vscode']); } finally { await d.close(); }
+});
 test('runDaemon: a third-party drop-in asks once per action; allowing stores a grant and rescans', async () => {
   const { runDaemon } = await import('../../packages/core/src/main.ts');
   const dir = mkdtempSync(join(tmpdir(), 'as-'));

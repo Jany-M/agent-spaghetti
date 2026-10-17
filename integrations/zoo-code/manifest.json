@@ -1,0 +1,27 @@
+{
+  "$schema": "../../packages/sdk/manifest.schema.json",
+  "manifest": 1,
+  "id": "zoo-code",
+  "name": "Zoo Code",
+  "roles": [
+    "client"
+  ],
+  "cost": "unknown",
+  "detect": {
+    "paths": [
+      "~/.vscode/extensions/zoocodeorganization.zoo-code-*",
+      "~/.vscode-insiders/extensions/zoocodeorganization.zoo-code-*",
+      "~/.cursor/extensions/zoocodeorganization.zoo-code-*",
+      "~/.windsurf/extensions/zoocodeorganization.zoo-code-*"
+    ],
+    "version": {
+      "file": "~/.vscode/extensions/zoocodeorganization.zoo-code-*/package.json",
+      "json": "version"
+    }
+  },
+  "speaks": {
+    "openaiClient": {
+      "setup": "In Zoo Code's settings: API Provider = OpenAI Compatible, Base URL = {url}, API Key = {key}, Model = auto.\nWhich LLM answers is chosen in Agent Spaghetti (Tools \u2192 Zoo Code \u2192 Model). The model must support tool calls for agent work."
+    }
+  }
+}

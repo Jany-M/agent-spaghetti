@@ -102,7 +102,7 @@ test('runner: paid target asks; once / job / always; deny and expiry are recorde
   assert.deepEqual([row.outcome, row.error], ['denied', 'denied by the user']);
   s.settings.set('consent.timeoutSec', 0.02 as never);
   row = await s.runner.start('cursor', { target: 'paid-agent', task: 'x' }).done;
-  assert.equal(row.outcome, 'expired');
+  assert.deepEqual([row.outcome, row.error], ['expired', 'no answer in time (questions wait in the Agent Spaghetti tray)']);
   s.settings.setGrants([g({ subject: 'cursor', resource: 'paid-agent', mode: 'deny' })]);
   assert.equal((await s.runner.start('cursor', { target: 'paid-agent', task: 'x' }).done).outcome, 'denied');
 });

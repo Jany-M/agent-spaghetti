@@ -158,7 +158,7 @@ export class Runner {
       const a = await this.d.consent.request({ subject: source, action: 'run', resource: t.id, task: withContext(req), cost: t.cost, scopes: SCOPES(req.jobId),
         why: `${req.reason ?? 'no reason given'} (${decision.why})`, billing: t.cost === 'free' ? undefined : `uses your ${t.name} account or plan`,
         timeoutMs: s.get('consent.timeoutSec') * 1000 });
-      if (a.answer !== 'granted') return finish(a.answer, { error: a.answer === 'denied' ? 'denied by the user' : 'no answer in time' });
+      if (a.answer !== 'granted') return finish(a.answer, { error: a.answer === 'denied' ? 'denied by the user' : 'no answer in time (questions wait in the Agent Spaghetti tray)' });
       if (a.scope !== 'once') s.setGrants(withGrants(s.grants(), [{ subject: source, action: 'run', resource: t.id, mode: 'allow', by: 'user', ts: Date.now(),
         ...(a.scope === 'job' ? { jobId: req.jobId } : {}) }]));
     }

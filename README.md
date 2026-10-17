@@ -51,7 +51,7 @@ Status keeps itself current: running tools and model servers are re-checked ever
 
 ## Choose the LLM per tool (model gateway)
 
-Tools that accept a custom OpenAI-compatible endpoint (VS Code chat, OpenCode, Kilo, Cline, Roo Code, Continue) can use Agent Spaghetti's model gateway, so you pick each tool's LLM in one place, local or online.
+Tools that accept a custom OpenAI-compatible endpoint (VS Code chat, OpenCode, Kilo, Cline, Zoo Code, Continue) can use Agent Spaghetti's model gateway, so you pick each tool's LLM in one place, local or online.
 
 1. Settings → `gateway.port` (e.g. `4141`): the gateway listens on `127.0.0.1` only.
 2. Tools → the tool → **Use the gateway**: a key for that tool, shown once, with the exact steps for it. The tool asks for model `auto`.

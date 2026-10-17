@@ -21,12 +21,12 @@ import ollamaManifest from './ollama/manifest.json' with { type: 'json' };
 import openaiApiManifest from './openai-api/manifest.json' with { type: 'json' };
 import openclawManifest from './openclaw/manifest.json' with { type: 'json' };
 import opencodeManifest from './opencode/manifest.json' with { type: 'json' };
-import rooManifest from './roo/manifest.json' with { type: 'json' };
 import vllmManifest from './vllm/manifest.json' with { type: 'json' };
 import vscodeManifest from './vscode/manifest.json' with { type: 'json' };
 import windsurfManifest from './windsurf/manifest.json' with { type: 'json' };
+import zooCodeManifest from './zoo-code/manifest.json' with { type: 'json' };
 
 const MODULES: Record<string, Integration['module']> = { openclaw: openclawModule, 'claude-cli': claudeCliModule, codex: codexModule };
-export const BUILTIN_MANIFESTS = [anthropicApiManifest, anythingllmManifest, chatgptDesktopManifest, claudeCliManifest, claudeDesktopManifest, clineManifest, codexManifest, continueManifest, cursorManifest, kiloManifest, llamacppManifest, lmstudioManifest, mempalaceManifest, ollamaManifest, openaiApiManifest, openclawManifest, opencodeManifest, rooManifest, vllmManifest, vscodeManifest, windsurfManifest] as unknown as Manifest[];
+export const BUILTIN_MANIFESTS = [anthropicApiManifest, anythingllmManifest, chatgptDesktopManifest, claudeCliManifest, claudeDesktopManifest, clineManifest, codexManifest, continueManifest, cursorManifest, kiloManifest, llamacppManifest, lmstudioManifest, mempalaceManifest, ollamaManifest, openaiApiManifest, openclawManifest, opencodeManifest, vllmManifest, vscodeManifest, windsurfManifest, zooCodeManifest] as unknown as Manifest[];
 export const BUILTINS: Integration[] = BUILTIN_MANIFESTS.map(manifest => ({ manifest, module: MODULES[manifest.id], source: 'builtin' }));
 export const BUILTIN_DIR = new URL('.', import.meta.url);
