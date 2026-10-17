@@ -19,3 +19,4 @@ description: Hand a task to a local model or another agent on this machine throu
    - `returnSession`: your own session id if you know it, so a result that arrives after you stopped waiting can be resumed into it.
 3. If `delegate` returns a run id instead of a result, call `run_status` with that id later. `run_status` without an id gives the results of your hand-offs that finished after you stopped waiting (each once).
 4. A denied run means the user said no: do not retry it with another paid target unless the user asks.
+5. A task that reached you from Agent Spaghetti with a `run_id` (in your chat) ends with `report`: call it with that `run_id` and your complete result.

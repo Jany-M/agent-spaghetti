@@ -58,6 +58,7 @@ export interface Manifest {
     openai?: { port: number; base: string };
     mcpServer?: { command: string[] };
     acp?: { command: string[] };
+    chat?: { command: string[] };   // its chat takes a task: <command…> <prompt> - (task on stdin); the result comes back through `report`
     mcpClient?: { config: string; key: string; entry?: Record<string, unknown>; commandArray?: boolean };   // entry: extra fields our server entry needs (e.g. type); commandArray: command and args as one array
     mcpCli?: { add: string[]; remove: string[]; config?: string };   // the tool's CLI: <bin> <add…> agent-spaghetti -- <command…> (e.g. `claude mcp add`); config: the file it writes (connected = it names our server)
     agentPlugins?: { dir: string; variant?: 'agent-plugins' | 'cursor' };
@@ -123,7 +124,7 @@ export interface RunRow {
 export type Delivery = 'inline' | 'resumed' | 'injected' | 'unread' | 'read';
 /** Something `delegate` can hand a task to: a local model server (OpenAI API) or an agent with a run hook.
  *  `engine`: how its runs are made; `resumable`: a run can continue one of its sessions (results can go back into it). */
-export interface Target { id: string; name: string; kind: 'model' | 'agent'; cost: Cost; envId: string; models: string[]; engine: 'openai' | 'acp' | 'module'; resumable: boolean }
+export interface Target { id: string; name: string; kind: 'model' | 'agent'; cost: Cost; envId: string; models: string[]; engine: 'openai' | 'acp' | 'module' | 'chat'; resumable: boolean }
 export interface Ctx { signal: AbortSignal; inventory: Inventory; pollMs?: number; runId?: number }   // runId: set for run(), so nested delegations link to it
 export interface Switch { id: string; label: string; on: boolean; envId: string; integration: string }
 export interface TestStep { name: string; ok: boolean; detail: string; ms: number }

@@ -11,6 +11,7 @@ import type { Consent } from './consent.ts';
 import type { Ledger } from './ledger.ts';
 import type { Settings } from './settings.ts';
 import { openaiRun } from './engine/openai.ts';
+import { chatTask } from './engine/chat.ts';
 import { deliver } from './returns.ts';
 
 export interface RunnerDeps {
@@ -22,7 +23,7 @@ export interface RunnerDeps {
 /** What the runner keeps about a hand-off chain while it runs: who asked and where the result goes. */
 export interface Chain { id: number; source: string; returnTo: 'caller' | 'none'; returnSession?: string; parentRunId?: number; watchedAt?: number }
 /** What `delegate` can use right now on this machine (from the last scan). Models: servers the host reaches. Agents: tools that speak
- *  ACP or have a run hook, in a running environment where their own program was found (the host first); `models` lists their agents. */
+ *  ACP, have a run hook or take tasks in their chat, in a running environment where their own program was found (the host first); `models` lists their agents. */
 export function targets(d: Pick<RunnerDeps, 'host' | 'snapshot' | 'integrations'>): Target[] {
   const snap = d.snapshot(), hostId = d.host()?.id;
   if (!snap || !hostId) return [];
@@ -33,10 +34,10 @@ export function targets(d: Pick<RunnerDeps, 'host' | 'snapshot' | 'integrations'
     const i = byId.get(det.integration);
     if (!i || out.some(t => t.id === det.integration)) continue;
     const models = snap.backends.filter(b => b.integration === det.integration && b.reachableFrom.includes(hostId)).map(b => b.model);
-    const acp = i.manifest.speaks?.acp;
-    if (i.manifest.speaks?.openai && models.length) out.push({ id: det.integration, name: det.name, kind: 'model', cost: det.cost, envId: hostId, models, engine: 'openai', resumable: false });
-    else if ((acp || i.module?.run) && running.has(det.envId) && programOf(det, acp?.command[0] ?? i.manifest.detect?.bin?.[0]))
-      out.push({ id: det.integration, name: det.name, kind: 'agent', cost: det.cost, envId: det.envId, engine: acp ? 'acp' : 'module', resumable: !!acp || !!i.module?.resumes,
+    const sp = i.manifest.speaks, engine = sp?.acp ? 'acp' : i.module?.run ? 'module' : sp?.chat ? 'chat' : null;   // a tool's best engine (ADR 0010 §2)
+    if (sp?.openai && models.length) out.push({ id: det.integration, name: det.name, kind: 'model', cost: det.cost, envId: hostId, models, engine: 'openai', resumable: false });
+    else if (engine && running.has(det.envId) && programOf(det, (sp?.acp ?? (engine === 'chat' ? sp?.chat : undefined))?.command[0] ?? i.manifest.detect?.bin?.[0]))
+      out.push({ id: det.integration, name: det.name, kind: 'agent', cost: det.cost, envId: det.envId, engine, resumable: engine === 'acp' || (engine === 'module' && !!i.module?.resumes),
         models: snap.agents.filter(a => a.integration === det.integration && a.envId === det.envId).map(a => a.id.slice(det.integration.length + 1)) });
   }
   return out;
@@ -52,6 +53,7 @@ export class Runner {
   private d: RunnerDeps;
   private running = new Map<number, { ac: AbortController; done: Promise<RunRow>; target: string }>();
   private chains = new Map<number, Chain & { done: Promise<RunRow>; resolve(r: RunRow): void }>();
+  private reports = new Map<number, (r: { result: string; failed: boolean }) => void>();   // chat runs waiting for `report`
   constructor(d: RunnerDeps) { this.d = d; }
 
   /** Starts a hand-off and returns its id at once; `done` settles with the chain's last run record.
@@ -83,6 +85,13 @@ export class Runner {
     this.running.set(id, { ac, done: hop, target: t.id });
     void hop.then(r => this.next(r, req));
     return { id, done: this.chains.get(chainId)!.done };
+  }
+  /** A chat run's result, sent by the agent that did it (only the run's target may report it). */
+  report(id: number, source: string, result: string, failed = false): void {
+    const run = this.d.ledger.get(id), done = this.reports.get(id);
+    if (!run || !done) throw new Error(`run ${id} is not waiting for a report`);
+    if (run.target !== source) throw new Error(`only ${run.target} can report run ${id}`);
+    done({ result, failed });
   }
   cancel(id: number): boolean { const r = this.running.get(id); r?.ac.abort(new Error('cancelled')); return !!r; }
   /** The caller is polling this chain: it gets the result inline when the chain ends. */
@@ -159,7 +168,19 @@ export class Runner {
       return openaiRun(host, { endpoint: b.endpoint, base: i.manifest.speaks!.openai!.base, model, concurrency: this.d.settings.get('backend.concurrency') }, req,
         { signal, onQueue: (waiting, running) => this.d.bus.emit({ ts: Date.now(), type: 'backend.queue', envId: host.id, source: t.id, data: { endpoint: b.endpoint, waiting, running } }) });
     }
-    return this.d.runOn(t.envId, t.id, req, { signal, runId: id });
+    return t.engine === 'chat' ? this.chatRun(id, t, req, signal) : this.d.runOn(t.envId, t.id, req, { signal, runId: id });
+  }
+  /** Opens the task in the tool's chat, then waits for its `report` (a report run, a result handed back, waits for nothing). */
+  private async *chatRun(id: number, t: Target, req: RunRequest, signal: AbortSignal): AsyncIterable<RunEvent> {
+    const waiting = req.kind === 'report' ? null : new Promise<{ result: string; failed: boolean }>((res, rej) => {
+      this.reports.set(id, res); signal.addEventListener('abort', () => rej(signal.reason), { once: true });
+    });
+    waiting?.catch(() => { /* awaited below; a failed launch never gets there */ });
+    try {
+      yield* this.d.runOn(t.envId, t.id, { ...req, task: chatTask(req, id) }, { signal, runId: id });
+      const r = await waiting;
+      yield r?.failed ? { type: 'error', message: r.result || 'the agent reported a failure' } : { type: 'done', result: r?.result ?? '' };
+    } finally { this.reports.delete(id); }
   }
   /** `<data>/results/<id>.md`, plus a copy in the caller's folder when asked (e.g. the Cursor workspace). */
   private writeResult(id: number, req: RunRequest, result: string, error?: string): Partial<RunRow> {

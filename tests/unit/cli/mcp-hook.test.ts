@@ -32,7 +32,7 @@ test('MCP: modern discover, legacy initialize, version errors, tools = ops with 
   assert.equal(missing.error.code, -32602);
   const list: any = await h({ jsonrpc: '2.0', id: 4, method: 'tools/list', params: { _meta: meta } });
   assert.deepEqual(list.result.tools.map((t: any) => t.name), Object.values(OPS).flatMap(o => ('mcp' in o ? [o.mcp.name] : [])));
-  assert.deepEqual(list.result.tools.map((t: any) => t.name), ['delegate', 'targets', 'run_status']);
+  assert.deepEqual(list.result.tools.map((t: any) => t.name), ['delegate', 'targets', 'run_status', 'report']);
   const legacy = mcpHandler(fakeClient([]).client, { source: 'cursor' }, () => {});
   const init: any = await legacy({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {} } });
   assert.equal(init.result.protocolVersion, '2025-06-18');

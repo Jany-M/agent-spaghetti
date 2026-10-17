@@ -127,6 +127,7 @@ export const handlers: Handlers = {
     if (i.watch && final.run.outcome !== 'running' && final.run.delivered === 'unread') s.ledger.update(run.chainId, { delivered: 'read' });   // collected by id
     return { runs: s.ledger.chain(run.id), result: s.ledger.result(run), final };
   },
+  handback: (i, s) => { s.runner.report(num(i.run_id, 0), need(i.source, 'source'), String(i.result ?? ''), i.status === 'failed'); return { ok: true }; },
   cancel: (i, s) => ({ cancelled: s.runner.cancel(num(i.id, 0)) }),
   verdict: (i, s) => {
     if (!['up', 'down', 'redo'].includes(i.value)) throw new Error('verdict must be up, down or redo');

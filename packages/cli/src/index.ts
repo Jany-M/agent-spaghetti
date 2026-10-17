@@ -130,6 +130,12 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
         print(r, () => [...r.runs.map(runLine), ...(r.result ? ['', r.result] : [])].join('\n') || 'No runs yet.');
         break;
       }
+      case 'handback': {
+        const as = flag(args, '--as'), [, id, ...result] = args, failed = args.includes('--failed');
+        if (!as || !id) { io.err(`usage: agent-spaghetti ${OPS.handback.usage}`); return 1; }
+        const r = await c.call('handback', { run_id: Number(id), result: result.filter(x => x !== '--failed').join(' '), status: failed ? 'failed' : 'done', source: as });
+        print(r, () => `run ${id}: result sent`); break;
+      }
       case 'cancel': { const r = await c.call('cancel', { id: Number(a1) }); print(r, () => (r.cancelled ? `run ${a1} cancelled` : `run ${a1} is not running`)); break; }
       case 'verdict': { const r = await c.call('verdict', { id: Number(a1), value: a2 as 'up' }); print(r, () => `run ${a1}: ${a2}`); break; }
       case 'connect': {

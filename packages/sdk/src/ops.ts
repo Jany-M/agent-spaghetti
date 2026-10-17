@@ -52,6 +52,10 @@ export const OPS = {
   verdict:      { method: 'POST', path: '/v1/verdict', gui: 'runs',      usage: 'verdict <id> up|down|redo', summary: 'Rate a run (kept in the run record)' },
   connect:      { method: 'POST', path: '/v1/connect', gui: 'tools',      usage: 'connect|disconnect <integration> [--dry-run]', summary: 'Give a client the agent-spaghetti tools (MCP + plugin), or take them away' },
   setup:        { method: 'POST', path: '/v1/setup',        gui: 'tools', usage: 'setup <integration> [--check] [--dry-run]', summary: 'Set a tool up for agent-spaghetti (e.g. its workflow pack), or check it' },
+  handback:     { method: 'POST', path: '/v1/handback', gui: 'machine', usage: 'handback <run id> <result> --as <tool> [--failed]', summary: 'Send the result of a task a tool was given in its chat (its agent calls `report`)',
+    mcp: { name: 'report', description: 'Send the result of a task Agent Spaghetti gave you in this chat (its run_id is in the task). Only for those tasks.',
+      input: { type: 'object', additionalProperties: false, required: ['run_id', 'result'], properties: {
+        run_id: { type: 'integer' }, result: { type: 'string', description: 'Your complete result' }, status: { type: 'string', enum: ['done', 'failed'] } } } } },
   hook:         { method: 'POST', path: '/v1/hook', gui: 'machine',         usage: 'hook <client>',            summary: 'Run by client hooks (reads the hook JSON on stdin)' },
 } as const satisfies Record<string, OpSpec>;
 export type OpId = keyof typeof OPS;
@@ -77,6 +81,7 @@ export interface OpIO {
   shutdown: { in: {}; out: { stopping: true } };
   delegate: { in: RunRequest & { source?: string; waitMs?: number }; out: RunView };
   targets: { in: {}; out: Target[] };
+  handback: { in: { run_id: number; result: string; status?: 'done' | 'failed'; source?: string }; out: { ok: true } };
   runs: { in: { id?: number; since?: number; limit?: number; watch?: boolean; unread?: boolean; source?: string };
     out: { runs: RunRow[]; result?: string; final?: RunView; unread?: RunView[] } };   // final: the chain's view (id = chain); unread: given once
   cancel: { in: { id: number }; out: { cancelled: boolean } };

@@ -23,16 +23,19 @@ const agent = (id: string, cost: 'free' | 'metered', resumes = false): Integrati
     if (req.task.startsWith('slow')) await new Promise(r => setTimeout(r, 60));
     yield { type: 'done', result: `${id}(${req.task.split('\n')[0]})` };
   } } });
-const agents = [agent('editor', 'free', true), agent('coder', 'free'), agent('paid', 'metered'), agent('chatty', 'free')];
+const chat: Integration = { source: 'builtin', manifest: { manifest: 1, id: 'ide', name: 'IDE', roles: ['client'], cost: 'free', speaks: { chat: { command: ['x', 'chat'] } } } as Manifest };
+const agents = [agent('editor', 'free', true), agent('coder', 'free'), agent('paid', 'metered'), agent('chatty', 'free'), chat];
 const det = (integration: string): Detection => ({ integration, name: integration, envId: 'windows', installs: [{ path: '/b/x', via: 'bin' }], levels: [],
   cost: agents.find(a => a.manifest.id === integration)!.manifest.cost!, connectable: 'yes', why: '' });
 const snap: Snapshot = { ts: 1, envs: [{ id: 'windows', state: 'running' }], agents: [], rejected: [], backends: [], detections: agents.map(a => det(a.manifest.id)) };
 function setup() {
   const store = new Store(':memory:'), bus = new Bus(store), consent = new Consent(bus), settings = new Settings(store), ledger = new Ledger(store), host = fakeEnv({});
   const runner = new Runner({ bus, consent, ledger, settings, resultsDir: mkdtempSync(join(tmpdir(), 'as-chain-')), host: () => host, snapshot: () => snap, integrations: () => agents,
-    runOn: (_envId, id, req, o) => agents.find(a => a.manifest.id === id)!.module!.run!(host, det(id), req, { ...o, inventory: { installed: [], processes: [], listening: [], env: {}, partial: [] } }) });
+    runOn: (_envId, id, req, o) => { const m = agents.find(a => a.manifest.id === id)!.module;
+      return m ? m.run!(host, det(id), req, { ...o, inventory: { installed: [], processes: [], listening: [], env: {}, partial: [] } }) : launched(id, req); } });
   return { store, consent, settings, ledger, runner };
 }
+async function* launched(id: string, req: RunRequest): AsyncIterable<never> { seen.push({ id, req }); }   // a chat launch: the result comes through report
 const delivered = async (l: Ledger, id: number) => { for (let i = 0; i < 100 && !l.get(id)!.delivered; i++) await new Promise(r => setTimeout(r, 5)); return l.get(id)!.delivered; };
 
 test('parseHop: target[:model], models may contain colons', () => {
@@ -83,6 +86,26 @@ test('chain: a session that cannot take the result back leaves it unread', async
   for (let i = 0; i < 100 && s.ledger.get(id)!.delivered !== 'unread'; i++) await new Promise(r => setTimeout(r, 5));
   assert.deepEqual([s.ledger.get(id)!.delivered, s.ledger.unread('editor').map(r => r.id)], ['unread', [id]]);
 });
+test('chat target: the task goes in with the report footer; only the target can report; the run ends with its report; a late result is injected back', async () => {
+  const s = setup(); seen.length = 0;
+  const { id, done } = s.runner.start('cli', { target: 'ide', task: 'review this', then: ['coder'] });
+  for (let i = 0; i < 50 && !seen.length; i++) await new Promise(r => setTimeout(r, 5));
+  assert.match(seen[0].req.task, new RegExp(`^review this\n\n---\nWhen you have finished, call the agent-spaghetti MCP tool \`report\` with run_id ${id} `));
+  assert.throws(() => s.runner.report(id, 'coder', 'x'), /only ide can report run/);
+  assert.throws(() => s.runner.report(999, 'ide', 'x'), /not waiting for a report/);
+  s.runner.report(id, 'ide', 'looks fine');
+  await done;
+  assert.equal(seen[1].req.context, 'looks fine', 'the next hop gets the reported result');
+  const back = s.runner.start('ide', { target: 'coder', task: 'slow fix' });   // the chat delegated and stopped waiting
+  await back.done;
+  assert.equal(await delivered(s.ledger, back.id), 'injected');
+  const inj = seen.find(x => x.id === 'ide' && x.req.kind === 'report')!;
+  assert.match(inj.req.task, /^The work you handed off .* is done\. Result:\n\ncoder\(slow fix\)$/, 'no footer on a result handed back');
+  const failed = s.runner.start('cli', { target: 'ide', task: 'try' });
+  for (let i = 0; i < 50 && !seen.some(x => x.req.task.startsWith('try')); i++) await new Promise(r => setTimeout(r, 5));
+  s.runner.report(failed.id, 'ide', 'no access', true);
+  assert.deepEqual([(await failed.done).outcome, (await failed.done).error], ['error', 'no access']);
+});
 test('chain: hop budget stops loops; a next hop that cannot start ends the chain with a note', async () => {
   const s = setup();
   s.settings.set('delegate.maxHops', 2 as never);
@@ -97,4 +120,13 @@ test('ledger: rows a stopped daemon left running are marked', () => {
   const id = l.record({ ts: 1, source: 'a', target: 'b', kind: 'other', taskHash: 'h', outcome: 'running' });
   l.abandonRunning();
   assert.deepEqual([l.get(id)!.outcome, l.get(id)!.chainId], ['error', id]);
+});
+test('chat launch: inert prompt argument, the task on stdin; a failed launch says why', async () => {
+  const { chatLaunch, CHAT_PROMPT } = await import('../../../packages/core/src/engine/chat.ts');
+  const key = `C:/VS/bin/code.cmd chat -m agent -r ${CHAT_PROMPT} -`;
+  const env = fakeEnv({ exec: { [key]: { code: 0, stdout: '', stderr: '' } } });
+  await chatLaunch(env, 'C:/VS/bin/code.cmd', ['chat', '-m', 'agent', '-r'], 'the "task" & more');
+  assert.equal(env.inputs[key], 'the "task" & more');
+  assert.doesNotMatch(CHAT_PROMPT, /["%^&|<>!\r\n]/, 'safe for .cmd shims');
+  await assert.rejects(chatLaunch(fakeEnv(), 'code', ['chat'], 't'), /could not open the chat: not found/);
 });

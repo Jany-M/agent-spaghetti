@@ -57,7 +57,7 @@ export function mcpHandler(client: HubClient, o: BridgeOpts, send: Send) {
     try {
       if (tool.op === 'delegate') return await delegate(args, progressToken);
       if (tool.op === 'runs') return await status(args.id);
-      return text(JSON.stringify(await client.call(tool.op, args as never), null, 2));
+      return text(JSON.stringify(await client.call(tool.op, { ...args, source: o.source } as never), null, 2));   // the caller, for ops that check it (report)
     } catch (e) { return text((e as Error).message, true); }   // daemon down or the op refused: a tool error the agent can read
   }
   return async function handle(m: Msg): Promise<object | null> {

@@ -22,6 +22,15 @@
     }
   },
   "speaks": {
+    "chat": {
+      "command": [
+        "code",
+        "chat",
+        "-m",
+        "agent",
+        "-r"
+      ]
+    },
     "mcpClient": {
       "config": "%APPDATA%/Code/User/mcp.json",
       "key": "servers",

@@ -5,6 +5,7 @@ import { programOf, rankTargets } from '@agent-spaghetti/sdk';
 import { setConnection } from './connect.ts';
 import { inspectAs } from './engine/observe.ts';
 import { acpRun } from './engine/acp.ts';
+import { chatLaunch } from './engine/chat.ts';
 import { testIntegration } from './engine/test.ts';
 import { scanEnv, type EnvScan } from './scan.ts';
 
@@ -69,13 +70,14 @@ export async function runEnvCommand<C extends EnvCommand>(env: Environment, inte
  *  tool's engine: ACP when it speaks it, else its module's run (ADR 0010 §2). */
 export async function* runHere(env: Environment, integrations: Integration[], id: string, req: RunRequest, grants: Grant[],
   o: { signal?: AbortSignal; runId?: number } = {}): AsyncIterable<RunEvent> {
-  const i = integrations.find(x => x.manifest.id === id), acp = i?.manifest.speaks?.acp;
+  const i = integrations.find(x => x.manifest.id === id), sp = i?.manifest.speaks;
   const inventory = await env.inventory(i?.manifest.detect?.env ?? []);
-  const r = i && (acp || i.module?.run) ? await inspectAs(i, env, inventory, grants) : null;
+  const r = i && (sp?.acp || i.module?.run || sp?.chat) ? await inspectAs(i, env, inventory, grants) : null;
   if (!i || !r) throw new Error(`${id} cannot run tasks in ${env.id}`);
   const ctx = { signal: o.signal ?? new AbortController().signal, inventory, runId: o.runId };
-  if (!acp) return yield* i.module!.run!(env, r.detection, req, ctx);
-  const exe = programOf(r.detection, acp.command[0]);
-  if (!exe) throw new Error(`${i.manifest.name}: ${acp.command[0]} not found in ${env.id}`);
-  yield* acpRun(env, exe, acp.command.slice(1), req, ctx);
+  if (!sp?.acp && i.module?.run) return yield* i.module.run(env, r.detection, req, ctx);
+  const command = (sp?.acp ?? sp?.chat)!.command, exe = programOf(r.detection, command[0]);
+  if (!exe) throw new Error(`${i.manifest.name}: ${command[0]} not found in ${env.id}`);
+  if (sp?.acp) yield* acpRun(env, exe, command.slice(1), req, ctx);
+  else await chatLaunch(env, exe, command.slice(1), req.task);    // the result comes later, through `report`
 }
