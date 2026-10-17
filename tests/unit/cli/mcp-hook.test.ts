@@ -85,6 +85,8 @@ test('>> hooks (Cursor, Claude Code): one parser for target[:model] and chains; 
   assert.ok('delegate' in cc);
   assert.deepEqual([cc.delegate.cwd, cc.block('sent')], ['E:\\proj', { decision: 'block', reason: 'sent' }]);
   assert.deepEqual(planHook({ hook_event_name: 'UserPromptSubmit', prompt: 'plain' }), { reply: {}, report: { event: 'UserPromptSubmit', data: {} } });
+  assert.deepEqual(planHook({ hook_event_name: 'UserPromptSubmit', prompt: '>>codex fix it', cursor_version: '3.22', workspace_roots: ['/w'] }, 'claude-cli'), { reply: {} },
+    'Claude Code\'s hook run by Cursor (third-party import) stays out: Cursor\'s own hook sends it');
   assert.deepEqual(planHook({ hook_event_name: 'beforeSubmitPrompt', prompt: 'normal SECRET-MARKER question', conversation_id: 'c1' }),
     { reply: { continue: true }, report: { event: 'beforeSubmitPrompt', data: { conversation_id: 'c1' } } });
   assert.deepEqual((planHook({ hook_event_name: 'beforeSubmitPrompt', prompt: '>>' }) as { reply: unknown }).reply, { continue: true }, 'no target and task: pass through');

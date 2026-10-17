@@ -53,13 +53,19 @@ async function mcpConfig(env: Environment, spec: NonNullable<Speaks['mcpClient']
   return { description: `${on ? 'add' : 'remove'} the ${SERVER_NAME} MCP server ${on ? 'to' : 'from'} ${spec.config} (restart the client)`, changes: await write(env, files, dryRun) };
 }
 
+/** Our entry in a prompt hook list: the one running `… hook <client>`. */
+const ourHook = (client: string) => (e: any) => (e?.hooks ?? []).some((h: any) => Array.isArray(h?.args) && h.args.at(-2) === 'hook' && h.args.at(-1) === client);
+/** Whether the tool's prompt hook has our entry (a connection without it is incomplete, so it is connected again). */
+export async function hasPromptHook(env: Environment, spec: NonNullable<Speaks['promptHook']>, client: string): Promise<boolean> {
+  const doc = parseJsonc(await env.readFile(spec.config)) as Record<string, any> | undefined;
+  return Array.isArray(doc?.hooks?.[spec.event]) && doc.hooks[spec.event].some(ourHook(client));
+}
 /** The `>>` shortcut in a tool's prompt hook (e.g. Claude Code's UserPromptSubmit): our one entry added or removed, the rest kept. */
 async function promptHook(env: Environment, spec: NonNullable<Speaks['promptHook']>, cli: Cli, client: string, on: boolean, dryRun: boolean) {
   const text = await env.readFile(spec.config);
   const doc = (text === null ? {} : parseJsonc(text)) as Record<string, any> | undefined;
   if (!doc || typeof doc !== 'object' || Array.isArray(doc)) throw new Error(`${spec.config} is not a JSON object; not changed`);
-  const ours = (e: any) => (e?.hooks ?? []).some((h: any) => Array.isArray(h?.args) && h.args.at(-2) === 'hook' && h.args.at(-1) === client);
-  const before = (doc.hooks?.[spec.event] ?? []) as unknown[], others = before.filter(e => !ours(e));
+  const before = (doc.hooks?.[spec.event] ?? []) as unknown[], others = before.filter(e => !ourHook(client)(e));
   const entry = { hooks: [{ type: 'command', command: cli.command, args: [...cli.args, 'hook', client] }] };
   const after = on ? [...others, entry] : others;
   const what = `${on ? 'add' : 'remove'} the >> shortcut ${on ? 'to' : 'from'} ${spec.config} (${spec.event})`;

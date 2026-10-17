@@ -1,6 +1,7 @@
-export function parseJson(text: string | null | undefined): unknown {   // undefined on failure
+/** undefined on failure; a leading byte-order mark (some Windows tools write one) is ignored. */
+export function parseJson(text: string | null | undefined): unknown {
   if (!text) return undefined;
-  try { return JSON.parse(text); } catch { return undefined; }
+  try { return JSON.parse(text.replace(/^\uFEFF/, '')); } catch { return undefined; }
 }
 /** JSON with comments and trailing commas (JSONC, used by several tools' config files); undefined on failure. */
 export function parseJsonc(text: string | null | undefined): unknown {

@@ -8,6 +8,7 @@
 import { createHmac, randomBytes } from 'node:crypto';
 import { createInterface } from 'node:readline';
 import type { HubClient } from './client.ts';
+import { parseJson } from './json.ts';
 import { uriPath } from './match.ts';
 import { OPS, type OpId, type RunView } from './ops.ts';
 import { rankTargets } from './routing.ts';
@@ -194,8 +195,8 @@ export function serveMcpStdio(client: HubClient, o: BridgeOpts): Promise<void> {
   const handle = mcpHandler(client, o, send);
   const rl = createInterface({ input: process.stdin });
   rl.on('line', line => {
-    let m: Msg;
-    try { m = JSON.parse(line); } catch { send({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'parse error' } }); return; }
+    const m = parseJson(line) as Msg | undefined;
+    if (!m || typeof m !== 'object') { send({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'parse error' } }); return; }
     void handle(m).then(r => { if (r) send(r); });
   });
   return new Promise(r => rl.on('close', () => r()));

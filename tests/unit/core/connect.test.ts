@@ -101,8 +101,12 @@ test('>> prompt hook (Claude Code): our one entry added, kept unique, removed; t
   assert.deepEqual((await setConnection(env, claude, d, cli, true, false)).changes.filter(c => c.startsWith('write')), [], 'already there: the file is left alone');
   assert.deepEqual(read().hooks.UserPromptSubmit, [own, { hooks: [{ type: 'command', command: 'node', args: ['C:/Program Files/as/cli.ts', 'hook', 'claude-cli'] }] }], 'once, after the user\'s own');
   assert.deepEqual([read().model, read().hooks.Stop], ['x', [own]]);
+  const { isConnected } = await import('../../../packages/core/src/engine/inspect.ts');
+  (spec.files as Record<string, string>)['~/.claude.json'] = '{"mcpServers":{"agent-spaghetti":{}}}';
+  assert.equal(await isConnected(env, claude.manifest), true);
   await setConnection(env, claude, d, cli, false, false);
   assert.deepEqual(read().hooks.UserPromptSubmit, [own]);
+  assert.equal(await isConnected(env, claude.manifest), false, 'the server without the >> hook is an incomplete connection: connected again');
 });
 test('connectionPlan: never disconnects, always connects, unset asks once; tools that cannot connect are left alone', async () => {
   const { connectionPlan } = await import('../../../packages/core/src/connections.ts');

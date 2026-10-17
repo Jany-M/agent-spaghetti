@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // `agent-spaghetti` CLI: thin. Every command is an op through HubClient, rendered by sdk/format. No logic of its own.
 import { writeFileSync } from 'node:fs';
-import { DaemonDown, ENGINE_LABEL, HubClient, OPS, SCOPE_LABEL, detectionRows, describeRun, eventLine, permissionRows, runLine, renderStats, renderTable, renderToolRows, renderTree, serveMcpStdio, switchRows, testLines,
+import { DaemonDown, ENGINE_LABEL, HubClient, OPS, parseJson, SCOPE_LABEL, detectionRows, describeRun, eventLine, permissionRows, runLine, renderStats, renderTable, renderToolRows, renderTree, serveMcpStdio, switchRows, testLines,
   type Action, type ConsentRequest, type ConsentScope, type OpId, type TaskKind } from '@agent-spaghetti/sdk';
 import { planHook } from './hook.ts';
 
@@ -39,15 +39,15 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
   const op = cmd && (VERB[cmd] ?? (cmd in OPS ? cmd as OpId : undefined));
   if (!op) { io.err(usage()); return 1; }
   if (op === 'hook') {          // client hooks: always answer the client, even when the daemon is down
-    const plan = planHook(JSON.parse((await readStdin()) || '{}'));
+    const client = args[1] ?? 'client', plan = planHook((parseJson(await readStdin()) ?? {}) as Record<string, any>, client);
     const c = (() => { try { return HubClient.fromDiscovery(env); } catch { return null; } })();
     if ('delegate' in plan) {
-      const r = await c?.call('delegate', { ...plan.delegate, source: args[1] ?? 'client', waitMs: 0 }).catch((e: Error) => e);
+      const r = await c?.call('delegate', { ...plan.delegate, source: client, waitMs: 0 }).catch((e: Error) => e);
       io.out(JSON.stringify(plan.block(!r ? 'agent-spaghetti is not running: start it, then send again.'
         : r instanceof Error ? `agent-spaghetti: ${r.message}`
         : `Sent to ${[plan.delegate.target, ...(plan.delegate.then ?? [])].join(' → ')} (run ${r.id}). The result will be in ${plan.delegate.resultDir ?? 'the agent-spaghetti results folder'}/${r.id}.md and in Agent Spaghetti → Runs.`)));
     } else {
-      if (plan.report) await c?.call('hook', { client: args[1] ?? 'client', ...plan.report }).catch(() => {});
+      if (plan.report) await c?.call('hook', { client, ...plan.report }).catch(() => {});
       io.out(JSON.stringify(plan.reply));
     }
     return 0;
