@@ -14,6 +14,8 @@ const PROMPT_EVENTS: Record<string, { pass: Record<string, unknown>; block(messa
   beforeSubmitPrompt: { pass: { continue: true }, block: m => ({ continue: false, user_message: m }) },
   UserPromptSubmit: { pass: {}, block: m => ({ decision: 'block', reason: m }) },
 };
+/** A path under a folder, in the folder's own spelling (Windows `\\` or `/`). */
+export const under = (dir: string, ...names: string[]) => [dir, ...names].join(dir.includes('\\') ? '\\' : '/');
 export type HookPlan =
   | { delegate: RunRequest & { resultDir?: string }; block(message: string): Record<string, unknown> }
   | { reply: Record<string, unknown>; report?: { event: string; data: Record<string, unknown> } };
@@ -39,5 +41,5 @@ export function planHook(input: Record<string, any>, client = 'client'): HookPla
   const root = Array.isArray(input.workspace_roots) ? String(input.workspace_roots[0] ?? '') : String(input.cwd ?? '');
   const files = (Array.isArray(input.attachments) ? input.attachments : []).filter((a: any) => a?.type === 'file' && a.file_path).map((a: any) => String(a.file_path));
   return { block: kind.block, delegate: { target: p.target, ...(p.model ? { model: p.model } : {}), ...(p.then.length ? { then: p.then } : {}), task: p.task,
-    ...(files.length ? { files } : {}), reason: 'sent with the >> prefix', ...(root ? { cwd: root, resultDir: [root, '.agent-spaghetti', 'results'].join(root.includes('\\') ? '\\' : '/') } : {}) } };
+    ...(files.length ? { files } : {}), reason: 'sent with the >> prefix', ...(root ? { cwd: root, resultDir: under(root, '.agent-spaghetti', 'results') } : {}) } };
 }

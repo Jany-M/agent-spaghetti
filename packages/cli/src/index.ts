@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DaemonDown, ENGINE_LABEL, HubClient, dataDir, ensureDaemon, logsDir, readDiscovery, OPS, parseJson, SCOPE_LABEL, detectionRows, describeRun, eventLine, permissionRows, runLine, renderStats, renderTable, renderToolRows, renderTree, serveMcpStdio, switchRows, testLines,
   type Action, type ConsentRequest, type ConsentScope, type OpId, type TaskKind } from '@agent-spaghetti/sdk';
-import { planHook } from './hook.ts';
+import { planHook, under } from './hook.ts';
 
 export interface IO { out(s: string): void; err(s: string): void }
 const DOWN = 'agent-spaghetti daemon is not running. Start it with: agent-spaghetti daemon';
@@ -63,7 +63,7 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
       const r = await c?.call('delegate', { ...plan.delegate, source: client, waitMs: 0 }).catch((e: Error) => e);
       io.out(JSON.stringify(plan.block(!r ? 'agent-spaghetti is not running: start it, then send again.'
         : r instanceof Error ? `agent-spaghetti: ${r.message}`
-        : `Sent to ${[plan.delegate.target, ...(plan.delegate.then ?? [])].join(' → ')} (run ${r.id}). The result will be in ${plan.delegate.resultDir ?? 'the agent-spaghetti results folder'}/${r.id}.md and in Agent Spaghetti → Runs.`)));
+        : `Sent to ${[plan.delegate.target, ...(plan.delegate.then ?? [])].join(' → ')} (run ${r.id}). The result will be in ${plan.delegate.resultDir ? `${under(plan.delegate.resultDir, `${r.id}.md`)} and in ` : ''}Agent Spaghetti → Runs.`)));
     } else {
       if (plan.report) await c?.call('hook', { client, ...plan.report }).catch(() => {});
       io.out(JSON.stringify(plan.reply));
