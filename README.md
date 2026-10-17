@@ -11,7 +11,7 @@ Your AI tools each live in their own world. Agent Spaghetti untangles them: it m
 ## What it does
 
 Agent Spaghetti is a **switchboard** for the AI tools you already use on your machine.
-Any tool can hand a task to any other tool, and the result comes back to the one that asked: coding agents (Claude Code, Codex, OpenCode, Cline, Kilo, OpenClaw, …), IDE chats (VS Code, Cursor, …), desktop apps (Claude Desktop, AnythingLLM, …) and models (LM Studio, Ollama, llama.cpp, vLLM or a hosted API).
+Any tool can hand a task to any other tool, and the result comes back to the one that asked: coding agents, IDE chats, desktop apps and models.
 
 No more single tool hoarding all the tasks and draining your API or subscription quotas by doing it all by itself.
 It's time to organize agents workload better and make the most of ever raising tokens and plans cost.
@@ -45,7 +45,7 @@ Status keeps itself current: running tools and model servers are re-checked ever
 
   | Tool | Type | |
   |---|---|---|
-  | any | `have the local model write the tests, then Claude Code review them` | its agent calls `delegate` |
+  | any | `have the local model write the tests, then Claude Code review them, then hand it back to me` | its agent calls `delegate` |
   | VS Code | `/mcp.agent-spaghetti.delegate` | a form with a target list; or `#delegate` in a prompt |
   | Claude Code | `@agent-spaghetti:target://openclaw review this` | `@` lists the targets |
   | Cursor, Claude Code | `>>openclaw >>claude-cli review src/app.ts` | sent straight to the targets, not to the tool's model |
@@ -76,10 +76,12 @@ Local models answer at once; a paid one (OpenAI or Anthropic API, found if `OPEN
 - Codex
 - VSCode
 - Cursor
+- Continue (up to last opensource version)
 - Openclaw
 - OpenCode
 - Cline
 - Kilo
+- ZooCode (ex RooCode)
 - LM Studio
 - AnythingLLM
 
