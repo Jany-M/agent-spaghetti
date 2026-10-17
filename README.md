@@ -5,16 +5,21 @@
 
 *Multi Agent Orchestrator for tools and LLMs that have no intention of cooperating.*
 
-Your AI tools each live in their own world. Agent Spaghetti untangles them: it makes your agents hand work to each other, one step at a time, on the LLM you choose, local or online.
+Your AI tools each live in their own world. Agent Spaghetti untangles them: it makes your tools' agents hand work to each other, on the LLM you choose, local or online.
 </div>
 
 ## What it does
 
-Agent Spaghetti is a **switchboard** for the AI tools on your machine. Any tool can hand a task to any other tool, and the result comes back to the one that asked: coding agents (Claude Code, Codex, OpenCode, Cline, Kilo, OpenClaw, …), IDE chats (VS Code, Cursor, …), desktop apps (Claude Desktop, AnythingLLM, …) and models (LM Studio, Ollama, llama.cpp, vLLM or a hosted API). No tool sits in the middle and none is preferred: you decide who does what.
+Agent Spaghetti is a **switchboard** for the AI tools you already use on your machine.
+Any tool can hand a task to any other tool, and the result comes back to the one that asked: coding agents (Claude Code, Codex, OpenCode, Cline, Kilo, OpenClaw, …), IDE chats (VS Code, Cursor, …), desktop apps (Claude Desktop, AnythingLLM, …) and models (LM Studio, Ollama, llama.cpp, vLLM or a hosted API).
+
+No more single tool hoarding all the tasks and draining your API or subscription quotas by doing it all by itself.
+It's time to organize agents workload better and make the most of ever raising tokens and plans cost.
+You decide who does what, when you want them to.
 
 - **See** what is installed and running, on Windows and in your WSL distros, and which model each agent uses.
 - **Connect** your tools once (one click each): they get the `agent-spaghetti` tools (`delegate`, `targets`, `run_status`, `report`).
-- **Hand off** a task from any connected tool, or from the tray, to any target. Free local models run at once; anything that may cost money asks you first. Every hand-off is recorded (who, what kind, why, outcome, cost, result).
+- **Hand off** a task from any connected tool, or from the tray, to any target. Free local models run at once; anything that may cost money (e.g. delegating a task to your Copilot in VSCode, or your Claude CLI etc.) asks you first, before delegating. Every hand-off is recorded (who, what kind, why, outcome, cost, result).
 
 <div align="center">
 <img width="380" height="520" alt="taskbar_dark" src="https://github.com/user-attachments/assets/345fcd88-737a-4870-94dc-856b6ffc28cd" />
@@ -52,12 +57,28 @@ Tools that accept a custom OpenAI-compatible endpoint (VS Code chat, OpenCode, K
 2. Tools → the tool → **Use the gateway**: a key for that tool, shown once, with the exact steps for it. The tool asks for model `auto`.
 3. Tools → the tool → **Model**: `auto` (the best free model loaded) or a specific one. Change it here any time; the tool needs no change.
 
-Local models answer at once; a paid one (OpenAI or Anthropic API, found when `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` is set) asks you first, as hand-offs do. Every request is in **Runs** (no prompt text is stored). Limits: VS Code's inline completions stay with GitHub; Cursor cannot reach a local endpoint (its requests go through its servers), so it works through hand-offs instead.
+Local models answer at once; a paid one (OpenAI or Anthropic API, found if `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` is set) asks you first, as hand-offs do. Every request is in **Runs** (no prompt text is stored). 
+
+## Works with
+
+- Claude Code
+- Claude Desktop
+- ChatGPT Desktop
+- Codex
+- VSCode
+- Cursor
+- Openclaw
+- OpenCode
+- Cline
+- Kilo
+- LM Studio
+- AnythingLLM
 
 ## Per-tool notes
 
 - **OpenClaw:** Tools → OpenClaw → **Set up** installs its multi-step workflow pack (roles, settings, helpers; **Dry run** first if you like, **Check** any time). It needs a running gateway and `python3` on the gateway host. The model it uses is the setting `openclaw.model`: `auto` (keep the current one while it answers, else the best loaded local model), `keep`, or `<server>:<model>` from `targets`.
-- **Cursor:** cannot use a local model as its own model (its servers can't reach your machine), so it works through MCP and the `>>` prefix.
+- **Cursor:** cannot use a local model/endpoint as its own model (its servers can't reach your machine), so it works through hand-offs instead, via local MCP and the `>>` prefix.
+- **VS Code**'s inline completions stay with GitHub.
 
 ## License
 
