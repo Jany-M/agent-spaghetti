@@ -32,11 +32,11 @@ async function refresh() {
   for (const id of newQuestions(seen, consents.map(c => c.id))) {
     seen.add(id);
     const c = consents.find(x => x.id === id)!;
-    const n = new Notification({ title: `${names.get(c.subject) ?? c.subject} is asking`, body: `${c.action} ${c.resource}\n${c.why}`, icon: asset('icon.png') });
-    n.on('click', showPopover); n.show();
+    notify(`${names.get(c.subject) ?? c.subject} is asking`, `${c.action} ${c.resource}\n${c.why}`);
   }
   setMenu();
 }
+function notify(title: string, body: string) { const n = new Notification({ title, body, icon: asset('icon.png') }); n.on('click', showPopover); n.show(); }
 let pending: NodeJS.Timeout | undefined;
 const refreshSoon = () => { clearTimeout(pending); pending = setTimeout(() => void refresh(), 200); };
 
@@ -46,7 +46,7 @@ async function follow() {
     try {
       client = await connect(); up = true; wait = 1000;
       send({ type: 'hub.up' }); refreshSoon();
-      for await (const e of client.stream()) { send(e); refreshSoon(); }
+      for await (const e of client.stream()) { send(e); refreshSoon(); if (e.type === 'run.delivered' && e.data.how === 'unread') notify(`Result of run ${e.data.id} is waiting`, 'Its caller was no longer waiting: see Runs.'); }
     } catch (e) { if (!(e instanceof DaemonDown)) console.error(e); }
     if (up) { up = false; client = null; send({ type: 'hub.down' }); void refresh(); }
     await new Promise(r => setTimeout(r, wait));

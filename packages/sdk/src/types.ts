@@ -82,7 +82,7 @@ export const EVENT_TYPES = [
   'scan.completed', 'scan.integration_error', 'env.status', 'backend.detected', 'agent.detected',
   'session.started', 'session.updated', 'session.ended', 'backend.changed', 'tool.changed', 'switch.changed', 'permission.pending',
   'consent.requested', 'consent.answered', 'consent.expired',
-  'run.started', 'run.event', 'run.finished', 'backend.queue', 'client.hook', 'client.connected',
+  'run.started', 'run.event', 'run.finished', 'run.delivered', 'backend.queue', 'client.hook', 'client.connected',
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 export interface HubEvent { ts: number; type: EventType; envId: string; source: string; data: Record<string, unknown> }
@@ -92,25 +92,37 @@ export type Emit = (e: Pick<HubEvent, 'type' | 'data'> & Partial<HubEvent>) => v
 export interface Disposable { dispose(): void }
 
 /** Delegation (ADR 0007): the one list of task kinds, and the run record. */
-export const TASK_KINDS = ['code-edit', 'tests', 'review', 'research', 'summarize', 'refactor', 'docs', 'other'] as const;
+export const TASK_KINDS = ['code-edit', 'tests', 'review', 'research', 'summarize', 'refactor', 'docs', 'other', 'report'] as const;   // report: a result handed back, no reply expected
 export type TaskKind = (typeof TASK_KINDS)[number];
+/** The kinds a caller picks (report is the runner's own). */
+export const HANDOFF_KINDS = TASK_KINDS.filter(k => k !== 'report');
+/** One hand-off (ADR 0010 envelope). `then` = the next hops (`target[:model]`), each getting the previous result as `context`;
+ *  the last result goes back to the caller (`returnTo`, default 'caller'), into `returnSession` when the caller knows its session. */
 export interface RunRequest {
   target: string; task: string; kind?: TaskKind; reason?: string; model?: string;
   cwd?: string; resultDir?: string; jobId?: string; parentRunId?: number; deadlineMs?: number;
+  context?: string; then?: string[]; returnTo?: 'caller' | 'none'; returnSession?: string;
+  session?: string;                                         // a session of the target to continue (engines that can resume)
+  chainId?: number;                                         // set by the runner for hops after the first
 }
 export type RunEvent =
   | { type: 'text'; text: string } | { type: 'tool'; name: string; summary: string }
   | { type: 'usage'; inputTokens?: number; outputTokens?: number; costUsd?: number }
-  | { type: 'done'; result: string } | { type: 'error'; message: string };
+  | { type: 'done'; result: string } | { type: 'error'; message: string }
+  | { type: 'session'; id: string };                        // the target's session, so a result can be resumed into it later
 export type RunOutcome = 'running' | 'done' | 'error' | 'denied' | 'expired' | 'cancelled';
 export interface RunRow {
   id: number; ts: number; source: string; target: string; model?: string; parentRunId?: number; jobId?: string;
   kind: TaskKind; reason?: string; taskHash: string; durationMs?: number;
   inputTokens?: number; outputTokens?: number; costUsd?: number; outcome: RunOutcome; error?: string;
   resultPath?: string; resultSha256?: string; verdict?: 'up' | 'down' | 'redo';
+  chainId: number; session?: string; returnTo?: 'caller' | 'none'; delivered?: Delivery;
 }
-/** Something `delegate` can hand a task to: a local model server (OpenAI API) or an agent with a run hook. */
-export interface Target { id: string; name: string; kind: 'model' | 'agent'; cost: Cost; envId: string; models: string[] }
+/** Where a chain's result went (ADR 0010): the waiting call, a resumed session, the caller's chat, or its unread results. */
+export type Delivery = 'inline' | 'resumed' | 'injected' | 'unread' | 'read';
+/** Something `delegate` can hand a task to: a local model server (OpenAI API) or an agent with a run hook.
+ *  `engine`: how its runs are made; `resumable`: a run can continue one of its sessions (results can go back into it). */
+export interface Target { id: string; name: string; kind: 'model' | 'agent'; cost: Cost; envId: string; models: string[]; engine: 'openai' | 'module'; resumable: boolean }
 export interface Ctx { signal: AbortSignal; inventory: Inventory; pollMs?: number; runId?: number }   // runId: set for run(), so nested delegations link to it
 export interface Switch { id: string; label: string; on: boolean; envId: string; integration: string }
 export interface TestStep { name: string; ok: boolean; detail: string; ms: number }
@@ -125,6 +137,8 @@ export interface IntegrationModule {
   setSwitch?(env: Environment, det: Detection, id: string, on: boolean, ctx: Ctx): Promise<void>;
   test?(env: Environment, det: Detection, ctx: Ctx): Promise<TestStep[]>;
   run?(env: Environment, det: Detection, req: RunRequest, ctx: Ctx): AsyncIterable<RunEvent>;
+  /** `run` emits `session` events and continues `req.session` (ADR 0010 resumed returns). */
+  resumes?: boolean;
   /** Add (on) or remove agent-spaghetti's MCP server where the tool's own CLI is the documented way (else core/connect.ts does it). */
   connect?(env: Environment, det: Detection, cli: Cli, on: boolean, dryRun: boolean): Promise<Connected>;
   /** Tool-side setup (e.g. a workflow pack): check reports, apply changes the tool (Tools → Set up, `agent-spaghetti setup`). */

@@ -46,6 +46,7 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
 
   const consent = new Consent(bus);
   const ledger = new Ledger(store);
+  ledger.abandonRunning();                                    // runs a previous daemon left behind
   const token = loadOrCreateToken(dir);
   const load = () => loadIntegrations(BUILTINS, userIntegrationsDir(dir));
   let loaded: Loaded = await load();

@@ -14,7 +14,13 @@ export class Store {
         CREATE TABLE IF NOT EXISTS runs(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, source TEXT, target TEXT, model TEXT,
           parent_run_id INTEGER, job_id TEXT, kind TEXT, reason TEXT, task_hash TEXT, duration_ms INTEGER, input_tokens INTEGER,
           output_tokens INTEGER, cost_usd REAL, outcome TEXT, error TEXT, result_path TEXT, result_sha256 TEXT, verdict TEXT);`);
+      this.addColumns('runs', { chain_id: 'INTEGER', session: 'TEXT', return_to: 'TEXT', delivered: 'TEXT' });
     } catch (err) { throw new Error(`agent-spaghetti store cannot open "${path}": ${(err as Error).message}`); }
+  }
+  /** Columns added after a table was first created (older stores keep their data). */
+  private addColumns(table: string, cols: Record<string, string>) {
+    const have = new Set((this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map(c => c.name));
+    for (const [c, t] of Object.entries(cols)) if (!have.has(c)) this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${c} ${t}`);
   }
   appendEvent(e: HubEvent): number {
     return Number(this.db.prepare('INSERT INTO events(ts,type,env_id,source,data) VALUES(?,?,?,?,?)')

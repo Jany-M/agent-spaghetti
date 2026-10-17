@@ -132,7 +132,7 @@ test('OpenAI engine: one request at a time per server; queue reported; usage par
   assert.equal(queue.at(-1), '0/0');
   assert.match(env.inputs['POST http://h/v1/chat/completions'], /"stream":true,"stream_options":\{"include_usage":true\}/);
 });
-test('claude-cli: read-only unless a folder and an editing kind; stream-json → events (subagents skipped)', () => {
+test('claude-cli: read-only unless a folder and an editing kind; stream-json → events (subagents skipped); sessions resume', () => {
   assert.deepEqual(claudeArgs({ target: 'claude-cli', task: 'x' }).slice(4, 6), ['--permission-mode', 'dontAsk']);
   assert.deepEqual(claudeArgs({ target: 'claude-cli', task: 'x', kind: 'code-edit', cwd: '/w' }).slice(4, 6), ['--permission-mode', 'acceptEdits']);
   assert.deepEqual(claudeArgs({ target: 'claude-cli', task: 'x', kind: 'review', cwd: '/w', model: 'opus' }).slice(4), ['--permission-mode', 'dontAsk', '--permission-prompts', 'none', '--model', 'opus']);
@@ -143,4 +143,6 @@ test('claude-cli: read-only unless a folder and an editing kind; stream-json →
     [{ type: 'usage', inputTokens: 3, outputTokens: 4, costUsd: 0.01 }, { type: 'done', result: 'done!' }]);
   assert.deepEqual(toEvents('{"type":"result","is_error":true,"result":"Not logged in"}').at(-1), { type: 'error', message: 'Not logged in' });
   assert.deepEqual(toEvents('not json'), []);
+  assert.deepEqual(toEvents('{"type":"system","subtype":"init","session_id":"s-1"}'), [{ type: 'session', id: 's-1' }]);
+  assert.deepEqual(claudeArgs({ target: 'claude-cli', task: 'x', session: 's-1' }).slice(-2), ['--resume', 's-1']);
 });

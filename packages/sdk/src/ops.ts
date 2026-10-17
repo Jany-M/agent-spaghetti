@@ -1,7 +1,7 @@
 // The one list of operations: REST routes, CLI usage text and the MCP tools (`mcp`) are all generated from it.
 import type { Snapshot, StoredEvent, RunRequest, RunRow, Switch, Target, TestResult } from './types.ts';
 import type { ToolRow } from './format.ts';
-import { TASK_KINDS } from './types.ts';
+import { HANDOFF_KINDS } from './types.ts';
 import type { Action, ConsentRequest, ConsentScope, DeclaredAction, Grant, Mode } from './permissions.ts';
 import type { LiveState } from './state.ts';
 
@@ -30,18 +30,24 @@ export const OPS = {
   report:       { method: 'GET',  path: '/v1/report', gui: 'settings',       usage: 'report [--out <file>]',    summary: 'Machine configuration report (Markdown)' },
   consent:      { method: 'POST', path: '/v1/consent', gui: 'home',      usage: 'answer <id> allow|deny [once|job|always]', summary: 'Answer a question waiting for you (ids: status)' },
   shutdown:     { method: 'POST', path: '/v1/shutdown', gui: 'tray-menu',     usage: 'shutdown',                 summary: 'Stop the daemon' },
-  delegate:     { method: 'POST', path: '/v1/delegate', gui: 'runs',     usage: 'delegate <target> <task> [options]', summary: 'Hand a task to a local model or agent (--kind, --reason, --model)',
+  delegate:     { method: 'POST', path: '/v1/delegate', gui: 'runs',     usage: 'delegate <target> <task> [options]', summary: 'Hand a task to a local model or agent (--kind, --reason, --model, --then <target[:model]>,…)',
     mcp: { name: 'delegate', description: 'Hand a task to a local model or another agent on this machine (see `targets`). Free local models run at once; '
-      + 'targets that may cost money ask the user first. Returns the result, or a run id to check with `run_status` if it takes long.',
+      + 'targets that may cost money ask the user first. `then` hands the result on to further targets in order; the last result comes back to you. '
+      + 'Returns the result, or a run id to check with `run_status` if it takes long.',
       input: { type: 'object', additionalProperties: false, required: ['target', 'task'], properties: {
         target: { type: 'string', description: 'Target id from `targets`' }, task: { type: 'string', description: 'The full task, self-contained' },
-        kind: { type: 'string', enum: [...TASK_KINDS] }, reason: { type: 'string', description: 'One line: why this is handed off' },
+        kind: { type: 'string', enum: HANDOFF_KINDS }, reason: { type: 'string', description: 'One line: why this is handed off' },
         model: { type: 'string', description: 'A loaded model of a model target, or an agent of an agent target (see `targets`; default: the first model / the default agent)' },
-        cwd: { type: 'string', description: 'Working folder for agents that edit files' } } } } },
+        cwd: { type: 'string', description: 'Working folder for agents that edit files' },
+        context: { type: 'string', description: 'Findings or instructions the target needs besides the task' },
+        then: { type: 'array', items: { type: 'string' }, description: 'Next targets (`target` or `target:model`), each getting the previous result' },
+        returnTo: { type: 'string', enum: ['caller', 'none'], description: 'caller (default): the last result comes back to you; none: nothing comes back' },
+        returnSession: { type: 'string', description: 'Your own session id, so a late result can be resumed into it' } } } } },
   targets:      { method: 'GET',  path: '/v1/targets', gui: 'runs',      usage: 'targets',                  summary: 'What tasks can be handed to right now',
     mcp: { name: 'targets', description: 'List the local models and agents `delegate` can use now, with their cost class (free / metered).', input: { type: 'object', additionalProperties: false, properties: {} } } },
   runs:         { method: 'GET',  path: '/v1/runs', gui: 'runs',         usage: 'runs [<id>]',              summary: 'The run record; with an id: its hand-off chain and result',
-    mcp: { name: 'run_status', description: 'Status and result of a delegated run.', input: { type: 'object', additionalProperties: false, required: ['id'], properties: { id: { type: 'integer' } } } } },
+    mcp: { name: 'run_status', description: 'Status and result of a run you handed off; without an id: results of your hand-offs that finished after you stopped waiting (each given once).',
+      input: { type: 'object', additionalProperties: false, properties: { id: { type: 'integer' } } } } },
   cancel:       { method: 'POST', path: '/v1/cancel', gui: 'runs',       usage: 'cancel <id>',              summary: 'Stop a running delegation' },
   verdict:      { method: 'POST', path: '/v1/verdict', gui: 'runs',      usage: 'verdict <id> up|down|redo', summary: 'Rate a run (kept in the run record)' },
   connect:      { method: 'POST', path: '/v1/connect', gui: 'tools',      usage: 'connect|disconnect <integration> [--dry-run]', summary: 'Give a client the agent-spaghetti tools (MCP + plugin), or take them away' },
@@ -71,7 +77,8 @@ export interface OpIO {
   shutdown: { in: {}; out: { stopping: true } };
   delegate: { in: RunRequest & { source?: string; waitMs?: number }; out: RunView };
   targets: { in: {}; out: Target[] };
-  runs: { in: { id?: number; since?: number; limit?: number }; out: { runs: RunRow[]; result?: string } };
+  runs: { in: { id?: number; since?: number; limit?: number; watch?: boolean; unread?: boolean; source?: string };
+    out: { runs: RunRow[]; result?: string; final?: RunView; unread?: RunView[] } };   // final: the chain's view (id = chain); unread: given once
   cancel: { in: { id: number }; out: { cancelled: boolean } };
   verdict: { in: { id: number; value: 'up' | 'down' | 'redo' }; out: { ok: true } };
   connect: { in: { integration: string; on?: boolean; envId?: string; dryRun?: boolean }; out: ConnectResult };

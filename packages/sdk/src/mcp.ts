@@ -40,9 +40,14 @@ export function mcpHandler(client: HubClient, o: BridgeOpts, send: Send) {
           message: asking ? 'waiting for approval in Agent Spaghetti' : `running on ${v.run.target}` } });
       }
       await new Promise(r => setTimeout(r, o.pollMs ?? 1500));
-      const r = await client.call('runs', { id: v.id });
-      v = { id: v.id, run: r.runs.find(x => x.id === v.id)!, result: r.result };
+      v = (await client.call('runs', { id: v.id, watch: true })).final!;
     }
+  }
+  /** One run (its chain's final state), or every result waiting for this caller. */
+  async function status(id: number | undefined): Promise<object> {
+    if (id !== undefined) return describeRun((await client.call('runs', { id, watch: true })).final!);
+    const waiting = (await client.call('runs', { unread: true, source: o.source })).unread ?? [];
+    return text(waiting.length ? waiting.map(v => `## Run ${v.id} (${v.run.target}): ${v.run.outcome}\n\n${v.result ?? v.run.error ?? '(no output)'}`).join('\n\n') : 'No new results.');
   }
   async function call(name: string, args: Record<string, any>, progressToken: unknown): Promise<object> {
     const tool = TOOLS.find(t => t.name === name);
@@ -51,7 +56,7 @@ export function mcpHandler(client: HubClient, o: BridgeOpts, send: Send) {
     if (errors.length) return text(`invalid arguments: ${errors.join('; ')}`, true);
     try {
       if (tool.op === 'delegate') return await delegate(args, progressToken);
-      if (tool.op === 'runs') { const r = await client.call('runs', { id: args.id }); const run = r.runs.find(x => x.id === args.id); return run ? describeRun({ id: run.id, run, result: r.result }) : text(`no run ${args.id}`, true); }
+      if (tool.op === 'runs') return await status(args.id);
       return text(JSON.stringify(await client.call(tool.op, args as never), null, 2));
     } catch (e) { return text((e as Error).message, true); }   // daemon down or the op refused: a tool error the agent can read
   }

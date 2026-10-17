@@ -1,5 +1,5 @@
 // Handlers for the operations declared once in sdk/ops.ts. Per-environment work goes through Services.onEnvs (core/dispatch).
-import type { EnvResult, Grant, LiveState, OpId, OpIO, Snapshot, Target } from '@agent-spaghetti/sdk';
+import type { EnvResult, Grant, LiveState, OpId, OpIO, RunView, Snapshot, Target } from '@agent-spaghetti/sdk';
 import { OPS, declaredActions, levelsOf, renderConfigReport, toolRows, withGrants, withoutGrants } from '@agent-spaghetti/sdk';
 import type { Store } from './store.ts';
 import type { Bus } from './bus.ts';
@@ -10,7 +10,6 @@ import type { Consent } from './consent.ts';
 import type { EnvCommand, EnvResults } from './actions.ts';
 import type { Ledger } from './ledger.ts';
 import { targets, type Runner } from './runner.ts';
-import { readFileSync } from 'node:fs';
 import { ENGINES } from './engine/inspect.ts';
 
 export interface Services {
@@ -109,15 +108,24 @@ export const handlers: Handlers = {
   delegate: async (i, s) => {
     const { source, waitMs, ...req } = i;
     need(req.target, 'target'); need(req.task, 'task');
-    const { id, done } = s.runner.start(source || 'cli', { ...req, parentRunId: req.parentRunId ? Number(req.parentRunId) : undefined });
-    if (Number(waitMs) > 0) await Promise.race([done, new Promise(r => setTimeout(r, Number(waitMs)))]);
-    return runView(s, id);
+    const { id, done } = s.runner.start(source || 'cli', { ...req, parentRunId: req.parentRunId ? Number(req.parentRunId) : undefined, chainId: undefined });
+    if (Number(waitMs) > 0) { s.runner.watch(id); await Promise.race([done, new Promise(r => setTimeout(r, Number(waitMs)))]); s.runner.watch(id); }
+    return chainView(s, id);
   },
   targets: (_i, s) => targets({ host: s.host, snapshot: () => snapshot(s), integrations: () => s.loaded().integrations.filter(x => !s.settings.get('disabled').includes(x.manifest.id)) }),
   runs: (i, s) => {
+    if (i.unread) {                                           // results waiting for their caller: given once, then read
+      const rows = s.ledger.unread(need(i.source, 'source'));
+      for (const r of rows) s.ledger.update(r.id, { delivered: 'read' });
+      return { runs: [], unread: rows.map(r => chainView(s, r.id)) };
+    }
     if (i.id === undefined || i.id === null || String(i.id) === '') return { runs: s.ledger.list({ since: num(i.since, 0), limit: num(i.limit, 50) }) };
-    const v = runView(s, num(i.id, 0));
-    return { runs: s.ledger.chain(v.id), result: v.result };
+    const run = s.ledger.get(num(i.id, 0));
+    if (!run) throw new Error(`no run ${i.id}`);
+    if (i.watch) s.runner.watch(run.chainId);
+    const final = chainView(s, run.chainId);
+    if (i.watch && final.run.outcome !== 'running' && final.run.delivered === 'unread') s.ledger.update(run.chainId, { delivered: 'read' });   // collected by id
+    return { runs: s.ledger.chain(run.id), result: s.ledger.result(run), final };
   },
   cancel: (i, s) => ({ cancelled: s.runner.cancel(num(i.id, 0)) }),
   verdict: (i, s) => {
@@ -166,13 +174,13 @@ export const handlers: Handlers = {
     return { ok: true };
   },
 };
-/** The run record plus its result text (read from the result file) once it has one. */
-function runView(s: Services, id: number) {
-  const run = s.ledger.get(id);
-  if (!run) throw new Error(`no run ${id}`);
-  let result: string | undefined;
-  try { if (run.resultPath) result = readFileSync(run.resultPath, 'utf8'); } catch { /* moved or deleted by the user */ }
-  return { id, run, result };
+/** A hand-off chain as its caller sees it: the last hop's record and result, still `running` until the chain has ended. */
+function chainView(s: Services, chainId: number): RunView {
+  const hops = s.ledger.hops(chainId), first = hops[0];
+  if (!first) throw new Error(`no run ${chainId}`);
+  const last = hops[hops.length - 1];
+  const run = { ...last, delivered: first.delivered, ...(s.runner.wait(chainId) ? { outcome: 'running' as const } : {}) };
+  return { id: chainId, run, result: run.outcome === 'running' ? undefined : s.ledger.result(last) };
 }
 export const routesFor = (s: Services): Route[] => (Object.keys(OPS) as OpId[]).map(id => ({
   method: OPS[id].method, path: OPS[id].path, handle: (input: Record<string, unknown>) => (handlers[id] as (i: unknown, s: Services) => unknown)(input, s) }));

@@ -1,6 +1,7 @@
 // Claude Code CLI module: runs a delegated task headless (`claude -p`, stream-json), checked 2026-10-16 against
 // https://code.claude.com/docs/en/headless . The task goes through stdin (never the command line).
 // Least privilege: read-only (dontAsk) unless the request names a working folder and the kind changes files.
+// Sessions: the init event carries `session_id`; `--resume <id>` continues it (results handed back, ADR 0010).
 import type { IntegrationModule, RunEvent, RunRequest } from '@agent-spaghetti/sdk';
 import { parseJsonLoose } from '@agent-spaghetti/sdk';
 
@@ -8,12 +9,13 @@ const EDIT_KINDS = new Set(['code-edit', 'refactor', 'tests', 'docs']);
 export function claudeArgs(req: RunRequest): string[] {
   const edits = !!req.cwd && EDIT_KINDS.has(req.kind ?? 'other');
   return ['-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', edits ? 'acceptEdits' : 'dontAsk', '--permission-prompts', 'none',
-    ...(req.model ? ['--model', req.model] : [])];
+    ...(req.model ? ['--model', req.model] : []), ...(req.session ? ['--resume', req.session] : [])];
 }
 /** stream-json lines → run events (main conversation only; subagent messages carry a parent_tool_use_id). */
 export function toEvents(line: string): RunEvent[] {
   const j = parseJsonLoose(line) as any;
   if (!j || typeof j !== 'object') return [];
+  if (j.type === 'system' && j.subtype === 'init' && typeof j.session_id === 'string') return [{ type: 'session', id: j.session_id }];
   if (j.type === 'assistant' && !j.parent_tool_use_id) return (j.message?.content ?? []).flatMap((c: any): RunEvent[] =>
     c?.type === 'text' && c.text ? [{ type: 'text', text: c.text }]
       : c?.type === 'tool_use' ? [{ type: 'tool', name: String(c.name), summary: JSON.stringify(c.input ?? {}).slice(0, 120) }] : []);
@@ -38,6 +40,7 @@ export const claudeCliModule: IntegrationModule = {
     return { description: `${on ? 'add' : 'remove'} the agent-spaghetti MCP server ${on ? 'to' : 'from'} Claude Code (user scope)`,
       changes: [`claude ${(on ? add : remove).join(' ')}`], applied: !dryRun };
   },
+  resumes: true,
   async *run(env, det, req, ctx) {
     const exe = exeOf(det);
     if (!exe) throw new Error('Claude Code CLI not found');

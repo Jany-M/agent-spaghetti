@@ -84,17 +84,20 @@ export const openclawModule: IntegrationModule = {
     const timer = setInterval(tick, ctx.pollMs ?? 2000);
     return { dispose: () => clearInterval(timer) };
   },
-  /** One turn of an OpenClaw agent (req.model = agent id, else the default agent) in its own session per run. */
+  /** One turn of an OpenClaw agent (req.model = agent id, else the default agent): in `req.session` when continuing one, else its own session per run. */
+  resumes: true,
   async *run(env, det, req, ctx) {
     const exe = openclawExe(det);
     if (!exe) throw new Error('openclaw not found');
     if (!det.endpoint) throw new Error('the OpenClaw gateway is not running');
     if (env.kind === 'windows') throw new Error('OpenClaw tasks run where its CLI reads the task from /dev/stdin (Linux, macOS, WSL)');
     const agent = req.model ?? toAgents(await openclawJson(env, exe, ['agents', 'list']), {}, env.id).find(a => a.isDefault)?.id.slice('openclaw:'.length) ?? 'main';
+    const session = req.session ?? `agent-spaghetti-${ctx.runId ?? Date.now()}`;
+    yield { type: 'session', id: session };
     const lines: string[] = [];
     try {
       // through `cat |`: Node gives children a socket as stdin, which /dev/stdin cannot open (ENXIO); a pipe it can
-      const args = ['agent', '--agent', agent, '--session-id', `agent-spaghetti-${ctx.runId ?? Date.now()}`, '--message-file', '/dev/stdin', '--json'];
+      const args = ['agent', '--agent', agent, '--session-id', session, '--message-file', '/dev/stdin', '--json'];
       for await (const l of env.execLines('sh', ['-c', 'cat | "$0" "$@"', exe, ...args], { input: req.task, cwd: req.cwd, signal: ctx.signal })) lines.push(l);
     } catch (e) { if (ctx.signal.aborted || !lines.length) throw e; }   // exit 1 still prints the JSON reason
     yield* agentResult(lines.join('\n'));

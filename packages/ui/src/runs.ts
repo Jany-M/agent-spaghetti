@@ -1,6 +1,6 @@
 // Runs panel: the run record, one run's hand-off chain + result (verdict, cancel), and "New task" (= delegate).
 import { createElement as h, useState } from 'react';
-import { TASK_KINDS, runLine, type OpIO, type RunRow, type Target } from '@agent-spaghetti/sdk/web';
+import { HANDOFF_KINDS, runLine, type OpIO, type RunRow, type Target } from '@agent-spaghetti/sdk/web';
 import type { Bridge } from './bridge.ts';
 import { useAct, useOp } from './hooks.ts';
 
@@ -29,7 +29,7 @@ export function RunsView(p: RunsProps) {
       h('label', null, 'To', h('select', { name: 'target', value: t?.id ?? '', onChange: (e: { target: { value: string } }) => p.onTarget(e.target.value) },
         ...p.targets.map(x => h('option', { key: x.id, value: x.id }, `${x.name} (${x.cost})`)))),
       t?.models.length ? h('label', null, t.kind === 'model' ? 'Model' : 'Agent', h('select', { name: 'model', key: t.id }, ...t.models.map(m => h('option', { key: m, value: m }, m)))) : null,
-      h('label', null, 'Kind', h('select', { name: 'kind', defaultValue: 'other' }, ...TASK_KINDS.map(k => h('option', { key: k, value: k }, k)))),
+      h('label', null, 'Kind', h('select', { name: 'kind', defaultValue: 'other' }, ...HANDOFF_KINDS.map(k => h('option', { key: k, value: k }, k)))),
       h('label', null, 'Why', h('input', { name: 'reason', placeholder: 'one line, kept in the record' }))),
     h('textarea', { name: 'task', rows: 4, required: true, placeholder: 'The whole task: the target sees nothing else.' }),
     h('div', { className: 'row' }, h('button', { className: 'allow', type: 'submit', disabled: !!p.busy || !t }, p.busy === 'send' ? 'Sending…' : 'Send')));

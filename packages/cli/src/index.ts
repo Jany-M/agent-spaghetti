@@ -115,11 +115,11 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
       }
       case 'shutdown': { const r = await c.call('shutdown'); print(r, () => 'agent-spaghetti daemon is stopping'); break; }
       case 'delegate': {
-        const kind = flag(args, '--kind') as TaskKind | undefined, reason = flag(args, '--reason'), model = flag(args, '--model');
+        const kind = flag(args, '--kind') as TaskKind | undefined, reason = flag(args, '--reason'), model = flag(args, '--model'), then = flag(args, '--then');
         const [, target, ...task] = args;
         if (!target || !task.length) { io.err(`usage: agent-spaghetti ${OPS.delegate.usage}`); return 1; }
-        let v = await c.call('delegate', { target, task: task.join(' '), kind, reason, model, source: 'cli', waitMs: 0 });
-        while (v.run.outcome === 'running') { await new Promise(r => setTimeout(r, 1000)); const r = await c.call('runs', { id: v.id }); v = { id: v.id, run: r.runs.find(x => x.id === v.id)!, result: r.result }; }
+        let v = await c.call('delegate', { target, task: task.join(' '), kind, reason, model, then: then?.split(',').filter(Boolean), source: 'cli', waitMs: 0 });
+        while (v.run.outcome === 'running') { await new Promise(r => setTimeout(r, 1000)); v = (await c.call('runs', { id: v.id, watch: true })).final!; }
         const d = describeRun(v);
         print(v, () => d.content[0].text);
         return 'isError' in d ? 1 : 0;

@@ -80,7 +80,7 @@ test('toolRows: group by first role in TOOL_GROUPS order; state, connection, pre
     det('oc', { connected: true, envId: 'wsl:T' }), det('oc', { envId: 'windows' }), det('lms'), det('ed', { connected: false, installs: [{ via: 'process', pid: 1 }] }),
     det('srv', { connectable: 'needs-setup', why: 'installed, server not running' }), det('gone') ] };
   const live = liveState([{ id: 1, ts: 1, type: 'tool.changed', envId: 'windows', source: 'gone', data: { integration: 'gone', running: false } }], emptyLive());
-  const rows = toolRows({ snapshot, live, targets: [{ id: 'lms', name: 'LMS', kind: 'model', cost: 'free', envId: 'windows', models: ['m'] }],
+  const rows = toolRows({ snapshot, live, targets: [{ id: 'lms', name: 'LMS', kind: 'model', cost: 'free', envId: 'windows', models: ['m'], engine: 'openai', resumable: false }],
     prefs: { auto: ['oc'], never: [] }, consents: [{ subject: 'ed' }],
     loaded: [L('oc', ['agent', 'client']), L('lms', ['backend']), L('ed', ['client']), L('srv', ['backend']), L('gone', ['tool']), L('nope', ['client']), L('off', ['client'], true)] });
   const by = Object.fromEntries(rows.map(r => [r.id, r]));

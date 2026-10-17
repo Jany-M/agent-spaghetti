@@ -11,7 +11,9 @@ function fakeClient(views: RunView[], asking = false) {
   const client = { call: async (op: string, input: any) => {
     calls.push([op, input]);
     if (op === 'delegate') return views[0];
-    if (op === 'runs') { const v = views[Math.min(++i, views.length - 1)]; return { runs: [v.run], result: v.result }; }
+    if (op === 'runs' && input.unread) return { runs: [], unread: views.filter(v => v.run.outcome !== 'running') };
+    if (op === 'runs' && input.id === 1) throw new Error('no run 1');
+    if (op === 'runs') { const v = views[Math.min(++i, views.length - 1)]; return { runs: [v.run], result: v.result, final: v }; }
     if (op === 'status') return { consents: asking ? [{ subject: 'cursor', action: 'run', resource: 'claude-cli' }] : [] };
     if (op === 'targets') return [{ id: 'lmstudio' }];
     throw new Error('daemon down');
@@ -59,6 +61,12 @@ test('MCP delegate: progress while waiting for approval, result text, still-runn
   assert.deepEqual(st.result.content, [{ type: 'text', text: 'the answer' }]);
   const gone: any = await h({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'run_status', arguments: { id: 1 }, _meta: meta } });
   assert.deepEqual([gone.result.isError, gone.result.content[0].text], [true, 'no run 1']);
+  assert.ok(f.calls.filter(c => c[0] === 'runs' && c[1].id).every(c => c[1].watch), 'polling marks the caller as waiting (result inline)');
+  const un: any = await h({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'run_status', arguments: {}, _meta: meta } });
+  assert.deepEqual(f.calls.at(-1), ['runs', { unread: true, source: 'cursor' }]);
+  assert.equal(un.result.content[0].text, '## Run 7 (claude-cli): done\n\nthe answer');
+  const none: any = await mcpHandler(fakeClient([run('running')]).client, { source: 'cursor' }, () => {})({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'run_status', arguments: {}, _meta: meta } });
+  assert.equal(none.result.content[0].text, 'No new results.');
 });
 
 test('Cursor hook: >>target bypasses the model; other prompts pass; metadata only, never content', () => {
