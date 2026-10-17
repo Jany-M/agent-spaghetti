@@ -19,6 +19,7 @@ foreach ($n in @(${names})) { $v=[Environment]::GetEnvironmentVariable($n); if (
 ConvertTo-Json -Compress -Depth 4 @{ installed=@($inst); processes=@($proc); listening=@($lis); env=$env2; partial=@($partial) }`;
 }
 const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+const unquote = (p?: string) => p?.replace(/^"(.*)"$/, '$1');   // some installers write InstallLocation in quotes
 /** "C:\\Apps\\X\\x.exe",0 → C:\\Apps\\X */
 const iconDir = (icon?: string) => {
   const p = icon?.replace(/^"|"?,\s*-?\d+$|"$/g, '').trim();
@@ -30,7 +31,7 @@ export function parseWindowsInventory(json: string): Inventory {
   if (!j) return { installed: [], processes: [], listening: [], env: {}, partial: ['inventory output was not JSON'] };
   const arr = (v: unknown) => (Array.isArray(v) ? v : v ? [v] : []);
   return {
-    installed: arr(j.installed).map((x: any) => ({ name: x.n, version: str(x.v), location: str(x.l) ?? iconDir(str(x.i)), source: x.s }))
+    installed: arr(j.installed).map((x: any) => ({ name: x.n, version: str(x.v), location: unquote(str(x.l)) ?? iconDir(str(x.i)), source: x.s }))
       .filter(x => x.name),
     processes: arr(j.processes).map((x: any) => ({ name: x.n, pid: x.p, path: str(x.x) })),
     listening: arr(j.listening).map((x: any) => ({ address: x.a, port: x.o, pid: x.p || undefined })),

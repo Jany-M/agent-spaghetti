@@ -9,11 +9,11 @@ const norm = (p: string, kind: EnvKind) => {
   const s = p.replaceAll('\\', '/').replace(/\/+$/, '');
   return kind === 'windows' ? s.toLowerCase() : s;
 };
-/** A tool's own program among the installs found (PATH or a manifest path): the one named `name` (any extension), else, without a
- *  name, the first. A companion app or extension folder found alongside never counts. */
+/** A tool's own program among the installs found (PATH, a manifest path, or the running process): the one named `name` (any
+ *  extension), else, without a name, the first on PATH or a manifest path. A companion app or extension folder never counts. */
 export function programOf(det: Pick<Detection, 'installs'>, name?: string): string | undefined {
-  const progs = det.installs.filter(i => (i.via === 'bin' || i.via === 'path') && i.path);
-  const base = (p: string) => p.split(/[\\/]/).pop()!.replace(/\.(exe|cmd|bat|ps1)$/i, '');
-  return (name ? progs.find(i => base(i.path!).toLowerCase() === name.toLowerCase()) : progs[0])?.path;
+  const base = (p: string) => p.split(/[\\/]/).pop()!.replace(/\.(exe|cmd|bat|ps1)$/i, '').toLowerCase();
+  const progs = det.installs.filter(i => i.path && (i.via === 'bin' || i.via === 'path' || (name && i.via === 'process')));
+  return (name ? progs.find(i => base(i.path!) === name.toLowerCase()) : progs[0])?.path;
 }
 export const samePath = (a: string, b: string, kind: EnvKind) => norm(a, kind) === norm(b, kind);

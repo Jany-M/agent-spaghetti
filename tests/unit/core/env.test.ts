@@ -35,12 +35,13 @@ test('globFirst handles one * per segment, spaces and non-ASCII; whichBin finds 
   assert.ok(await whichBin('node'));
   assert.equal(await whichBin('definitely-not-a-binary-xyz'), null);
 });
-test('windows inventory: location from InstallLocation or DisplayIcon folder, MSIX, empty names dropped, partial kept', () => {
+test('windows inventory: location from InstallLocation (quotes dropped) or DisplayIcon folder, MSIX, empty names dropped, partial kept', () => {
   const inv = parseWindowsInventory(fx('windows.json'));
   assert.deepEqual(inv.installed.map(i => [i.name, i.location, i.source]), [
     ['Cursor (User)', 'C:\\Users\\u\\AppData\\Local\\Programs\\cursor\\', 'uninstall'],
     ['LM Studio 0.4.26', 'D:\\Apps\\LM Studio', 'uninstall'],
-    ['Claude', 'C:\\Program Files\\WindowsApps\\Claude_2.1.0.0_x64__abc', 'msix']]);
+    ['Claude', 'C:\\Program Files\\WindowsApps\\Claude_2.1.0.0_x64__abc', 'msix'],
+    ['Desk App', 'C:\\Users\\u\\AppData\\Local\\DeskApp', 'uninstall']]);
   assert.equal(inv.processes.find(p => p.name === 'svchost')?.path, undefined);
   assert.deepEqual(inv.listening[0], { address: '127.0.0.1', port: 4321, pid: 42 });
   assert.deepEqual(inv.env, { OLLAMA_HOST: '0.0.0.0:5555' });
