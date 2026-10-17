@@ -1,7 +1,7 @@
 // The generic manifest interpreter (ADR 0004 + ADR 0008). Order: installed apps → processes → PATH → default paths.
 // Endpoints: env override → ports the tool's processes listen on → manifest default, on every host candidate.
 import type { BackendInfo, Ctx, Detection, Environment, Install, Inspection, Integration, Inventory, Manifest } from '@agent-spaghetti/sdk';
-import { firstNumber, levelsOf, parseJson, parseJsonc, pick, pluginDir, samePath, wildcard, type Engines } from '@agent-spaghetti/sdk';
+import { fillEnv, firstNumber, levelsOf, parseJson, parseJsonc, pick, pluginDir, samePath, wildcard, type Engines } from '@agent-spaghetti/sdk';
 
 type Detect = NonNullable<Manifest['detect']>;
 export const ENGINES: Engines = { openai: true, acp: false };    // openai: engine/openai.ts (Phase 3); acp arrives in Phase 5
@@ -9,7 +9,7 @@ const PROBE_MS = 2500, EXEC_MS = 10000, DEFAULT_VERSION = /(\d+\.\d+\.\d+)/;
 export const platformOf = (k: Environment['kind']) => (k === 'windows' ? 'windows' : k === 'macos' ? 'macos' : 'linux');
 const pathsFor = (p: Detect['paths'], k: Environment['kind']) => (Array.isArray(p) ? p : p?.[platformOf(k)] ?? []);
 const exeName = (n: string) => n.replace(/\.exe$/i, '');
-export const httpGet = (env: Environment, url: string) => env.http({ url, timeoutMs: PROBE_MS });
+export const httpGet = (env: Environment, url: string, headers?: Record<string, string>) => env.http({ url, headers, timeoutMs: PROBE_MS });
 
 const processInstalls = (d: Detect, inv: Inventory): Install[] =>
   inv.processes.filter(p => d.process?.some(n => wildcard(exeName(n), p.name))
@@ -44,10 +44,14 @@ export function endpointsToTry(d: Detect, inv: Inventory, installs: Install[], h
   if (d.http?.port) ports.push(d.http.port);
   return [...new Set([...urls, ...[...new Set(ports)].flatMap(p => hosts.map(h => `http://${h}:${p}`))])];
 }
-async function reach(env: Environment, d: Detect, inv: Inventory, installs: Install[]) {
-  for (const endpoint of endpointsToTry(d, inv, installs, await env.hostCandidates())) {
-    const r = await httpGet(env, endpoint + d.http!.path);
-    if (r?.status === 200 && parseJson(r.body) !== undefined) return { endpoint, body: r.body };
+type Hit = { endpoint: string; body: string; headers?: Record<string, string> };
+/** The tool's server: a hosted API at its url (once its env vars are set), else the first local endpoint that answers. */
+async function reach(env: Environment, m: Manifest, inv: Inventory, installs: Install[]): Promise<Hit | null> {
+  const d = m.detect!, headers = fillEnv(m.speaks?.openai?.headers, inv.env);
+  if (!headers) return null;
+  for (const endpoint of d.http!.url ? [d.http!.url] : endpointsToTry(d, inv, installs, await env.hostCandidates())) {
+    const r = await httpGet(env, endpoint + d.http!.path, headers);
+    if (r?.status === 200 && parseJson(r.body) !== undefined) return { endpoint, body: r.body, headers };
   }
   return null;
 }
@@ -65,9 +69,9 @@ async function readDeclaredVersion(env: Environment, v: Exclude<Detect['version'
   const val = pick(parseJson(text), v.json);
   return typeof val === 'string' ? val : undefined;
 }
-export async function listModels(env: Environment, m: Manifest, hit: { endpoint: string; body: string }): Promise<BackendInfo[]> {
+export async function listModels(env: Environment, m: Manifest, hit: Hit): Promise<BackendInfo[]> {
   const spec = m.models!;
-  const body = spec.path ? (await httpGet(env, hit.endpoint + spec.path))?.body : hit.body;
+  const body = spec.path ? (await httpGet(env, hit.endpoint + spec.path, hit.headers))?.body : hit.body;
   const list = pick(parseJson(body), spec.list);
   if (!Array.isArray(list)) return [];
   return list
@@ -100,10 +104,10 @@ function explain(m: Manifest, installs: Install[], hit: unknown, backends: Backe
  *  null = nothing observable (no `process`, no `http` in the manifest). */
 export async function probeLive(env: Environment, m: Manifest, inv: Inventory): Promise<{ running: boolean; endpoint?: string; backends: BackendInfo[] } | null> {
   const d = m.detect ?? {};
-  if (!d.http && !d.process?.length) return null;
+  if ((!d.http || d.http.url) && !d.process?.length) return null;          // hosted APIs: the scan only, never every few seconds
   if (m.platforms && !m.platforms.includes(platformOf(env.kind))) return null;
   const procs = processInstalls(d, inv);
-  const hit = d.http ? await reach(env, d, inv, procs) : null;
+  const hit = d.http && !d.http.url ? await reach(env, m, inv, procs) : null;
   return { running: !!hit || procs.length > 0, endpoint: hit?.endpoint, backends: m.models && hit ? await listModels(env, m, hit) : [] };
 }
 
@@ -112,7 +116,7 @@ export async function inspect(i: Integration, env: Environment, ctx: Ctx): Promi
   if (m.platforms && !m.platforms.includes(platformOf(env.kind))) return null;
   const d = m.detect ?? {};
   const installs = await findInstalls(env, d, ctx.inventory);
-  const hit = d.http ? await reach(env, d, ctx.inventory, installs) : null;
+  const hit = d.http ? await reach(env, m, ctx.inventory, installs) : null;
   if (!installs.length && !hit) return null;
   const backends = m.models && hit ? await listModels(env, m, hit) : [];
   const connected = m.speaks?.mcpClient || m.speaks?.agentPlugins || m.speaks?.mcpCli ? await isConnected(env, m) : undefined;

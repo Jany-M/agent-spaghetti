@@ -1,0 +1,31 @@
+{
+  "$schema": "../../packages/sdk/manifest.schema.json",
+  "manifest": 1,
+  "id": "openai-api",
+  "name": "OpenAI API",
+  "roles": [
+    "backend"
+  ],
+  "cost": "metered",
+  "detect": {
+    "env": [
+      "OPENAI_API_KEY"
+    ],
+    "http": {
+      "url": "https://api.openai.com",
+      "path": "/v1/models"
+    }
+  },
+  "models": {
+    "list": "data",
+    "id": "id"
+  },
+  "speaks": {
+    "openai": {
+      "base": "/v1",
+      "headers": {
+        "Authorization": "Bearer {env:OPENAI_API_KEY}"
+      }
+    }
+  }
+}

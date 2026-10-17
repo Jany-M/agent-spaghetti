@@ -59,7 +59,7 @@ test('settings: defaults, typed set (lists, numbers, text), text parsing, unknow
 });
 
 const lms: Integration = { source: 'builtin', manifest: { manifest: 1, id: 'lmstudio', name: 'LM Studio', roles: ['backend'], cost: 'free',
-  detect: { http: { port: 1234, path: '/m' } }, models: { list: 'data', id: 'id' }, speaks: { openai: { port: 1234, base: '/v1' } } } as Manifest };
+  detect: { http: { port: 1234, path: '/m' } }, models: { list: 'data', id: 'id' }, speaks: { openai: { base: '/v1' } } } as Manifest };
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
 test('observeEnv: first poll reports only what runs; later polls report every change (marked changed); module observers get the detection', async () => {
   const http: Record<string, { status: number; body: string } | null> = { 'http://127.0.0.1:1234/m': { status: 200, body: '{"data":[{"id":"a"}]}' } };

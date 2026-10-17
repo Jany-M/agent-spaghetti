@@ -102,3 +102,17 @@ test('a running program at the manifest path is the program (bundled CLI), a des
     files: { [exe]: '' } });
   assert.deepEqual(r!.detection.installs.map(i => [i.via, i.path]), [['path', exe], ['process', 'C:/Users/u/AppData/Local/App/App.exe']]);
 });
+test('hosted API: probed at its url with its headers once the key variable is set; the live poll leaves it alone', async () => {
+  const { probeLive } = await import('../../../packages/core/src/engine/inspect.ts');
+  const m: Partial<Manifest> = { roles: ['backend'], cost: 'metered', detect: { env: ['K'], http: { url: 'https://api.test', path: '/v1/models' } }, models: { list: 'data', id: 'id' },
+    speaks: { openai: { base: '/v1', headers: { Authorization: 'Bearer {env:K}' } } } };
+  const seen: Array<Record<string, string> | undefined> = [];
+  const spec: FakeSpec = { inventory: { env: { K: 'test-key' } }, http: { 'https://api.test/v1/models': { status: 200, body: '{"data":[{"id":"m"}]}' } } };
+  const env = fakeEnv(spec), http = env.http.bind(env);
+  env.http = async r => { seen.push(r.headers); return http(r); };
+  const r = await inspect({ source: 'builtin', manifest: { manifest: 1, id: 'h', name: 'H', ...m } as Manifest }, env, { signal: new AbortController().signal, inventory: fakeInventory(spec.inventory) });
+  assert.deepEqual([r!.backends.map(b => b.model), r!.detection.endpoint, seen[0]], [['m'], 'https://api.test', { Authorization: 'Bearer test-key' }]);
+  assert.equal(await probeLive(env, { manifest: 1, id: 'h', name: 'H', ...m } as Manifest, fakeInventory(spec.inventory)), null);
+  const { openaiHeaders } = await import('../../../packages/core/src/engine/openai.ts');
+  assert.throws(() => openaiHeaders({ manifest: 1, id: 'h', name: 'H', ...m } as Manifest, {}), /H needs K set/);
+});

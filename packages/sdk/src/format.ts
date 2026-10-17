@@ -118,7 +118,7 @@ export interface ToolRow {
   receives?: Target['engine'];                              // can take tasks now, through this engine
 }
 export interface ToolInput {
-  loaded: Array<{ id: string; name: string; source: 'builtin' | 'user'; roles: Role[]; levels: Level[]; disabled: boolean; setup?: boolean }>;
+  loaded: Array<{ id: string; name: string; source: 'builtin' | 'user'; roles: Role[]; levels: Level[]; disabled: boolean; setup?: boolean; needsEnv?: string[] }>;   // needsEnv: a hosted API's key variables
   snapshot: Snapshot | null; live: LiveState; targets: Target[]; prefs: { auto: string[]; never: string[] }; consents: Array<{ subject: string }>;
 }
 /** The one row model behind the Tools panel and the CLI (ADR 0009). */
@@ -133,7 +133,7 @@ export function toolRows(x: ToolInput): ToolRow[] {
     return {
       id: i.id, name: i.name, group: TOOL_GROUPS.find(g => i.roles.includes(g.role))?.id ?? 'tools', source: i.source, levels: i.levels,
       envs: [...new Set(dets.map(d => d.envId))], version: dets.find(d => d.version)?.version, state,
-      why: i.disabled ? 'skipped in scans' : (client[0] ?? dets[0])?.why ?? 'not found on this machine',
+      why: i.disabled ? 'skipped in scans' : (client[0] ?? dets[0])?.why ?? (i.needsEnv ? `set ${i.needsEnv.join(', ')} where Agent Spaghetti runs, then rescan` : 'not found on this machine'),
       ...(client.length ? { connection: client.some(d => d.connected) ? 'connected' as const : 'not connected' as const,
         preference: x.prefs.auto.includes(i.id) ? 'always' as const : x.prefs.never.includes(i.id) ? 'never' as const : 'ask' as const } : {}),
       asks: x.consents.filter(c => c.subject === i.id).length, ...(i.setup ? { setup: true as const } : {}),

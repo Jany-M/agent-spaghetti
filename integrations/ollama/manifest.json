@@ -39,7 +39,6 @@
   },
   "speaks": {
     "openai": {
-      "port": 11434,
       "base": "/v1"
     }
   }

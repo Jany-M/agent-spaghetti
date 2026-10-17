@@ -62,7 +62,6 @@
   },
   "speaks": {
     "openai": {
-      "port": 1234,
       "base": "/v1"
     }
   }

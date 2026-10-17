@@ -28,7 +28,6 @@
   },
   "speaks": {
     "openai": {
-      "port": 8080,
       "base": "/v1"
     }
   }

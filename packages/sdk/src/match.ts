@@ -16,4 +16,10 @@ export function programOf(det: Pick<Detection, 'installs'>, name?: string): stri
   const progs = det.installs.filter(i => i.path && (i.via === 'bin' || i.via === 'path'));
   return (name ? progs.find(i => base(i.path!) === name.toLowerCase()) : progs[0])?.path;
 }
+/** Header values with {env:NAME} filled from `env`; null when a variable is not set (the tool needs setup). */
+export function fillEnv(headers: Record<string, string> | undefined, env: Record<string, string | undefined>): Record<string, string> | null {
+  let ok = true;
+  const out = Object.fromEntries(Object.entries(headers ?? {}).map(([k, v]) => [k, v.replace(/\{env:([A-Za-z_][A-Za-z0-9_]*)\}/g, (_, n) => env[n] ?? (ok = false, ''))]));
+  return ok ? out : null;
+}
 export const samePath = (a: string, b: string, kind: EnvKind) => norm(a, kind) === norm(b, kind);

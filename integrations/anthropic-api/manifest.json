@@ -1,0 +1,32 @@
+{
+  "$schema": "../../packages/sdk/manifest.schema.json",
+  "manifest": 1,
+  "id": "anthropic-api",
+  "name": "Anthropic API",
+  "roles": [
+    "backend"
+  ],
+  "cost": "metered",
+  "detect": {
+    "env": [
+      "ANTHROPIC_API_KEY"
+    ],
+    "http": {
+      "url": "https://api.anthropic.com",
+      "path": "/v1/models"
+    }
+  },
+  "models": {
+    "list": "data",
+    "id": "id"
+  },
+  "speaks": {
+    "openai": {
+      "base": "/v1",
+      "headers": {
+        "x-api-key": "{env:ANTHROPIC_API_KEY}",
+        "anthropic-version": "2023-06-01"
+      }
+    }
+  }
+}

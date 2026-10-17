@@ -51,11 +51,12 @@ export interface Manifest {
     env?: string[];
     paths?: string[] | Partial<Record<Platform, string[]>>;
     version?: { from: 'installed' } | { args: string[]; regex?: string } | { file: string; json: string } | { json: string };
-    http?: { port?: number; path: string };
+    http?: { port?: number; path: string; url?: string };   // url: a hosted API (probed once its env vars are set; not by the live poll)
   };
   models?: { path?: string; list: string; id: string; filter?: Array<{ field: string; in: Array<string | boolean> }>; context?: string[] };
   speaks?: {
-    openai?: { port: number; base: string };
+    openai?: { base: string; headers?: Record<string, string> };   // headers: {env:NAME} read at request time
+    openaiClient?: { setup: string };                                // takes a custom OpenAI endpoint (the gateway): steps with {url} {key} {model}
     mcpServer?: { command: string[] };
     acp?: { command: string[] };
     chat?: { command: string[] };   // its chat takes a task: <command…> <prompt> - (task on stdin); the result comes back through `report`

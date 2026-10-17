@@ -36,7 +36,7 @@ test('manifest schema accepts a valid manifest and reports each error with its p
   assert.match(validate(schema, { ...ok, detect: { version: { nope: 1 } } }).join(), /\/detect\/version: does not match/);
 });
 test('levels are derived; drive only once the engine exists', () => {
-  const be: Integration = { source: 'builtin', manifest: { manifest: 1, id: 'b', name: 'B', roles: ['backend'], models: { list: 'data', id: 'id' }, speaks: { openai: { port: 1, base: '/v1' } } } };
+  const be: Integration = { source: 'builtin', manifest: { manifest: 1, id: 'b', name: 'B', roles: ['backend'], models: { list: 'data', id: 'id' }, speaks: { openai: { base: '/v1' } } } };
   assert.deepEqual(levelsOf(be, { openai: false, acp: false }), ['detect', 'observe']);
   assert.deepEqual(levelsOf(be, { openai: true, acp: false }), ['detect', 'observe', 'drive']);
   const cl: Integration = { source: 'builtin', manifest: { manifest: 1, id: 'c', name: 'C', roles: ['client'], speaks: { mcpClient: { config: 'x', key: 'k' } } } };

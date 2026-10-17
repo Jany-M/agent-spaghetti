@@ -46,7 +46,7 @@ export async function runEnvCommand<C extends EnvCommand>(env: Environment, inte
         const i = integrations.find(i => i.manifest.id === args[0]);
         const r = i?.module?.setup && await inspectAs(i, env, await env.inventory(i.manifest.detect?.env ?? []), grants);
         if (!i || !r) throw new Error(`${args[0]} has nothing to set up in ${env.id}`);
-        const servers = integrations.filter(x => x.manifest.models && x.manifest.speaks?.openai);
+        const servers = integrations.filter(x => x.manifest.models && x.manifest.speaks?.openai && !x.manifest.detect?.http?.url);   // local servers only
         const localModels = async () => rankTargets((await scanEnv(env, servers, { grants })).inspections.flatMap(x => x.backends.map(b => {
           const m = servers.find(y => y.manifest.id === b.integration)!.manifest;
           return { id: b.integration, cost: m.cost ?? 'unknown', integration: b.integration, base: b.endpoint + m.speaks!.openai!.base, model: b.model, contextLength: b.contextLength };

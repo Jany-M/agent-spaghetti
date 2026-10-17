@@ -10,7 +10,7 @@ import type { Bus } from './bus.ts';
 import type { Consent } from './consent.ts';
 import type { Ledger } from './ledger.ts';
 import type { Settings } from './settings.ts';
-import { openaiRun } from './engine/openai.ts';
+import { openaiHeaders, openaiRun } from './engine/openai.ts';
 import { chatTask } from './engine/chat.ts';
 import { deliver } from './returns.ts';
 
@@ -185,7 +185,8 @@ export class Runner {
       const model = req.model ?? t.models[0];
       const b = this.d.snapshot()!.backends.find(x => x.integration === t.id && x.model === model)!;
       onModel(model);
-      return openaiRun(host, { endpoint: b.endpoint, base: i.manifest.speaks!.openai!.base, model, concurrency: this.d.settings.get('backend.concurrency') }, req,
+      const headers = openaiHeaders(i.manifest);
+      return openaiRun(host, { endpoint: b.endpoint, base: i.manifest.speaks!.openai!.base, model, concurrency: this.d.settings.get('backend.concurrency'), headers }, req,
         { signal, onQueue: (waiting, running) => this.d.bus.emit({ ts: Date.now(), type: 'backend.queue', envId: host.id, source: t.id, data: { endpoint: b.endpoint, waiting, running } }) });
     }
     return t.engine === 'chat' ? this.chatRun(id, t, req, signal) : this.d.runOn(t.envId, t.id, req, { signal, runId: id });

@@ -1,0 +1,38 @@
+[
+  {
+    "name": "key set: the models the account can use",
+    "env": {
+      "inventory": {
+        "env": {
+          "OPENAI_API_KEY": "test-key"
+        }
+      },
+      "http": {
+        "https://api.openai.com/v1/models": {
+          "status": 200,
+          "body": "{\"data\": [{\"id\": \"gpt-x\"}]}"
+        }
+      }
+    },
+    "expect": {
+      "backends": [
+        [
+          "gpt-x",
+          null
+        ]
+      ]
+    }
+  },
+  {
+    "name": "no key: not probed, not found",
+    "env": {
+      "http": {
+        "https://api.openai.com/v1/models": {
+          "status": 200,
+          "body": "{\"data\":[]}"
+        }
+      }
+    },
+    "expect": null
+  }
+]

@@ -47,7 +47,8 @@ export const handlers: Handlers = {
     const l = s.loaded(), off = s.settings.get('disabled');
     return { rows: toolRows({ snapshot: snapshot(s), live: s.live(), targets: handlers.targets({}, s) as Target[], consents: s.consent.pending(),
       prefs: { auto: s.settings.get('connect.auto'), never: s.settings.get('connect.never') },
-      loaded: l.integrations.map(i => ({ id: i.manifest.id, name: i.manifest.name, source: i.source, roles: i.manifest.roles, levels: levelsOf(i, ENGINES), disabled: off.includes(i.manifest.id), setup: !!i.module?.setup })) }),
+      loaded: l.integrations.map(i => ({ id: i.manifest.id, name: i.manifest.name, source: i.source, roles: i.manifest.roles, levels: levelsOf(i, ENGINES), disabled: off.includes(i.manifest.id), setup: !!i.module?.setup,
+        ...(i.manifest.detect?.http?.url ? { needsEnv: i.manifest.detect.env ?? [] } : {}) })) }),
       rejected: l.rejected };
   },
   switches: async (_i, s) => {
