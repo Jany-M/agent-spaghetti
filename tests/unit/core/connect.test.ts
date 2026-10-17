@@ -1,6 +1,7 @@
 // `connect` both ways: plugin (Agent Plugins / Cursor), MCP config entry, module CLIs; disconnect is the exact inverse; dry runs write nothing.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { fakeEnv } from '@agent-spaghetti/sdk/testing';
 import { VERSION, type Integration, type Manifest } from '@agent-spaghetti/sdk';
 import { setConnection, pluginFiles } from '../../../packages/core/src/connect.ts';
@@ -78,8 +79,8 @@ test('CLI connect (manifest speaks.mcpCli: Claude Code, Codex) and module connec
   await setConnection(env, by('claude-cli'), d('/b/claude'), cli, false, false);
   assert.deepEqual(env.calls, ['exec /b/claude mcp remove --scope user agent-spaghetti']);
   const on = await setConnection(env, by('claude-cli'), d('/b/claude'), cli, true, false);
-  assert.deepEqual(on.changes, ['/b/claude mcp add --scope user agent-spaghetti -- node C:/Program Files/as/cli.ts mcp --as claude-cli', 'write ~/.claude/settings.json'],
-    'the server, then the >> prompt hook (no settings file yet: nothing to back up)');
+  assert.deepEqual(on.changes, ['/b/claude mcp add --scope user agent-spaghetti -- node C:/Program Files/as/cli.ts mcp --as claude-cli', 'write ~/.claude/settings.json', 'write ~/.claude/agents/agent-spaghetti.md'],
+    'the server, then the >> prompt hook (no settings file yet: nothing to back up), then the agent');
   await assert.rejects(setConnection(env, by('codex'), d('/b/codex.exe'), cli, true, false), /codex mcp add failed: boom/);
   await assert.rejects(setConnection(env, by('codex'), d('/b/other'), cli, true, true), /its program was not found/);
   const oc = by('openclaw');
@@ -106,7 +107,14 @@ test('>> prompt hook (Claude Code): our one entry added, kept unique, removed; t
   assert.equal(await isConnected(env, claude.manifest), true);
   await setConnection(env, claude, d, cli, false, false);
   assert.deepEqual(read().hooks.UserPromptSubmit, [own]);
+  assert.equal(spec.files['~/.claude/agents/agent-spaghetti.md' as never], undefined, 'the agent goes too');
   assert.equal(await isConnected(env, claude.manifest), false, 'the server without the >> hook is an incomplete connection: connected again');
+});
+test('the agent-spaghetti agent: the delegate skill under an agent header (one source, CRLF-safe)', async () => {
+  const { agentText } = await import('../../../packages/core/src/connect.ts');
+  const t = agentText(), skill = readFileSync(new URL('../../../clients/plugin/skills/delegate/SKILL.md', import.meta.url), 'utf8');
+  assert.match(t, /^---\nname: agent-spaghetti\ndescription: Hand a task to .+\nargument-hint: target and task, e\.g\. lmstudio summarize README\.md\n---\n\nThe user's message is the task\./);
+  assert.ok(t.endsWith(skill.slice(skill.indexOf('\n---\n') + 5)), 'the skill body, unchanged');
 });
 test('connectionPlan: never disconnects, always connects, unset asks once; tools that cannot connect are left alone', async () => {
   const { connectionPlan } = await import('../../../packages/core/src/connections.ts');

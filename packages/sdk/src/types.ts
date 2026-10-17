@@ -64,7 +64,8 @@ export interface Manifest {
     mcpCli?: { add: string[]; remove: string[]; config?: string };   // the tool's CLI: <bin> <add…> agent-spaghetti -- <command…> (e.g. `claude mcp add`); config: the file it writes (connected = it names our server)
     agentPlugins?: { dir: string; variant?: 'agent-plugins' | 'cursor' };
     mcpClientNames?: string[];   // the name it gives as an MCP client (clientInfo.name), so a server it starts from another tool's config still knows it
-    promptHook?: { config: string; event: string };   // its prompt hook (`>>` shortcut): a JSON settings file with hooks.<event>[] = { hooks: [{ type: 'command', command, args }] }
+    promptHook?: { config: string; event: string };
+    agentFile?: string;   // where its custom agents live: connect writes the `agent-spaghetti` agent there (a pick in its agent list)   // its prompt hook (`>>` shortcut): a JSON settings file with hooks.<event>[] = { hooks: [{ type: 'command', command, args }] }
   };
 }
 

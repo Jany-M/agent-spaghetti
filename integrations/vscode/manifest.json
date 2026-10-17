@@ -32,6 +32,7 @@
       ]
     },
     "mcpClientNames": ["Visual Studio Code"],
+    "agentFile": "~/.copilot/agents/agent-spaghetti.agent.md",
     "mcpClient": {
       "config": "%APPDATA%/Code/User/mcp.json",
       "key": "servers",

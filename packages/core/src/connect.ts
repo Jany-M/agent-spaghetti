@@ -24,6 +24,23 @@ export function pluginFiles(variant: 'agent-plugins' | 'cursor', cli: Cli, clien
   return { ...files, '.cursor-plugin/plugin.json': JSON.stringify(cursorManifest, null, 2), 'commands/delegate.md': source('commands/delegate.md'), 'hooks/hooks.json': JSON.stringify(hooks, null, 2) };
 }
 
+/** The `agent-spaghetti` custom agent (a pick in the tool's agent list): the delegate skill's instructions under an agent header.
+ *  One file for both formats in use (VS Code / Copilot `.agent.md`, Claude Code agents): name, description, argument-hint, no tool list. */
+export function agentText(): string {
+  const [, head, body] = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/.exec(source('skills/delegate/SKILL.md'))!;
+  const description = /^description: (.*?)\r?$/m.exec(head)![1];
+  return `---\nname: agent-spaghetti\ndescription: ${description}\nargument-hint: target and task, e.g. lmstudio summarize README.md\n---\n`
+    + `\nThe user's message is the task. A first word that is a target id (see \`targets\`) is the target; with none, call \`delegate\` without one and the user picks.\n${body}`;
+}
+async function agentFile(env: Environment, path: string, on: boolean, dryRun: boolean) {
+  const now = await env.readFile(path), text = agentText();
+  const description = `${on ? 'add' : 'remove'} the agent-spaghetti agent (${path})`;
+  if (on ? now === text : now === null) return { description, changes: [] };   // already so
+  if (on) return { description, changes: await write(env, { [path]: text }, dryRun) };
+  if (!dryRun) await env.remove(path);
+  return { description, changes: [`remove ${path}`] };
+}
+
 async function write(env: Environment, files: Record<string, string>, dryRun: boolean): Promise<string[]> {
   if (!dryRun) for (const [p, c] of Object.entries(files)) await env.writeFile(p, c);
   return Object.keys(files).map(p => `write ${p}`);
@@ -55,10 +72,12 @@ async function mcpConfig(env: Environment, spec: NonNullable<Speaks['mcpClient']
 
 /** Our entry in a prompt hook list: the one running `… hook <client>`. */
 const ourHook = (client: string) => (e: any) => (e?.hooks ?? []).some((h: any) => Array.isArray(h?.args) && h.args.at(-2) === 'hook' && h.args.at(-1) === client);
-/** Whether the tool's prompt hook has our entry (a connection without it is incomplete, so it is connected again). */
-export async function hasPromptHook(env: Environment, spec: NonNullable<Speaks['promptHook']>, client: string): Promise<boolean> {
-  const doc = parseJsonc(await env.readFile(spec.config)) as Record<string, any> | undefined;
-  return Array.isArray(doc?.hooks?.[spec.event]) && doc.hooks[spec.event].some(ourHook(client));
+/** Whether the extras next to the server are there (the `>>` hook entry, the agent file): a connection without them is
+ *  incomplete, so it is made again. */
+export async function extrasThere(env: Environment, m: Manifest): Promise<boolean> {
+  const { promptHook: h, agentFile: a } = m.speaks ?? {};
+  const doc = h ? parseJsonc(await env.readFile(h.config)) as Record<string, any> | undefined : undefined;
+  return (!h || (Array.isArray(doc?.hooks?.[h.event]) && doc.hooks[h.event].some(ourHook(m.id)))) && (!a || await env.readFile(a) !== null);
 }
 /** The `>>` shortcut in a tool's prompt hook (e.g. Claude Code's UserPromptSubmit): our one entry added or removed, the rest kept. */
 async function promptHook(env: Environment, spec: NonNullable<Speaks['promptHook']>, cli: Cli, client: string, on: boolean, dryRun: boolean) {
@@ -92,11 +111,12 @@ export async function setConnection(env: Environment, i: Integration, det: Detec
   const sp = i.manifest.speaks, client = i.manifest.id;
   if (!sp?.mcpCli && !sp?.agentPlugins && !sp?.mcpClient) throw new Error(`${i.manifest.name} has no MCP client or plugin support agent-spaghetti knows of`);
   // the server: the tool's CLI, else the plugin where supported, else the MCP config (disconnect: plugin and config, whichever is there);
-  // plus the `>>` prompt hook where the tool has one
+  // plus the extras the tool has: the `>>` prompt hook, the agent file
   const server = sp.mcpCli ? [() => mcpCli(env, sp.mcpCli!, programOf(det, i.manifest.detect?.bin?.[0]), cli, client, on, dryRun)]
     : on ? [() => (sp.agentPlugins ? plugin(env, sp.agentPlugins, cli, client, on, dryRun) : mcpConfig(env, sp.mcpClient!, cli, client, on, dryRun))]
     : [...(sp.agentPlugins ? [() => plugin(env, sp.agentPlugins!, cli, client, on, dryRun)] : []), ...(sp.mcpClient ? [() => mcpConfig(env, sp.mcpClient!, cli, client, on, dryRun)] : [])];
   const r: Array<{ description: string; changes: string[] }> = [];
-  for (const step of [...server, ...(sp.promptHook ? [() => promptHook(env, sp.promptHook!, cli, client, on, dryRun)] : [])]) r.push(await step());   // in order: one file at a time
+  const extras = [...(sp.promptHook ? [() => promptHook(env, sp.promptHook!, cli, client, on, dryRun)] : []), ...(sp.agentFile ? [() => agentFile(env, sp.agentFile!, on, dryRun)] : [])];
+  for (const step of [...server, ...extras]) r.push(await step());   // in order: one file at a time
   return { description: r.map(x => x.description).join('; '), changes: r.flatMap(x => x.changes), applied: !dryRun };
 }

@@ -30,6 +30,7 @@
     }
   },
   "speaks": {
+    "agentFile": "~/.claude/agents/agent-spaghetti.md",
     "mcpClient": {
       "config": "~/.claude.json",
       "key": "mcpServers"

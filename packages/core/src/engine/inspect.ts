@@ -1,7 +1,7 @@
 // The generic manifest interpreter (ADR 0004 + ADR 0008). Order: installed apps → processes → PATH → default paths.
 // Endpoints: env override → ports the tool's processes listen on → manifest default, on every host candidate.
 import type { BackendInfo, Ctx, Detection, Environment, Install, Inspection, Integration, Inventory, Manifest } from '@agent-spaghetti/sdk';
-import { hasPromptHook } from '../connect.ts';
+import { extrasThere } from '../connect.ts';
 import { fillEnv, firstNumber, programOf, levelsOf, parseJson, parseJsonc, pick, pluginDir, samePath, wildcard, type Engines } from '@agent-spaghetti/sdk';
 
 type Detect = NonNullable<Manifest['detect']>;
@@ -88,7 +88,7 @@ export async function listModels(env: Environment, m: Manifest, hit: Hit): Promi
 /** Whether the client already has agent-spaghetti (its plugin folder, the entry in its MCP config, or a config its CLI writes naming it). Read-only. */
 export async function isConnected(env: Environment, m: Manifest): Promise<boolean> {
   const s = m.speaks;
-  if (s?.promptHook && !await hasPromptHook(env, s.promptHook, m.id)) return false;
+  if (!await extrasThere(env, m)) return false;
   if (s?.agentPlugins && await env.glob(`${pluginDir(s.agentPlugins.dir)}/mcp.json`)) return true;
   if (!s?.mcpClient) return !!s?.mcpCli?.config && !!(await env.readFile(s.mcpCli.config))?.includes('agent-spaghetti');
   const servers = pick(parseJsonc(await env.readFile(s.mcpClient.config)), s.mcpClient.key);
