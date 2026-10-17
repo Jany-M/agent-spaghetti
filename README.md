@@ -45,7 +45,7 @@ Status keeps itself current: running tools and model servers are re-checked ever
 - From the tray: **Runs → New task**. From a terminal: `delegate <target> <task> [--model <m>] [--then <target>,…]`.
 - **Chains:** a hand-off can name next steps (`then`); each step gets the previous result, and the last result goes back to whoever asked: straight into the waiting call, into the caller's own session when it can continue one, into its chat (VS Code), or as a result waiting for it (`run_status`, the tray tells you).
 - **`auto`** lets Agent Spaghetti pick the target: the best free one, or the one its dispatcher model chooses (Settings → `dispatcher.model`, off by default). With a dispatcher model set, a hand-off that stops progressing is passed to another target once.
-- Targets take tasks through the standard each tool offers: the model API (LM Studio, Ollama, …), ACP (OpenCode, Kilo, Cline), their own CLI (Claude Code, Codex, OpenClaw) or their chat (VS Code). **Tools** shows which ones can take tasks now.
+- Targets take tasks through the standard each tool offers: the model API (LM Studio, Ollama, …), ACP (OpenCode, Kilo, Cline), their own CLI (Claude Code, Codex, OpenClaw) or their chat (VS Code). ACP and CLI targets need the tool's CLI (Kilo Desktop bundles one; the OpenCode and Cline apps don't). **Tools** shows which ones can take tasks now.
 - **Runs** shows each hand-off chain, where its result went and the result; rate it or cancel it there.
 - Third-party integrations (JSON files in the data folder's `integrations/`) do nothing until you allow each action (Tools → More).
 
@@ -76,7 +76,7 @@ Local models answer at once; a paid one (OpenAI or Anthropic API, found if `OPEN
 
 ## Per-tool notes
 
-- **OpenClaw:** Tools → OpenClaw → **Set up** installs its multi-step workflow pack (roles, settings, helpers; **Dry run** first if you like, **Check** any time). It needs a running gateway and `python3` on the gateway host. The model it uses is the setting `openclaw.model`: `auto` (keep the current one while it answers, else the best loaded local model), `keep`, or `<server>:<model>` from `targets`.
+- **OpenClaw:** Tools → OpenClaw → **Set up** installs its multi-step workflow pack (roles, settings, helpers; **Dry run** first if you like, **Check** any time). It needs a running OpenClaw gateway and `python3` on its host. The model it uses is the setting `openclaw.model`: `auto` (keep the current one while it answers, else the best loaded local model), `keep`, or `<server>:<model>` from `targets`.
 - **Cursor:** cannot use a local model/endpoint as its own model (its servers can't reach your machine), so it works through hand-offs instead, via local MCP and the `>>` prefix.
 - **VS Code**'s inline completions stay with GitHub.
 

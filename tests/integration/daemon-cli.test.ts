@@ -138,7 +138,7 @@ test('CLI 1b: switches, on (env resolved, switch.changed → live), test, permis
   await b.close();
 });
 
-test('runDaemon wiring: real settings, grants and host-env commands; no scan or observers unless asked', async () => {
+test('runDaemon wiring: real settings, grants and host-env commands; no scan or observers unless asked; closing hides it at once', async () => {
   const { runDaemon } = await import('../../packages/core/src/main.ts');
   const dir = mkdtempSync(join(tmpdir(), 'as-'));
   const d = await runDaemon({ AGENT_SPAGHETTI_DATA_DIR: dir }, { scanOnStart: false, observe: false, discover: fakeMachine });
@@ -151,7 +151,11 @@ test('runDaemon wiring: real settings, grants and host-env commands; no scan or 
   const sw = await c.call('switches');
   assert.ok(Array.isArray(sw.switches));
   assert.deepEqual((await c.call('permissions')).subjects, []);
-  } finally { await d.close(); }
+  } finally {
+    const closing = d.close();
+    assert.throws(() => HubClient.fromDiscovery({ AGENT_SPAGHETTI_DATA_DIR: dir }), 'a daemon on its way out is not found by a new start');
+    await closing;
+  }
 });
 
 test('CLI 2: questions show in status with their id; answer allow resolves the asker; status --short; shutdown', async () => {

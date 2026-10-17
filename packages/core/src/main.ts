@@ -167,9 +167,11 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
   }, 60000);
   autoScan.unref();
   const close = async () => {
+    removeDiscovery();                                         // first: a start meanwhile never reuses a daemon on its way out
+    clearTimeout(rescan); clearInterval(autoScan); clearInterval(pruneTimer); observers?.dispose(); watchdog.dispose();
     for (const id of session()) await connect(id, false);    // "Connect for this session" ends here
     setSession([]);
-    clearTimeout(rescan); clearInterval(autoScan); observers?.dispose(); watchdog.dispose(); await gateway.close(); clearInterval(pruneTimer); removeDiscovery(); await server.close(); store.close(); };
+    await gateway.close(); await server.close(); store.close(); };
   await gateway.sync().catch(e => process.stderr.write(`model gateway not started: ${(e as Error).message}\n`));   // e.g. its port is taken
   if (o.scanOnStart !== false) void services.scan().catch(e => process.stderr.write(`first scan failed: ${(e as Error).message}\n`));
   return { port: server.port, dir, services, close };
