@@ -190,6 +190,12 @@ export const handlers: Handlers = {
       return r ?? { envId, error: 'not running' };
     })));
   },
+  whoami: (i, s) => {   // a client can start a server set up for another tool (e.g. MCP discovery of other tools' configs): its own name decides
+    const name = need(i.name, 'name').toLowerCase(), as = need(i.as, 'as');
+    const id = s.loaded().integrations.find(x => x.manifest.speaks?.mcpClientNames?.some(n => n.toLowerCase() === name))?.manifest.id ?? as;
+    s.bus.emit({ ts: Date.now(), type: 'client.hook', envId: s.host()?.id ?? 'hub', source: id, data: { event: 'mcp', name: i.name, as } });
+    return { id };
+  },
   hook: (i, s) => {   // metadata only: the hook command already dropped prompts, responses and file contents
     const d = i.data ?? {};
     const keep = Object.fromEntries(['conversation_id', 'session_id', 'generation_id', 'tool_name', 'mcp_server_name', 'status', 'model'].filter(k => typeof d[k] === 'string').map(k => [k, d[k]]));

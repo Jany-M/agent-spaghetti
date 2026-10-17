@@ -25,7 +25,7 @@ const SNAP: Snapshot = { ts: 1, envs: [{ id: 'windows', state: 'running' }], age
 
 /** The daemon tests never touch the real machine: one fake local environment. */
 const fakeMachine = async () => [{ status: { id: 'windows', state: 'running' as const }, env: fakeEnv() }];
-const THIRD: Integration = { source: 'user', hash: 'h', manifest: { manifest: 1, id: 'acme', name: 'Acme', roles: ['backend'], detect: { bin: ['acme'], http: { port: 9, path: '/v' } } } };
+const THIRD: Integration = { source: 'user', hash: 'h', manifest: { manifest: 1, id: 'acme', name: 'Acme', roles: ['backend'], detect: { bin: ['acme'], http: { port: 9, path: '/v' } }, speaks: { mcpClientNames: ['Acme Desk'] } } };
 async function boot(scan: () => Promise<Snapshot> = async () => SNAP) {
   const store = new Store(':memory:'); const bus = new Bus(store);
   let live = emptyLive(); bus.subscribe(e => { live = liveState([e], live); });
@@ -130,6 +130,9 @@ test('CLI 1b: switches, on (env resolved, switch.changed → live), test (record
   r = await cli('disable', 'acme'); assert.match(r.out, /disabled: acme/);
   r = await cli('integrations'); assert.match(r.out, /^Model servers:\n/m); assert.match(r.out, /acme\s+Acme\s+skipped\s+-\s+-\s+skipped in scans/);
   r = await cli('enable', 'acme'); assert.match(r.out, /disabled: none/);
+  r = await cli('whoami', 'claude-desktop', 'acme desk'); assert.equal(r.out, 'acme', 'a server started from another tool\'s config knows its client by name');
+  r = await cli('whoami', 'claude-desktop', 'Some Client'); assert.equal(r.out, 'claude-desktop', 'unknown name: the configured id');
+  assert.deepEqual(b.services.store.eventsSince(0).filter(e => e.type === 'client.hook').map(e => [e.source, e.data.name]), [['acme', 'acme desk'], ['claude-desktop', 'Some Client']]);
   r = await cli('report'); assert.equal(r.code, 1); assert.match(r.err, /no scan yet/);
   await cli('scan');
   const out = join(b.dir, 'report.md');

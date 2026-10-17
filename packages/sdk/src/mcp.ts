@@ -57,6 +57,9 @@ class InputRequired { requests: Requests; state: unknown; constructor(requests: 
 export function mcpHandler(client: HubClient, o: BridgeOpts, send: Send) {
   let legacy = false, legacyCaps: Record<string, any> = {}, asked = 0;
   const waiting = new Map<string, (r: any) => void>();          // our questions to an older-era client, by request id
+  let me: Promise<string> | undefined;                            // which tool this client is, by the name it gives (asked once)
+  const identify = (name: unknown) => { if (!me && typeof name === 'string' && name) me = client.call('whoami', { as: o.source, name }).then(r => r.id, () => o.source); };
+  const source = () => me ?? Promise.resolve(o.source);
   const key = randomBytes(32);                                    // requestState is ours alone: signed, checked on the way back
   const seal = (s: unknown) => { const b = Buffer.from(JSON.stringify(s)).toString('base64url'); return `${b}.${createHmac('sha256', key).update(b).digest('base64url')}`; };
   const open = (s: unknown) => {
@@ -95,14 +98,15 @@ export function mcpHandler(client: HubClient, o: BridgeOpts, send: Send) {
         a.target = r.content.target;
       }
       if (!a.cwd) delete a.cwd;
-      runId = (await client.call('delegate', { ...a, target: a.target || AUTO, source: o.source, parentRunId: o.parentRunId, waitMs: 0 } as never)).id;
+      runId = (await client.call('delegate', { ...a, target: a.target || AUTO, source: await source(), parentRunId: o.parentRunId, waitMs: 0 } as never)).id;
     }
     let offered = false;
+    const who = await source();
     const until = Date.now() + (o.waitMs ?? 100_000);
     for (let n = 1; ; n++) {
-      const v = (await client.call('runs', { id: runId, watch: true, source: o.source })).final!;
+      const v = (await client.call('runs', { id: runId, watch: true, source: who })).final!;
       if (v.run.outcome !== 'running' || Date.now() >= until) return describeRun(v);
-      const q = (await client.call('status')).consents.find(c => c.subject === o.source && c.action === 'run' && c.resource === v.run.target);
+      const q = (await client.call('status')).consents.find(c => c.subject === who && c.action === 'run' && c.resource === v.run.target);
       if (q && !offered && x.can('elicitation')) {                 // the same question as in the tray; the first answer wins
         offered = true;
         const ask = x.ask({ approve: elicit(`Agent Spaghetti: ${q.why}${q.billing ? ` (${q.billing})` : ''}. Allow ${v.run.target}?`, 'answer', 'Your answer',
@@ -119,8 +123,8 @@ export function mcpHandler(client: HubClient, o: BridgeOpts, send: Send) {
   }
   /** One run (its chain's final state), or every result waiting for this caller. */
   async function status(id: number | undefined): Promise<object> {
-    if (id !== undefined) return describeRun((await client.call('runs', { id, watch: true, source: o.source })).final!);
-    const waiting = (await client.call('runs', { unread: true, source: o.source })).unread ?? [];
+    if (id !== undefined) return describeRun((await client.call('runs', { id, watch: true, source: await source() })).final!);
+    const waiting = (await client.call('runs', { unread: true, source: await source() })).unread ?? [];
     return text(waiting.length ? waiting.map(v => `## Run ${v.id} (${v.run.target}): ${v.run.outcome}\n\n${v.result ?? v.run.error ?? '(no output)'}`).join('\n\n') : 'No new results.');
   }
   async function call(name: string, args: Record<string, any>, p: Record<string, any>, x: Io): Promise<object> {
@@ -131,7 +135,7 @@ export function mcpHandler(client: HubClient, o: BridgeOpts, send: Send) {
     try {
       if (tool.op === 'delegate') return await delegate(args, p._meta?.progressToken, x, p.requestState ? open(p.requestState) ?? {} : {});
       if (tool.op === 'runs') return await status(args.id);
-      return text(JSON.stringify(await client.call(tool.op, { ...args, source: o.source } as never), null, 2));   // the caller, for ops that check it (report)
+      return text(JSON.stringify(await client.call(tool.op, { ...args, source: await source() } as never), null, 2));   // the caller, for ops that check it (report)
     } catch (e) {
       if (e instanceof InputRequired) throw e;
       return text((e as Error).message, true);                    // daemon down or the op refused: a tool error the agent can read
@@ -151,6 +155,7 @@ export function mcpHandler(client: HubClient, o: BridgeOpts, send: Send) {
     if (!m.method) { if (m.id !== undefined) { waiting.get(String(m.id))?.(m.error ? null : m.result); waiting.delete(String(m.id)); } return null; }   // answers to our questions
     if (m.id === undefined) return null;                                        // notifications
     const p = m.params ?? {}, version = p._meta?.['io.modelcontextprotocol/protocolVersion'];
+    identify(m.method === 'initialize' ? p.clientInfo?.name : p._meta?.['io.modelcontextprotocol/clientInfo']?.name);
     if (m.method === 'initialize') {
       legacy = true; legacyCaps = p.capabilities ?? {};
       return reply(m.id, { protocolVersion: LEGACY.includes(p.protocolVersion) ? p.protocolVersion : LEGACY[0], capabilities: CAPABILITIES, serverInfo: SERVER_INFO, instructions: INSTRUCTIONS }, false);

@@ -156,6 +156,7 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
         print(r, () => [`${r.applied ? 'Done' : 'Would'}: ${r.description} (${r.envId})`, ...r.changes.map(x => `  ${x}`)].join('\n'));
         break;
       }
+      case 'whoami': { const r = await c.call('whoami', { as: a1, name: a2 }); print(r, () => r.id); break; }
       case 'report': {
         const r = await c.call('report');
         if (outFile) { writeFileSync(outFile, r.markdown); io.out(`report written to ${outFile} (review it before sharing)`); } else print(r, () => r.markdown);

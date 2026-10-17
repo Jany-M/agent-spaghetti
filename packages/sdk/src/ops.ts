@@ -60,6 +60,7 @@ export const OPS = {
   gateway:      { method: 'GET',  path: '/v1/gateway', gui: 'tools',     usage: 'gateway',                  summary: 'The model gateway: its address and the tools with a key' },
   gatewayClient: { method: 'POST', path: '/v1/gateway/client', gui: 'tools', usage: 'gateway <tool> [--model <target:model|auto>] [--key create|revoke]',
     summary: 'A tool\'s model through the gateway, and its key (a new key is shown once, with the tool\'s setup steps)' },
+  whoami:       { method: 'POST', path: '/v1/whoami', gui: 'machine',       usage: 'whoami <as> <client name>', summary: 'Which tool an MCP client is (its clientInfo name), for the bridge' },
   hook:         { method: 'POST', path: '/v1/hook', gui: 'machine',         usage: 'hook <client>',            summary: 'Run by client hooks (reads the hook JSON on stdin)' },
 } as const satisfies Record<string, OpSpec>;
 export type OpId = keyof typeof OPS;
@@ -95,6 +96,7 @@ export interface OpIO {
   connect: { in: { integration: string; on?: boolean; envId?: string; dryRun?: boolean }; out: ConnectResult };
   setup: { in: { integration: string; check?: boolean; dryRun?: boolean; envId?: string }; out: Array<EnvResult<TestResult>> };
   hook: { in: { client: string; event: string; data?: Record<string, unknown> }; out: { ok: true } };
+  whoami: { in: { as: string; name: string }; out: { id: string } };
 }
 /** A delegated run as callers see it: its record and, once finished, the result text. */
 /** Every setting; `choices`: the values that make sense now (e.g. the loaded models for dispatcher.model, best first). */

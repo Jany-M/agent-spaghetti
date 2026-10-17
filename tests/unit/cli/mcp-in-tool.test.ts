@@ -11,6 +11,7 @@ function daemon(o: { asking?: boolean } = {}) {
   let asking = !!o.asking, polls = 0;
   const client = { call: async (op: string, input: any) => {
     calls.push([op, input]);
+    if (op === 'whoami') return { id: input.name === 'Visual Studio Code' ? 'vscode' : input.as };
     if (op === 'targets') return [T('paid', 'metered'), T('lms', 'free', ['m1'])];
     if (op === 'delegate') return { id: 7 };
     if (op === 'status') return { consents: asking ? [{ id: 'q1', subject: 'vscode', action: 'run', resource: 'paid', why: 'paid run', scopes: ['once', 'always'] }] : [] };
@@ -72,16 +73,17 @@ test('2026-07-28: roots and a target picked in the tool come back with the retry
 
 test('older eras: our questions go out as requests and their answers come back on the same stdio; nothing asked unless declared', async () => {
   const d = daemon({ asking: true }), sent: any[] = [];
-  const h = mcpHandler(d.client, { source: 'vscode', pollMs: 1 }, (m: any) => {
+  const h = mcpHandler(d.client, { source: 'claude-desktop', pollMs: 1 }, (m: any) => {
     sent.push(m);
     const answer = m.method === 'roots/list' ? { roots: [{ uri: 'file:///home/u/p' }] } : m.method === 'elicitation/create' ? { action: 'accept', content: { answer: 'always' } } : null;
     if (answer) setImmediate(() => void h({ jsonrpc: '2.0', id: m.id, result: answer }));
   });
-  await h({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: { roots: {}, elicitation: {} } } });
+  await h({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: { roots: {}, elicitation: {} }, clientInfo: { name: 'Visual Studio Code', version: '1' } } });
   const r: any = await h({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'delegate', arguments: { target: 'paid', task: 't' } } });
   assert.equal(r.result.content[0].text, 'done!');
   assert.deepEqual(sent.filter(m => m.method && m.id).map(m => m.method), ['roots/list', 'elicitation/create']);
-  assert.equal(d.calls.find(c => c[0] === 'delegate')![1].cwd, '/home/u/p');
+  assert.deepEqual([d.calls.find(c => c[0] === 'delegate')![1].cwd, d.calls.find(c => c[0] === 'delegate')![1].source], ['/home/u/p', 'vscode'],
+    'the client named itself: hand-offs are its own even from a server set up for another tool');
   assert.deepEqual(d.calls.find(c => c[0] === 'consent')![1], { id: 'q1', allow: true, scope: 'always' });
   const plain = daemon(), out: any[] = [], h2 = mcpHandler(plain.client, { source: 'vscode', pollMs: 1 }, m => out.push(m));
   await h2({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {} } });
