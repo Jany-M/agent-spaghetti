@@ -146,7 +146,7 @@ export const handlers: Handlers = {
     }
     throw new Error(errors.join('; '));
   },
-  setup: async (i, s) => {   // where the tool's own program was found (the OpenClaw gateway's distro, not a Windows companion app)
+  setup: async (i, s) => {   // where the tool's own program was found (not, say, a companion app without it)
     const id = need(i.integration, 'integration');
     if (!s.loaded().integrations.find(x => x.manifest.id === id)?.module?.setup) throw new Error(`${id} has nothing to set up`);
     const envIds = [...new Set(snapshot(s)?.detections.filter(d => d.integration === id && (!i.envId || d.envId === i.envId)

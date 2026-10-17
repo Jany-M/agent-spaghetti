@@ -12,6 +12,7 @@ import { parseJsonLoose } from '@agent-spaghetti/sdk';
 import { MCP_NAME, mcpServers, setMcpEnabled, setOurServer } from './pack/mcp.ts';
 import { healthSteps } from './pack/health.ts';
 import { applySetup } from './pack/setup.ts';
+import { packCli } from './pack/main.ts';
 import { openclawExe, openclawJson } from './cli.ts';
 export { openclawExe, openclawJson };
 /** Longest configured provider id wins (ids may contain '/'); otherwise the first segment. */
@@ -111,6 +112,8 @@ export const openclawModule: IntegrationModule = {
     if (!exe) throw new Error('openclaw not found');
     return o.action === 'check' ? healthSteps(env, exe) : applySetup({ env, exe, dryRun: o.dryRun, model: o.options.model ?? 'auto', cli: o.cli, localModels: o.localModels });
   },
+  cli: (env, det, args, say) => packCli(env, det, args, say),
+  settings: { model: { default: 'auto', help: 'Model the OpenClaw setup gives its workflow: auto (keep it while it answers, else the best loaded local model), keep, or <server>:<model> from targets' } },
   async switches(env, det) {
     const exe = openclawExe(det);
     return exe ? (await mcpServers(env, exe)).map(s => ({ id: `openclaw-mcp:${s.name}`, label: `OpenClaw MCP server ${s.name}`, on: s.enabled, envId: env.id, integration: 'openclaw' })) : [];

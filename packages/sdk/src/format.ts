@@ -132,7 +132,7 @@ export function toolRows(x: ToolInput): ToolRow[] {
         preference: x.prefs.auto.includes(i.id) ? 'always' as const : x.prefs.never.includes(i.id) ? 'never' as const : 'ask' as const } : {}),
       asks: x.consents.filter(c => c.subject === i.id).length, ...(i.setup ? { setup: true as const } : {}),
     };
-  });
+  }).sort((a, b) => a.name.localeCompare(b.name));   // alphabetical: no tool comes first by design (ADR 0010)
 }
 /** The CLI's view of the same rows: one block per group, found tools first. */
 export function renderToolRows(rows: ToolRow[]): string {

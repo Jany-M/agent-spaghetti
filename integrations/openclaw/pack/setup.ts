@@ -12,7 +12,7 @@ import { configPath, dirOf, packDir, stripAnsi } from './state.ts';
 export interface ApplyDeps { env: Environment; exe: string; dryRun: boolean; model: string; cli: Cli; localModels(): Promise<LocalModel[]> }
 const q = (s: string) => `'${s.replaceAll("'", `'\\''`)}'`;
 /** `ocmcp` and `agent-spaghetti-healthcheck` in the distro: agent-spaghetti's own pack commands. */
-export const shim = (cli: Cli, cmd: string) => `#!/bin/sh\nexec ${[cli.command, ...cli.args, 'openclaw', cmd].map(q).join(' ')} "$@"\n`;
+export const shim = (cli: Cli, cmd: string) => `#!/bin/sh\nexec ${[cli.command, ...cli.args, 'tool', 'openclaw', cmd].map(q).join(' ')} "$@"\n`;
 
 export async function applySetup(d: ApplyDeps): Promise<TestStep[]> {
   const { env, exe, dryRun } = d, steps: TestStep[] = [];

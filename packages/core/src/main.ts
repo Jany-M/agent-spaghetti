@@ -35,7 +35,7 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
   const dir = dataDir(env);
   const store = new Store(join(dir, 'store.db'));
   const bus = new Bus(store);
-  const settings = new Settings(store);
+  const settings = new Settings(store, () => loaded.integrations);
   const prune = () => store.pruneEvents(Date.now() - settings.get('events.retentionDays') * DAY);
   prune();
   const pruneTimer = setInterval(prune, DAY); pruneTimer.unref();

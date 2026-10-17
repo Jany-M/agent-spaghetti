@@ -1,6 +1,6 @@
 // `connect`: give a client agent-spaghetti's MCP server (ADR 0006). One plan builder for both generic ways:
 // install the plugin (Agent Plugins / Cursor variant) or merge one entry into the client's MCP config file.
-// A module's own connect() wins where the tool's CLI is the documented way (claude-cli, openclaw).
+// A module's own connect() wins where the tool's CLI is the documented way.
 import { readFileSync } from 'node:fs';
 import type { Cli, Connected, Detection, Environment, Integration, Manifest } from '@agent-spaghetti/sdk';
 import { VERSION, parseJson, pluginDir } from '@agent-spaghetti/sdk';

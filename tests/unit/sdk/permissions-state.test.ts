@@ -93,3 +93,10 @@ test('toolRows: group by first role in TOOL_GROUPS order; state, connection, pre
   assert.match(text, /oc\s+OC\s+installed\s+connected \(always\)\s+wsl:T,windows/);
   assert.ok(text.indexOf('ed ') < text.indexOf('nope'), 'found tools first');
 });
+test('rankTargets: free, then unknown, then metered; up before down; least queued; otherwise the input order (no tool preferred)', async () => {
+  const { rankTargets } = await import('@agent-spaghetti/sdk');
+  const t = (id: string, cost: 'free' | 'metered' | 'unknown') => ({ id, cost });
+  const items = [t('paid', 'metered'), t('b', 'free'), t('maybe', 'unknown'), t('a', 'free'), t('down', 'free')];
+  assert.deepEqual(rankTargets(items).map(x => x.id), ['b', 'a', 'down', 'maybe', 'paid']);
+  assert.deepEqual(rankTargets(items, { up: id => id !== 'down', queued: id => (id === 'b' ? 2 : 0) }).map(x => x.id), ['a', 'b', 'down', 'maybe', 'paid']);
+});

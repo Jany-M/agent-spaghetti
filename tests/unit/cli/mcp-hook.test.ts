@@ -65,7 +65,7 @@ test('Cursor hook: >>target bypasses the model; other prompts pass; metadata onl
   const p = planHook({ hook_event_name: 'beforeSubmitPrompt', prompt: '>>lmstudio write tests for utils.ts', workspace_roots: ['/w'], conversation_id: 'c1',
     attachments: [{ type: 'file', file_path: '/w/utils.ts' }, { type: 'rule', file_path: '/w/r.mdc' }] });
   assert.ok('delegate' in p);
-  assert.deepEqual(p, { reply: { continue: false }, delegate: { target: 'lmstudio', task: 'write tests for utils.ts\n\nFiles: /w/utils.ts', reason: 'sent with >> from Cursor', cwd: '/w', resultDir: '/w/.agent-spaghetti/results' } });
+  assert.deepEqual(p, { reply: { continue: false }, delegate: { target: 'lmstudio', task: 'write tests for utils.ts\n\nFiles: /w/utils.ts', reason: 'sent with the >> prefix', cwd: '/w', resultDir: '/w/.agent-spaghetti/results' } });
   assert.deepEqual(planHook({ hook_event_name: 'beforeSubmitPrompt', prompt: 'normal SECRET-MARKER question', conversation_id: 'c1' }),
     { reply: { continue: true }, report: { event: 'beforeSubmitPrompt', data: { conversation_id: 'c1' } } });
   assert.deepEqual(planHook({ hook_event_name: 'beforeSubmitPrompt', prompt: '>>' }).reply, { continue: true }, 'no target and task: pass through');

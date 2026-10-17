@@ -40,17 +40,16 @@ test('built-in index = integration folders (each has manifest.json + fixtures.js
   assert.deepEqual(BUILTIN_MANIFESTS.map(m => m.id).sort(), dirs);
   for (const d of dirs) assert.ok(existsSync(join(ROOT, 'integrations', d, 'fixtures.json')), `${d}/fixtures.json`);
 });
-test('the OpenClaw pack: no Python except jobctl; no hard-coded LLM ports or probing in pack code', () => {
-  const py = files('packs', /.*/).filter(f => /^#!.*python|\.py$/m.test(f.endsWith('.py') ? '.py' : read(f).split('\n')[0]));
-  assert.deepEqual(py, ['packs/openclaw/scripts/jobctl']);
-  assert.deepEqual(where(/python3/, ['packs'], /\.(sh|ps1)$/), []);
-  assert.deepEqual(where(/\b(1234|11434|8080|8000)\b|urllib/, ['packs', 'integrations/openclaw/pack'], /\.(ts|sh)$/), []);
+test('the OpenClaw pack: no Python except jobctl; no hard-coded LLM ports or probing in its code', () => {
+  const py = files('integrations/openclaw/pack/files', /.*/).filter(f => /^#!.*python|\.py$/m.test(f.endsWith('.py') ? '.py' : read(f).split('\n')[0]));
+  assert.deepEqual(py, ['integrations/openclaw/pack/files/scripts/jobctl']);
+  assert.deepEqual(where(/\b(1234|11434|8080|8000)\b|urllib/, ['integrations/openclaw/pack'], /\.ts$/), []);
 });
 test('no source file is hidden by .gitignore', { skip: !existsSync(join(ROOT, '.git')) }, async () => {
   const r = await spawnFile('git', ['-C', ROOT, 'ls-files', '--others', '--ignored', '--exclude-standard', '--directory',
-    'packages', 'integrations', 'packs', 'scripts', 'tests', 'config'], { timeoutMs: 30000 });
+    'packages', 'integrations', 'scripts', 'tests'], { timeoutMs: 30000 });
   assert.equal(r.code, 0, r.stderr.toString());
-  const hidden = r.stdout.toString().split('\n').filter(l => l && !/(^|\/)(node_modules|dist)\/?$/.test(l) && !/overrides\.env$/.test(l));
+  const hidden = r.stdout.toString().split('\n').filter(l => l && !/(^|\/)(node_modules|dist)\/?$/.test(l));
   assert.deepEqual(hidden, []);
 });
 test('secretscan is clean (no tokens, credentials or private LAN IPs in committed files)', async () => {
@@ -58,7 +57,7 @@ test('secretscan is clean (no tokens, credentials or private LAN IPs in committe
   assert.equal(r.code, 0, r.stdout.toString() + r.stderr.toString());
 });
 test('placeholders only: no real-looking user homes or drive paths in code, manifests or fixtures', () => {
-  const offenders = [...files('packages'), ...files('integrations'), ...files('packs'), ...files('tests')]
+  const offenders = [...files('packages'), ...files('integrations'), ...files('tests')]
     .filter(f => !f.startsWith('tests/guards/'))
     .flatMap(f => (read(f).match(/(?:C:[\\/]+Users[\\/]+|\/home\/|\/Users\/)([A-Za-z][\w.-]*)/g) ?? []).map(m => `${f}: ${m}`))
     .filter(m => !/(Users[\\/]+|home\/|Users\/)(u|user|test|TestUser)$/.test(m.split(': ')[1]));
@@ -69,4 +68,10 @@ test('GUI parity (ADR 0009): every op names a panel, the tray menu or machine; e
   const allowed = new Set<string>([...PANELS, 'tray-menu', 'machine']);
   for (const [id, o] of Object.entries(OPS)) assert.ok(allowed.has((o as { gui?: string }).gui ?? ''), `op ${id} has no known gui`);
   for (const p of PANELS) assert.ok(Object.values(OPS).some(o => o.gui === p), `panel ${p} offers nothing`);
+});
+test('neutral switchboard (ADR 0010): no integration is named in packages/ (tool-specific code lives in integrations/<id>/)', () => {
+  const ids = BUILTIN_MANIFESTS.map(m => m.id);
+  const named = files('packages').filter(f => !f.endsWith('.md')).flatMap(f => ids.filter(id => new RegExp(`['"\`/]${id}['"\`/:.]`).test(read(f).replace(/https?:\/\/\S+/g, ''))
+    && !(id === 'cursor' && /variant|'agent-plugins' \| 'cursor'/.test(read(f)))).map(id => `${f}: ${id}`));
+  assert.deepEqual(named, []);
 });

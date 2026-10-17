@@ -32,7 +32,7 @@ export async function loadBundle(path = process.env.AGENT_SPAGHETTI_ENV_BUNDLE
   return text && { text, sha256: createHash('sha256').update(text).digest('hex') };
 }
 
-// Node >= 20 inside a distro: find-node.sh (shared with the OpenClaw pack). Read lazily: the env bundle never needs it.
+// Node >= 20 inside a distro: find-node.sh. Read lazily: the env bundle never needs it.
 // The default route gives the Windows side's address, where the daemon also listens for this distro's MCP bridges.
 const DIR = 'd="${XDG_DATA_HOME:-$HOME/.local/share}/agent-spaghetti"; ';
 export const probeScript = () => `${DIR}echo "dir=$d"; `

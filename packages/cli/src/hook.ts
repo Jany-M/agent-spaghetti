@@ -21,5 +21,5 @@ export function planHook(input: Record<string, any>): HookPlan {
   const root = Array.isArray(input.workspace_roots) ? String(input.workspace_roots[0] ?? '') : '';
   const files = (Array.isArray(input.attachments) ? input.attachments : []).filter((a: any) => a?.type === 'file' && a.file_path).map((a: any) => String(a.file_path));
   return { reply: { continue: false }, delegate: { target: m[1], task: files.length ? `${m[2].trim()}\n\nFiles: ${files.join(', ')}` : m[2].trim(),
-    reason: 'sent with >> from Cursor', ...(root ? { cwd: root, resultDir: `${root}/.agent-spaghetti/results` } : {}) } };
+    reason: 'sent with the >> prefix', ...(root ? { cwd: root, resultDir: `${root}/.agent-spaghetti/results` } : {}) } };
 }

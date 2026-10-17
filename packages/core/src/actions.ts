@@ -1,6 +1,7 @@
 // Per-environment commands. The SAME function answers in the daemon (host env) and in the env bundle (inside distros),
 // so a command is added once here and works everywhere (core/dispatch.ts routes it).
 import type { ConnectResult, Environment, Grant, Integration, RunEvent, RunRequest, Switch, TestResult } from '@agent-spaghetti/sdk';
+import { rankTargets } from '@agent-spaghetti/sdk';
 import { setConnection } from './connect.ts';
 import { inspectAs } from './engine/observe.ts';
 import { testIntegration } from './engine/test.ts';
@@ -43,8 +44,11 @@ export async function runEnvCommand<C extends EnvCommand>(env: Environment, inte
         const i = integrations.find(i => i.manifest.id === args[0]);
         const r = i?.module?.setup && await inspectAs(i, env, await env.inventory(i.manifest.detect?.env ?? []), grants);
         if (!i || !r) throw new Error(`${args[0]} has nothing to set up in ${env.id}`);
-        const localModels = async () => (await scanEnv(env, integrations.filter(x => x.manifest.models && x.manifest.speaks?.openai), { grants })).inspections
-          .flatMap(x => x.backends.map(b => ({ integration: b.integration, base: b.endpoint + integrations.find(y => y.manifest.id === b.integration)!.manifest.speaks!.openai!.base, model: b.model, contextLength: b.contextLength })));
+        const servers = integrations.filter(x => x.manifest.models && x.manifest.speaks?.openai);
+        const localModels = async () => rankTargets((await scanEnv(env, servers, { grants })).inspections.flatMap(x => x.backends.map(b => {
+          const m = servers.find(y => y.manifest.id === b.integration)!.manifest;
+          return { id: b.integration, cost: m.cost ?? 'unknown', integration: b.integration, base: b.endpoint + m.speaks!.openai!.base, model: b.model, contextLength: b.contextLength };
+        }))).map(({ id: _, cost: __, ...l }) => l);
         const steps = await i.module!.setup!(env, r.detection, { action: args[2] === 'check' ? 'check' : 'apply', dryRun: args[3] === 'dry-run', cli: JSON.parse(args[1]),
           options: JSON.parse(args[4] || '{}'), localModels });
         return { ok: steps.every(s => s.ok), steps };

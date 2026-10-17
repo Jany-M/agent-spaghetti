@@ -51,8 +51,11 @@ test('settings: defaults, typed set (lists, numbers, text), text parsing, unknow
   assert.throws(() => s.setText('nope', '1'), /unknown setting nope/);
   s.setGrants([allow('net', 'GET /v')]); assert.equal(s.grants().length, 1);
   assert.equal(s.all()['events.retentionDays'].value, 14);
-  assert.equal(s.get('openclaw.model'), 'auto');
-  s.setText('openclaw.model', ' lmstudio:m '); assert.deepEqual(s.optionsOf('openclaw'), { model: 'lmstudio:m' }, 'a tool gets its own settings without the prefix');
+  const tool: Integration = { source: 'builtin', manifest: { manifest: 1, id: 'acme', name: 'Acme', roles: ['agent'] } as Manifest, module: { settings: { model: { default: 'auto', help: 'h' } } } };
+  const t = new Settings(new Store(':memory:'), () => [tool]);
+  assert.deepEqual(t.all()['acme.model'], { value: 'auto', help: 'h' }, "an integration's own settings appear with its prefix");
+  t.setText('acme.model', ' srv:m '); assert.deepEqual(t.optionsOf('acme'), { model: 'srv:m' }, 'its hooks get them without the prefix');
+  assert.throws(() => s.setText('acme.model', 'x'), /unknown setting/);
 });
 
 const lms: Integration = { source: 'builtin', manifest: { manifest: 1, id: 'lmstudio', name: 'LM Studio', roles: ['backend'], cost: 'free',

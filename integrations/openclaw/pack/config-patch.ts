@@ -12,13 +12,9 @@ import { MCP_NAME } from './mcp.ts';
 /** Seconds one model request may take (queue wait + long prompts on a single-slot local server). */
 export const TIMEOUT_SECONDS = 900;
 export interface ConfigDeps { env: Environment; exe: string }
-export interface PatchDeps extends ConfigDeps { model: string; detect(): Promise<LocalModel[]>; say(s: string): void }
+export interface PatchDeps extends ConfigDeps { model: string; detect(): Promise<LocalModel[]>; say(s: string): void }   // detect: best first
 /** Provider id OpenClaw gets for a detected backend (same ids the Python version used). */
 export const providerIdFor = (integration: string) => (integration === 'lmstudio' ? 'lmstudio' : `local-${integration}`);
-/** Preference order when several local servers answer. */
-export const BACKEND_ORDER = ['lmstudio', 'ollama', 'llamacpp', 'vllm'];
-/** Preference order when several local servers have a model loaded. */
-export const byPreference = (models: LocalModel[]) => [...models].sort((x, y) => BACKEND_ORDER.indexOf(x.integration) - BACKEND_ORDER.indexOf(y.integration));
 
 export type Provider = { baseUrl?: string; timeoutSeconds?: number; models?: Array<Record<string, unknown>> };
 export const get = async (d: ConfigDeps, path: string) => openclawJson(d.env, d.exe, ['config', 'get', path]);
@@ -69,7 +65,7 @@ export async function buildPatch(d: PatchDeps): Promise<Record<string, any>> {
       d.say(`keeping current primary model ${primary} (${prov[cur.provider!]?.baseUrl ? 'endpoint answers' : 'no local endpoint to probe'})`);
       choice = keep();
     } else {
-      const det = byPreference(await d.detect())[0];
+      const det = (await d.detect())[0];   // already ranked by the engine (sdk/routing.ts)
       if (det) {
         const pid = providerIdFor(det.integration);
         choice = providerPatch(prov[pid], det, pid);

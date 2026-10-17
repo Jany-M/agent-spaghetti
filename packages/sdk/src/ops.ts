@@ -45,7 +45,7 @@ export const OPS = {
   cancel:       { method: 'POST', path: '/v1/cancel', gui: 'runs',       usage: 'cancel <id>',              summary: 'Stop a running delegation' },
   verdict:      { method: 'POST', path: '/v1/verdict', gui: 'runs',      usage: 'verdict <id> up|down|redo', summary: 'Rate a run (kept in the run record)' },
   connect:      { method: 'POST', path: '/v1/connect', gui: 'tools',      usage: 'connect|disconnect <integration> [--dry-run]', summary: 'Give a client the agent-spaghetti tools (MCP + plugin), or take them away' },
-  setup:        { method: 'POST', path: '/v1/setup',        gui: 'tools', usage: 'setup <integration> [--check] [--dry-run]', summary: 'Set a tool up for agent-spaghetti (the OpenClaw workflow pack), or check it' },
+  setup:        { method: 'POST', path: '/v1/setup',        gui: 'tools', usage: 'setup <integration> [--check] [--dry-run]', summary: 'Set a tool up for agent-spaghetti (e.g. its workflow pack), or check it' },
   hook:         { method: 'POST', path: '/v1/hook', gui: 'machine',         usage: 'hook <client>',            summary: 'Run by client hooks (reads the hook JSON on stdin)' },
 } as const satisfies Record<string, OpSpec>;
 export type OpId = keyof typeof OPS;

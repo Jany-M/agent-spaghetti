@@ -8,26 +8,13 @@
 Your AI tools each live in their own world. Agent Spaghetti untangles them: it makes your agents hand work to each other, one step at a time, on the LLM you choose, local or online.
 </div>
 
-## What you get today
+## What it does
 
-**Reliable multi-step agent workflows for [OpenClaw](https://docs.openclaw.ai) with a local LLM** (LM Studio, Ollama, llama.cpp, vLLM or a hosted API), on Windows 11 / WSL.
+Agent Spaghetti is a **switchboard** for the AI tools on your machine. Any tool can hand a task to any other tool, and the result comes back to the one that asked: coding agents (Claude Code, Codex, OpenCode, Cline, Kilo, OpenClaw, …), IDE chats (VS Code, Cursor, …), desktop apps (Claude Desktop, AnythingLLM, …) and models (LM Studio, Ollama, llama.cpp, vLLM or a hosted API). No tool sits in the middle and none is preferred: you decide who does what.
 
-- Long tasks are split into steps and handed from agent to agent, saved to files, so a crash, restart or new chat resumes where it stopped.
-- One step at a time, so a single local GPU never gets overloaded.
-- Tools are switched on only when a step needs them.
-- Survives reinstalls of OpenClaw or your LLM server: set it up again with one click.
-
-## Install (Windows + WSL)
-
-`npm install` and `npm run tray` (Node.js 24 on Windows), then in the tray: **Tools → OpenClaw → Set up** (**Dry run** first if you like; **Check** any time later). Inside the distro, `agent-spaghetti-healthcheck` prints the same check. Without the tray: `node packages/cli/src/index.ts setup openclaw [--dry-run|--check]`.
-
-Needs OpenClaw with a working gateway (in a running WSL distro, or on Linux/macOS), plus `python3` on the gateway host (for `jobctl`). Works best with a model that handles tool calls well.
-
-## Choosing the LLM
-
-By default (`auto`) the setup keeps the model OpenClaw already uses while it answers, else it picks the first local server with a loaded model. Pick one yourself in **Settings → openclaw.model**: `keep` (never touch it) or `<server>:<model>` from **Runs → New task** / `targets` (e.g. `lmstudio:<loaded model>`), then **Set up** again.
-
-## The daemon, the tray and delegation
+- **See** what is installed and running, on Windows and in your WSL distros, and which model each agent uses.
+- **Connect** your tools once (one click each): they get the `agent-spaghetti` tools (`delegate`, `targets`, `run_status`).
+- **Hand off** a task from any connected tool, or from the tray, to any target. Free local models run at once; anything that may cost money asks you first. Every hand-off is recorded (who, what kind, why, outcome, cost, result).
 
 <div align="center">
 <img width="380" height="520" alt="taskbar_dark" src="https://github.com/user-attachments/assets/345fcd88-737a-4870-94dc-856b6ffc28cd" />
@@ -37,23 +24,27 @@ By default (`auto`) the setup keeps the model OpenClaw already uses while it ans
 <img width="380" height="520" alt="preview (6)" src="https://github.com/user-attachments/assets/29905432-99db-410f-b455-c4959d369de3" />
 </div>
 
+## Install (Windows 11 + WSL)
 
+`npm install`, then `npm run tray` (Node.js 24). The first start adds an **Agent Spaghetti** shortcut to the desktop and the Start menu; from then on, click it. "Start tray at login" in the tray menu starts it with Windows. Everything the tray does is also a command: `node packages/cli/src/index.ts help`.
 
-`npm install`, then (Node.js 24 on Windows):
+Status keeps itself current: running tools and model servers are re-checked every few seconds, a tool starting or stopping triggers a rescan, and a full rescan runs every 10 minutes (Settings → `scan.everyMin`).
 
-```powershell
-npm run tray  # tray icon: status on hover, questions to answer; starts the daemon if needed
-node packages/cli/src/index.ts help   # or the CLI (the daemon: `... daemon`)
-```
+## Connect your tools
 
-The first `npm run tray` adds an **Agent Spaghetti** shortcut to the desktop and the Start menu: from then on, click it to start the tray (and the daemon). "Start tray at login" in the tray menu starts it with Windows. Status keeps itself current: running tools and model servers are re-checked every few seconds, a tool starting or stopping triggers a rescan, and a full rescan runs every 10 minutes (`setting scan.everyMin`).
+**Tools** lists everything found, by type. Each tool you can connect asks once: *Connect for this session*, *Always connect* or *Don't connect* (change it any time in its row). Connected tools get the `agent-spaghetti` MCP server and a short skill that tells their agent how to hand off work.
 
-- **See:** `scan` finds AI tools, local model servers and agents on Windows and in running WSL distros; `status` shows what is running now.
-- **Delegate:** `delegate <target> <task>` hands a task to a local model (LM Studio, Ollama, llama.cpp, vLLM), an OpenClaw agent (`--model <agent>`, also inside WSL) or Claude Code; an agent that delegates further while it works shows up as one chain in `runs <id>`. Free local models run at once, one request at a time per server; anything that may cost money asks you first (tray or `answer <id> allow|deny`). `targets` lists what is available, `runs` keeps the record (who, what kind, why, outcome, cost, result file).
-- **Connect clients:** `connect openclaw | claude-cli | cursor | vscode | claude-desktop | anythingllm` gives a tool the `agent-spaghetti` MCP server (`delegate`, `targets`, `run_status`). In Cursor, a prompt starting with `>>target ` goes straight to that target without using Cursor's model; the result lands in `.agent-spaghetti/results/` in the workspace.
-- **Third-party integrations** (JSON files in the data folder's `integrations/`) do nothing until you allow each action (`permissions`, `allow`, `deny`).
+## Hand off work and get results back
 
-Limits: Cursor can't use a local model as its own model (its servers can't reach your machine), so Cursor works through MCP and the `>>` hook instead.
+- From a connected tool: ask its agent to delegate (for example "have the local model write the tests"), or in Cursor start a prompt with `>>target ` to send it without using Cursor's model.
+- From the tray: **Runs → New task**. From a terminal: `delegate <target> <task> [--model <model or agent>]`.
+- **Runs** shows each hand-off chain (an agent that delegates further while it works is part of the same chain) and its result; rate it or cancel it there.
+- Third-party integrations (JSON files in the data folder's `integrations/`) do nothing until you allow each action (Tools → More).
+
+## Per-tool notes
+
+- **OpenClaw:** Tools → OpenClaw → **Set up** installs its multi-step workflow pack (roles, settings, helpers; **Dry run** first if you like, **Check** any time). It needs a running gateway and `python3` on the gateway host. The model it uses is the setting `openclaw.model`: `auto` (keep the current one while it answers, else the best loaded local model), `keep`, or `<server>:<model>` from `targets`.
+- **Cursor:** cannot use a local model as its own model (its servers can't reach your machine), so it works through MCP and the `>>` prefix.
 
 ## License
 
