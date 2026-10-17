@@ -76,9 +76,10 @@ export class Gateway {
       if (!started) { c.res.writeHead(status, { 'content-type': type }); started = true; }
       if (chunk !== undefined) c.res.write(chunk);
     };
-    const { done } = this.d.runner.start(c.who, { target: r.target, model: r.model, kind: 'other', reason: `model gateway ${path.slice(4)}`, returnTo: 'none', jobId: this.session,
+    const { id, done } = this.d.runner.start(c.who, { target: r.target, model: r.model, kind: 'other', reason: `model gateway ${path.slice(4)}`, returnTo: 'none', jobId: this.session,
       task: JSON.stringify(body.messages ?? body.prompt ?? body.input ?? '') }, {
       engine: signal => { const s = this.d.runner.server(t, r.model); return openaiForward(s.target, path.slice(3), body, { signal: AbortSignal.any([signal, c.signal]), onQueue: s.onQueue, write }); } });
+    c.signal.addEventListener('abort', () => this.d.runner.cancel(id), { once: true });   // the tool gave up: no question left waiting
     const row = await done;
     if (started) { c.res.end(); return WRITTEN; }
     throw fail(row.outcome === 'denied' || row.outcome === 'expired' ? 403 : 502, `Agent Spaghetti: ${row.error ?? row.outcome}`);
