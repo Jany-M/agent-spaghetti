@@ -79,11 +79,11 @@ export async function listModels(env: Environment, m: Manifest, hit: { endpoint:
         : [];
     });
 }
-/** Whether the client already has agent-spaghetti (its plugin folder, or the entry in its MCP config). Read-only. */
+/** Whether the client already has agent-spaghetti (its plugin folder, the entry in its MCP config, or a config its CLI writes naming it). Read-only. */
 export async function isConnected(env: Environment, m: Manifest): Promise<boolean> {
   const s = m.speaks;
   if (s?.agentPlugins && await env.glob(`${pluginDir(s.agentPlugins.dir)}/mcp.json`)) return true;
-  if (!s?.mcpClient) return false;
+  if (!s?.mcpClient) return !!s?.mcpCli?.config && !!(await env.readFile(s.mcpCli.config))?.includes('agent-spaghetti');
   const servers = pick(parseJsonc(await env.readFile(s.mcpClient.config)), s.mcpClient.key);
   return !!servers && typeof servers === 'object' && 'agent-spaghetti' in servers;
 }
@@ -114,7 +114,7 @@ export async function inspect(i: Integration, env: Environment, ctx: Ctx): Promi
   const hit = d.http ? await reach(env, d, ctx.inventory, installs) : null;
   if (!installs.length && !hit) return null;
   const backends = m.models && hit ? await listModels(env, m, hit) : [];
-  const connected = m.speaks?.mcpClient || m.speaks?.agentPlugins ? await isConnected(env, m) : undefined;
+  const connected = m.speaks?.mcpClient || m.speaks?.agentPlugins || m.speaks?.mcpCli ? await isConnected(env, m) : undefined;
   const detection: Detection = {
     integration: m.id, name: m.name, envId: env.id, installs, endpoint: hit?.endpoint,
     version: await readVersion(env, d.version, installs, hit?.body), levels: levelsOf(i, ENGINES), cost: m.cost ?? 'unknown',

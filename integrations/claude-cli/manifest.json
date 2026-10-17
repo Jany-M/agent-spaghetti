@@ -33,6 +33,20 @@
     "mcpClient": {
       "config": "~/.claude.json",
       "key": "mcpServers"
+    },
+    "mcpCli": {
+      "add": [
+        "mcp",
+        "add",
+        "--scope",
+        "user"
+      ],
+      "remove": [
+        "mcp",
+        "remove",
+        "--scope",
+        "user"
+      ]
     }
   }
 }

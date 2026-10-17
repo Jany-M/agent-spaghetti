@@ -3,7 +3,7 @@
 // A module's own connect() wins where the tool's CLI is the documented way.
 import { readFileSync } from 'node:fs';
 import type { Cli, Connected, Detection, Environment, Integration, Manifest } from '@agent-spaghetti/sdk';
-import { VERSION, parseJsonc, pluginDir } from '@agent-spaghetti/sdk';
+import { VERSION, parseJsonc, pluginDir, programOf } from '@agent-spaghetti/sdk';
 
 export const SERVER_NAME = 'agent-spaghetti';
 const PLUGIN = new URL('../../../clients/plugin/', import.meta.url);
@@ -53,10 +53,23 @@ async function mcpConfig(env: Environment, spec: NonNullable<Speaks['mcpClient']
   return { description: `${on ? 'add' : 'remove'} the ${SERVER_NAME} MCP server ${on ? 'to' : 'from'} ${spec.config} (restart the client)`, changes: await write(env, files, dryRun) };
 }
 
+/** Through the tool's own CLI: remove (also replaces an older entry), then add. */
+async function mcpCli(env: Environment, spec: NonNullable<Speaks['mcpCli']>, exe: string | undefined, cli: Cli, client: string, on: boolean, dryRun: boolean) {
+  if (!exe) throw new Error(`${client}: its program was not found`);
+  const e = mcpEntry(cli, client), remove = [...spec.remove, SERVER_NAME], add = [...spec.add, SERVER_NAME, '--', e.command, ...e.args];
+  if (!dryRun) {
+    await env.exec(exe, remove, { timeoutMs: 30000 });
+    const r = on ? await env.exec(exe, add, { timeoutMs: 30000 }) : null;
+    if (r && r.code !== 0) throw new Error(`${client} ${spec.add.join(' ')} failed: ${(r.stderr || r.stdout).trim().slice(-300)}`);
+  }
+  return { description: `${on ? 'add' : 'remove'} the ${SERVER_NAME} MCP server with the tool's own CLI`, changes: [`${exe} ${(on ? add : remove).join(' ')}`] };
+}
+
 /** Connect (on) or disconnect a client: the module's own way, else the plugin and/or the MCP config entry. Disconnect is the exact inverse. */
 export async function setConnection(env: Environment, i: Integration, det: Detection, cli: Cli, on: boolean, dryRun: boolean): Promise<Connected> {
   if (i.module?.connect) return i.module.connect(env, det, cli, on, dryRun);
   const sp = i.manifest.speaks, client = i.manifest.id;
+  if (sp?.mcpCli) return { ...await mcpCli(env, sp.mcpCli, programOf(det, i.manifest.detect?.bin?.[0]), cli, client, on, dryRun), applied: !dryRun };
   if (!sp?.agentPlugins && !sp?.mcpClient) throw new Error(`${i.manifest.name} has no MCP client or plugin support agent-spaghetti knows of`);
   // connect: the plugin where supported, else the MCP config; disconnect: both (whichever a user or an older version added)
   const steps = on ? [sp.agentPlugins ? plugin(env, sp.agentPlugins, cli, client, on, dryRun) : mcpConfig(env, sp.mcpClient!, cli, client, on, dryRun)]

@@ -19,5 +19,18 @@
     "version": {
       "from": "installed"
     }
+  },
+  "speaks": {
+    "mcpCli": {
+      "add": [
+        "mcp",
+        "add"
+      ],
+      "remove": [
+        "mcp",
+        "remove"
+      ],
+      "config": "~/.codex/config.toml"
+    }
   }
 }

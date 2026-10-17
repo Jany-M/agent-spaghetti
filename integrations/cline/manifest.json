@@ -31,6 +31,12 @@
     }
   },
   "speaks": {
+    "acp": {
+      "command": [
+        "cline",
+        "--acp"
+      ]
+    },
     "mcpClient": {
       "config": "~/.cline/data/settings/cline_mcp_settings.json",
       "key": "mcpServers"

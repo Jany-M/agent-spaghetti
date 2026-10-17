@@ -24,7 +24,7 @@ export function fakeEnv(s: FakeSpec = {}): Environment & { calls: string[]; inpu
     calls, inputs, id: s.id ?? 'windows', kind: s.kind ?? 'windows',
     async exec(cmd, args, o) { calls.push(['exec', cmd, ...args].join(' ')); if (o?.input !== undefined) inputs[[cmd, ...args].join(' ')] = String(o.input); return s.exec?.[[cmd, ...args].join(' ')] ?? { code: 127, stdout: '', stderr: 'not found' }; },
     async http(req) { const m = req.method ?? 'GET'; calls.push(`${m} ${req.url}`); return s.http?.[`${m} ${req.url}`] ?? (m === 'GET' ? s.http?.[req.url] : undefined) ?? null; },
-    execLines: (cmd, args, o) => { const k = [cmd, ...args].join(' '); calls.push(`lines ${k}`); if (o?.input !== undefined) inputs[k] = o.input; return replay(s.lines?.[k], k); },
+    execLines: (cmd, args, o) => { const k = [cmd, ...args].join(' '); calls.push(`lines ${k}`); if (typeof o?.input === 'string') inputs[k] = o.input; return replay(s.lines?.[k], k); },
     httpLines: req => { const k = `${req.method ?? 'GET'} ${req.url}`; calls.push(`lines ${k}`); if (req.body !== undefined) inputs[k] = req.body; return replay(s.lines?.[k], k); },
     async writeFile(p, c) { calls.push(`write ${p}`); (s.files ??= {})[p] = c; },
     async remove(p) { calls.push(`remove ${p}`); for (const k of Object.keys(s.files ?? {})) if (k === p || k.startsWith(`${p}/`)) delete s.files![k]; },

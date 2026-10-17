@@ -25,6 +25,12 @@
     }
   },
   "speaks": {
+    "acp": {
+      "command": [
+        "opencode",
+        "acp"
+      ]
+    },
     "mcpClient": {
       "config": "~/.config/opencode/opencode.json",
       "key": "mcp",

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { firstNumber, levelsOf, parseJson, pick, samePath, validate, wildcard, type Integration } from '@agent-spaghetti/sdk';
+import { firstNumber, programOf, levelsOf, parseJson, pick, samePath, validate, wildcard, type Integration } from '@agent-spaghetti/sdk';
 
 const schema = createRequire(import.meta.url)('@agent-spaghetti/sdk/manifest.schema.json');
 
@@ -17,6 +17,13 @@ test('wildcard and samePath', () => {
   assert.ok(wildcard('a.b', 'A.B') && !wildcard('a.b', 'axb'));
   assert.ok(samePath('C:\\Apps\\X\\', 'c:/apps/x', 'windows'));
   assert.ok(!samePath('/home/u/A', '/home/u/a', 'linux'));
+});
+test('programOf: the tool\'s own program by name (any extension); never an app or extension folder found alongside', () => {
+  const det = { installs: [{ path: 'C:/Apps/Kilo', via: 'installed' as const }, { path: 'C:/u/.vscode/extensions/kilocode.kilo-code-1', via: 'path' as const },
+    { path: 'C:\\u\\AppData\\Local\\KiloDesktop\\app-1\\resources\\kilo\\win\\bin\\kilo.exe', via: 'path' as const }] };
+  assert.match(programOf(det, 'kilo')!, /kilo\.exe$/);
+  assert.equal(programOf(det, 'cline'), undefined);
+  assert.equal(programOf({ installs: [{ path: '/usr/bin/x', via: 'bin' }] }), '/usr/bin/x');
 });
 const ok = { manifest: 1, id: 'x-y', name: 'X', roles: ['backend'], detect: { http: { port: 1, path: '/v1' }, paths: { linux: ['~/x'] }, version: { from: 'installed' } } };
 test('manifest schema accepts a valid manifest and reports each error with its path', () => {

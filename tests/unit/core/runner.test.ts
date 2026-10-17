@@ -146,3 +146,13 @@ test('claude-cli: read-only unless a folder and an editing kind; stream-json →
   assert.deepEqual(toEvents('{"type":"system","subtype":"init","session_id":"s-1"}'), [{ type: 'session', id: 's-1' }]);
   assert.deepEqual(claudeArgs({ target: 'claude-cli', task: 'x', session: 's-1' }).slice(-2), ['--resume', 's-1']);
 });
+test('codex: read-only unless a folder and an editing kind; resume; JSONL → events', async () => {
+  const { codexArgs, codexEvents } = await import('../../../integrations/codex/index.ts');
+  assert.deepEqual(codexArgs({ target: 'codex', task: 'x' }), ['exec', '--json', '--skip-git-repo-check', '--sandbox', 'read-only', '-']);
+  assert.deepEqual(codexArgs({ target: 'codex', task: 'x', kind: 'tests', cwd: '/w', model: 'm', session: 't1' }).slice(4),
+    ['workspace-write', '--model', 'm', 'resume', 't1', '-']);
+  assert.deepEqual(['{"type":"thread.started","thread_id":"t1"}', '{"type":"item.completed","item":{"id":"i","type":"command_execution","command":"ls","status":"completed"}}',
+    '{"type":"item.completed","item":{"id":"r","type":"reasoning","text":"hmm"}}', '{"type":"item.completed","item":{"id":"m","type":"agent_message","text":"hi"}}',
+    '{"type":"turn.completed","usage":{"input_tokens":3,"output_tokens":4}}', '{"type":"turn.failed","error":{"message":"quota"}}', 'noise'].flatMap(codexEvents),
+  [{ type: 'session', id: 't1' }, { type: 'tool', name: 'command_execution', summary: 'ls' }, { type: 'text', text: 'hi' }, { type: 'usage', inputTokens: 3, outputTokens: 4 }, { type: 'error', message: 'quota' }]);
+});

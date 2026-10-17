@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ConsentScope, Delivery, Environment, Integration, RunEvent, RunOutcome, RunRequest, RunRow, Snapshot, Target } from '@agent-spaghetti/sdk';
-import { TASK_KINDS, runDecision, withGrants } from '@agent-spaghetti/sdk';
+import { TASK_KINDS, programOf, runDecision, withGrants } from '@agent-spaghetti/sdk';
 import type { Bus } from './bus.ts';
 import type { Consent } from './consent.ts';
 import type { Ledger } from './ledger.ts';
@@ -21,8 +21,8 @@ export interface RunnerDeps {
 }
 /** What the runner keeps about a hand-off chain while it runs: who asked and where the result goes. */
 export interface Chain { id: number; source: string; returnTo: 'caller' | 'none'; returnSession?: string; parentRunId?: number; watchedAt?: number }
-/** What `delegate` can use right now on this machine (from the last scan). Models: servers the host reaches. Agents: tools with a
- *  run hook, in a running environment where their own program was found (the host first); `models` lists their agents. */
+/** What `delegate` can use right now on this machine (from the last scan). Models: servers the host reaches. Agents: tools that speak
+ *  ACP or have a run hook, in a running environment where their own program was found (the host first); `models` lists their agents. */
 export function targets(d: Pick<RunnerDeps, 'host' | 'snapshot' | 'integrations'>): Target[] {
   const snap = d.snapshot(), hostId = d.host()?.id;
   if (!snap || !hostId) return [];
@@ -33,9 +33,10 @@ export function targets(d: Pick<RunnerDeps, 'host' | 'snapshot' | 'integrations'
     const i = byId.get(det.integration);
     if (!i || out.some(t => t.id === det.integration)) continue;
     const models = snap.backends.filter(b => b.integration === det.integration && b.reachableFrom.includes(hostId)).map(b => b.model);
+    const acp = i.manifest.speaks?.acp;
     if (i.manifest.speaks?.openai && models.length) out.push({ id: det.integration, name: det.name, kind: 'model', cost: det.cost, envId: hostId, models, engine: 'openai', resumable: false });
-    else if (i.module?.run && running.has(det.envId) && det.installs.some(x => x.via === 'bin' || x.via === 'path'))
-      out.push({ id: det.integration, name: det.name, kind: 'agent', cost: det.cost, envId: det.envId, engine: 'module', resumable: !!i.module.resumes,
+    else if ((acp || i.module?.run) && running.has(det.envId) && programOf(det, acp?.command[0] ?? i.manifest.detect?.bin?.[0]))
+      out.push({ id: det.integration, name: det.name, kind: 'agent', cost: det.cost, envId: det.envId, engine: acp ? 'acp' : 'module', resumable: !!acp || !!i.module?.resumes,
         models: snap.agents.filter(a => a.integration === det.integration && a.envId === det.envId).map(a => a.id.slice(det.integration.length + 1)) });
   }
   return out;

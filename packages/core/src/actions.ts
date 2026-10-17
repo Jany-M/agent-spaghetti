@@ -1,9 +1,10 @@
 // Per-environment commands. The SAME function answers in the daemon (host env) and in the env bundle (inside distros),
 // so a command is added once here and works everywhere (core/dispatch.ts routes it).
 import type { ConnectResult, Environment, Grant, Integration, RunEvent, RunRequest, Switch, TestResult } from '@agent-spaghetti/sdk';
-import { rankTargets } from '@agent-spaghetti/sdk';
+import { programOf, rankTargets } from '@agent-spaghetti/sdk';
 import { setConnection } from './connect.ts';
 import { inspectAs } from './engine/observe.ts';
+import { acpRun } from './engine/acp.ts';
 import { testIntegration } from './engine/test.ts';
 import { scanEnv, type EnvScan } from './scan.ts';
 
@@ -64,12 +65,17 @@ export async function runEnvCommand<C extends EnvCommand>(env: Environment, inte
   return r() as Promise<EnvResults[C]>;
 }
 
-/** A delegated task in this environment (the same code in the daemon and in the env bundle's `run`): fresh detection, then the module's run. */
+/** A delegated task in this environment (the same code in the daemon and in the env bundle's `run`): fresh detection, then the
+ *  tool's engine: ACP when it speaks it, else its module's run (ADR 0010 §2). */
 export async function* runHere(env: Environment, integrations: Integration[], id: string, req: RunRequest, grants: Grant[],
   o: { signal?: AbortSignal; runId?: number } = {}): AsyncIterable<RunEvent> {
-  const i = integrations.find(x => x.manifest.id === id);
+  const i = integrations.find(x => x.manifest.id === id), acp = i?.manifest.speaks?.acp;
   const inventory = await env.inventory(i?.manifest.detect?.env ?? []);
-  const r = i?.module?.run ? await inspectAs(i, env, inventory, grants) : null;
+  const r = i && (acp || i.module?.run) ? await inspectAs(i, env, inventory, grants) : null;
   if (!i || !r) throw new Error(`${id} cannot run tasks in ${env.id}`);
-  yield* i.module!.run!(env, r.detection, req, { signal: o.signal ?? new AbortController().signal, inventory, runId: o.runId });
+  const ctx = { signal: o.signal ?? new AbortController().signal, inventory, runId: o.runId };
+  if (!acp) return yield* i.module!.run!(env, r.detection, req, ctx);
+  const exe = programOf(r.detection, acp.command[0]);
+  if (!exe) throw new Error(`${i.manifest.name}: ${acp.command[0]} not found in ${env.id}`);
+  yield* acpRun(env, exe, acp.command.slice(1), req, ctx);
 }

@@ -7,6 +7,6 @@ export function levelsOf(i: Integration, engines: Engines): Level[] {
   const l: Level[] = ['detect'];
   if (m.models || mod?.inspect || mod?.observe) l.push('observe');
   if ((m.speaks?.openai && engines.openai) || (m.speaks?.acp && engines.acp) || mod?.run) l.push('drive');
-  if (m.speaks?.mcpClient || m.speaks?.agentPlugins) l.push('client');
+  if (m.speaks?.mcpClient || m.speaks?.agentPlugins || m.speaks?.mcpCli) l.push('client');
   return l;
 }

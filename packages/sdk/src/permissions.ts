@@ -32,6 +32,7 @@ export function declaredActions(m: Manifest): DeclaredAction[] {
   if (d.http) out.push({ action: 'net', resource: `GET ${d.http.path}`, why: 'probe the local server (localhost / WSL host only)' });
   if (m.models?.path) out.push({ action: 'net', resource: `GET ${m.models.path}`, why: 'list loaded models' });
   if (m.speaks?.mcpClient) out.push({ action: 'read', resource: m.speaks.mcpClient.config, why: 'check whether agent-spaghetti is connected' });
+  if (m.speaks?.mcpCli?.config) out.push({ action: 'read', resource: m.speaks.mcpCli.config, why: 'check whether agent-spaghetti is connected' });
   if (m.speaks?.agentPlugins) out.push({ action: 'read', resource: `${pluginDir(m.speaks.agentPlugins.dir)}/mcp.json`, why: 'check whether the agent-spaghetti plugin is installed' });
   return out;
 }
@@ -49,6 +50,9 @@ export const withoutGrants = (grants: Grant[], subject: string, action?: Action,
   grants.filter(g => !(g.subject === subject && (action === undefined || g.action === action) && (resource === undefined || g.resource === resource)));
 
 /** A question for the user (ADR 0005): third-party actions now, `run` requests from Phase 3. Answered in the tray or CLI. */
+/** Least privilege for agents that run tasks: they may change files only with a working folder and a kind that edits. */
+const EDIT_KINDS = new Set(['code-edit', 'refactor', 'tests', 'docs']);
+export const mayEdit = (req: { cwd?: string; kind?: string }) => !!req.cwd && EDIT_KINDS.has(req.kind ?? 'other');
 export type ConsentScope = 'once' | 'job' | 'always';
 export interface ConsentRequest {
   id: string; ts: number; subject: string; action: Action; resource: string; why: string;

@@ -18,6 +18,7 @@ const seen: Array<{ id: string; req: RunRequest }> = [];
 const agent = (id: string, cost: 'free' | 'metered', resumes = false): Integration => ({ source: 'builtin', manifest: { manifest: 1, id, name: id, roles: ['agent'], cost } as Manifest,
   module: { resumes, async *run(_e, _d, req) {
     seen.push({ id, req });
+    if (req.session === 'gone') throw new Error('no such session');
     if (resumes) yield { type: 'session', id: req.session ?? `${id}-s1` };
     if (req.task.startsWith('slow')) await new Promise(r => setTimeout(r, 60));
     yield { type: 'done', result: `${id}(${req.task.split('\n')[0]})` };
@@ -74,6 +75,13 @@ test('chain: a caller whose engine resumes gets a report run in its own session,
   const report = await (async () => { for (let i = 0; i < 100; i++) { const r = s.ledger.list({ target: 'editor' }).find(x => x.kind === 'report'); if (r?.outcome === 'done') return r; await new Promise(r => setTimeout(r, 5)); } })() as RunRow;
   assert.deepEqual([report.session, report.returnTo, s.consent.pending().length], ['editor-s1', 'none', 0]);
   assert.match(seen.find(x => x.req.kind === 'report')!.req.task, /^The work you handed off \(run \d+: coder → paid\) is done\. Result:\n\npaid\(sub\)/);
+});
+test('chain: a session that cannot take the result back leaves it unread', async () => {
+  const s = setup();
+  const { id, done } = s.runner.start('editor', { target: 'coder', task: 'x', returnSession: 'gone' });
+  await done;
+  for (let i = 0; i < 100 && s.ledger.get(id)!.delivered !== 'unread'; i++) await new Promise(r => setTimeout(r, 5));
+  assert.deepEqual([s.ledger.get(id)!.delivered, s.ledger.unread('editor').map(r => r.id)], ['unread', [id]]);
 });
 test('chain: hop budget stops loops; a next hop that cannot start ends the chain with a note', async () => {
   const s = setup();

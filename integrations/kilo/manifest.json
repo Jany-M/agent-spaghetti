@@ -32,6 +32,12 @@
     }
   },
   "speaks": {
+    "acp": {
+      "command": [
+        "kilo",
+        "acp"
+      ]
+    },
     "mcpClient": {
       "config": "~/.config/kilo/kilo.jsonc",
       "key": "mcp",

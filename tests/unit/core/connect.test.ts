@@ -67,20 +67,26 @@ test('disconnect is the exact inverse: plugin folder removed; only our MCP entry
   const none = await setConnection(fakeEnv(), integ({ mcpClient: { config: '~/x.json', key: 'servers' } }), det, cli, false, false);
   assert.deepEqual(none.changes, []);
 });
-test('module connect both ways: claude mcp add/remove; OpenClaw config patch (null deletes) + reload', async () => {
+test('CLI connect (manifest speaks.mcpCli: Claude Code, Codex) and module connect (OpenClaw config patch, null deletes, + reload)', async () => {
   const { BUILTINS } = await import('@agent-spaghetti/integrations');
-  const claude = BUILTINS.find(b => b.manifest.id === 'claude-cli')!, oc = BUILTINS.find(b => b.manifest.id === 'openclaw')!;
-  const d = { ...det, installs: [{ path: '/b/tool', via: 'bin' as const }] };
+  const by = (id: string) => BUILTINS.find(b => b.manifest.id === id)!;
   const ok = { code: 0, stdout: '', stderr: '' };
-  const env = fakeEnv({ exec: { '/b/tool mcp remove --scope user agent-spaghetti': ok, '/b/tool mcp add --scope user agent-spaghetti -- node C:/Program Files/as/cli.ts mcp --as claude-cli': ok,
-    '/b/tool config patch --stdin': ok, '/b/tool mcp reload': ok } });
-  await setConnection(env, claude, d, cli, false, false);
-  assert.deepEqual(env.calls, ['exec /b/tool mcp remove --scope user agent-spaghetti']);
-  await setConnection(env, oc, d, cli, true, false);
-  assert.deepEqual(JSON.parse(env.inputs['/b/tool config patch --stdin']), { mcp: { servers: { 'agent-spaghetti': { command: 'node', args: ['C:/Program Files/as/cli.ts', 'mcp', '--as', 'openclaw'], enabled: true } } } });
-  await setConnection(env, oc, d, cli, false, false);
-  assert.deepEqual(JSON.parse(env.inputs['/b/tool config patch --stdin']), { mcp: { servers: { 'agent-spaghetti': null } } });
-  assert.equal(env.calls.filter(c => c === 'exec /b/tool mcp reload').length, 2);
+  const d = (path: string) => ({ ...det, installs: [{ path: '/opt/x', via: 'path' as const }, { path, via: 'bin' as const }] });
+  const env = fakeEnv({ exec: { '/b/claude mcp remove --scope user agent-spaghetti': ok, '/b/claude mcp add --scope user agent-spaghetti -- node C:/Program Files/as/cli.ts mcp --as claude-cli': ok,
+    '/b/codex.exe mcp remove agent-spaghetti': ok, '/b/codex.exe mcp add agent-spaghetti -- node C:/Program Files/as/cli.ts mcp --as codex': { code: 1, stdout: '', stderr: 'boom' },
+    '/b/openclaw config patch --stdin': ok, '/b/openclaw mcp reload': ok } });
+  await setConnection(env, by('claude-cli'), d('/b/claude'), cli, false, false);
+  assert.deepEqual(env.calls, ['exec /b/claude mcp remove --scope user agent-spaghetti']);
+  const on = await setConnection(env, by('claude-cli'), d('/b/claude'), cli, true, false);
+  assert.equal(on.changes[0], '/b/claude mcp add --scope user agent-spaghetti -- node C:/Program Files/as/cli.ts mcp --as claude-cli');
+  await assert.rejects(setConnection(env, by('codex'), d('/b/codex.exe'), cli, true, false), /codex mcp add failed: boom/);
+  await assert.rejects(setConnection(env, by('codex'), d('/b/other'), cli, true, true), /its program was not found/);
+  const oc = by('openclaw');
+  await setConnection(env, oc, d('/b/openclaw'), cli, true, false);
+  assert.deepEqual(JSON.parse(env.inputs['/b/openclaw config patch --stdin']), { mcp: { servers: { 'agent-spaghetti': { command: 'node', args: ['C:/Program Files/as/cli.ts', 'mcp', '--as', 'openclaw'], enabled: true } } } });
+  await setConnection(env, oc, d('/b/openclaw'), cli, false, false);
+  assert.deepEqual(JSON.parse(env.inputs['/b/openclaw config patch --stdin']), { mcp: { servers: { 'agent-spaghetti': null } } });
+  assert.equal(env.calls.filter(c => c === 'exec /b/openclaw mcp reload').length, 2);
 });
 test('connectionPlan: never disconnects, always connects, unset asks once; tools that cannot connect are left alone', async () => {
   const { connectionPlan } = await import('../../../packages/core/src/connections.ts');

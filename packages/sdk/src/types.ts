@@ -11,7 +11,7 @@ export type Platform = 'windows' | 'linux' | 'macos';
 
 export interface ExecResult { code: number; stdout: string; stderr: string }   // code 127 = not found, 124 = timeout
 export interface ExecOpts { timeoutMs?: number; input?: string | Buffer }
-export interface StreamOpts { input?: string; cwd?: string; env?: Record<string, string>; signal?: AbortSignal }
+export interface StreamOpts { input?: string | AsyncIterable<string>; cwd?: string; env?: Record<string, string>; signal?: AbortSignal }   // iterable input: lines written as they come (a conversation, e.g. ACP)
 export interface HttpRequest { method?: 'GET' | 'POST'; url: string; headers?: Record<string, string>; body?: string; timeoutMs?: number; signal?: AbortSignal }
 export interface HttpResult { status: number; body: string }
 
@@ -59,6 +59,7 @@ export interface Manifest {
     mcpServer?: { command: string[] };
     acp?: { command: string[] };
     mcpClient?: { config: string; key: string; entry?: Record<string, unknown>; commandArray?: boolean };   // entry: extra fields our server entry needs (e.g. type); commandArray: command and args as one array
+    mcpCli?: { add: string[]; remove: string[]; config?: string };   // the tool's CLI: <bin> <add…> agent-spaghetti -- <command…> (e.g. `claude mcp add`); config: the file it writes (connected = it names our server)
     agentPlugins?: { dir: string; variant?: 'agent-plugins' | 'cursor' };
   };
 }
@@ -122,7 +123,7 @@ export interface RunRow {
 export type Delivery = 'inline' | 'resumed' | 'injected' | 'unread' | 'read';
 /** Something `delegate` can hand a task to: a local model server (OpenAI API) or an agent with a run hook.
  *  `engine`: how its runs are made; `resumable`: a run can continue one of its sessions (results can go back into it). */
-export interface Target { id: string; name: string; kind: 'model' | 'agent'; cost: Cost; envId: string; models: string[]; engine: 'openai' | 'module'; resumable: boolean }
+export interface Target { id: string; name: string; kind: 'model' | 'agent'; cost: Cost; envId: string; models: string[]; engine: 'openai' | 'acp' | 'module'; resumable: boolean }
 export interface Ctx { signal: AbortSignal; inventory: Inventory; pollMs?: number; runId?: number }   // runId: set for run(), so nested delegations link to it
 export interface Switch { id: string; label: string; on: boolean; envId: string; integration: string }
 export interface TestStep { name: string; ok: boolean; detail: string; ms: number }

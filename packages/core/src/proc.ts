@@ -29,7 +29,7 @@ export function spawnFile(cmd: string, args: string[], opts: SpawnOpts = {}): Pr
   });
 }
 
-export interface LinesOpts { env?: NodeJS.ProcessEnv; input?: string; cwd?: string }
+export interface LinesOpts { env?: NodeJS.ProcessEnv; input?: string | AsyncIterable<string>; cwd?: string }
 /** Long-running process: one callback per stdout line. Returns a stop function, the exit promise and the stderr tail. */
 export function spawnLines(cmd: string, args: string[], onLine: (line: string) => void, opts: LinesOpts = {}):
   { stop(): void; exited: Promise<number>; stderr(): string } {
@@ -40,7 +40,9 @@ export function spawnLines(cmd: string, args: string[], onLine: (line: string) =
   let err = '';
   child.stderr!.on('data', (d: Buffer) => { err = (err + d.toString('utf8')).slice(-2000); });
   child.stdin?.on('error', () => { /* exited before reading */ });
-  if (opts.input !== undefined) child.stdin!.end(opts.input);
+  const input = opts.input;
+  if (typeof input === 'string') child.stdin!.end(input);
+  else if (input) void (async () => { try { for await (const l of input) child.stdin!.write(l + '\n'); } finally { child.stdin!.end(); } })().catch(() => { /* exited */ });
   createInterface({ input: child.stdout! }).on('line', onLine);
   const exited = new Promise<number>(r => { child.on('error', () => r(127)); child.on('close', c => r(c ?? 1)); });
   const stop = () => { try { if (group && child.pid) process.kill(-child.pid, 'SIGTERM'); else child.kill(); } catch { child.kill(); } };
