@@ -1,7 +1,7 @@
 // The generic manifest interpreter (ADR 0004 + ADR 0008). Order: installed apps → processes → PATH → default paths.
 // Endpoints: env override → ports the tool's processes listen on → manifest default, on every host candidate.
 import type { BackendInfo, Ctx, Detection, Environment, Install, Inspection, Integration, Inventory, Manifest } from '@agent-spaghetti/sdk';
-import { fillEnv, firstNumber, levelsOf, parseJson, parseJsonc, pick, pluginDir, samePath, wildcard, type Engines } from '@agent-spaghetti/sdk';
+import { fillEnv, firstNumber, programOf, levelsOf, parseJson, parseJsonc, pick, pluginDir, samePath, wildcard, type Engines } from '@agent-spaghetti/sdk';
 
 type Detect = NonNullable<Manifest['detect']>;
 export const ENGINES: Engines = { openai: true, acp: false };    // openai: engine/openai.ts (Phase 3); acp arrives in Phase 5
@@ -119,7 +119,9 @@ export async function inspect(i: Integration, env: Environment, ctx: Ctx): Promi
   const hit = d.http ? await reach(env, m, ctx.inventory, installs) : null;
   if (!installs.length && !hit) return null;
   const backends = m.models && hit ? await listModels(env, m, hit) : [];
-  const connected = m.speaks?.mcpClient || m.speaks?.agentPlugins || m.speaks?.mcpCli ? await isConnected(env, m) : undefined;
+  // a tool connected through its own CLI is a client here only where that CLI is (a desktop edition without it is not)
+  const client = m.speaks?.mcpClient || m.speaks?.agentPlugins || (m.speaks?.mcpCli && programOf({ installs }, d.bin?.[0]));
+  const connected = client ? await isConnected(env, m) : undefined;
   const detection: Detection = {
     integration: m.id, name: m.name, envId: env.id, installs, endpoint: hit?.endpoint,
     version: await readVersion(env, d.version, installs, hit?.body), levels: levelsOf(i, ENGINES), cost: m.cost ?? 'unknown',

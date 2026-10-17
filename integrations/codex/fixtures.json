@@ -1,6 +1,6 @@
 [
   {
-    "name": "found",
+    "name": "desktop app only (no CLI): found, not a client here",
     "env": {
       "inventory": {
         "installed": [
@@ -15,7 +15,23 @@
     },
     "expect": {
       "installs": 1,
-      "version": "26.1.0.0"
+      "version": "26.1.0.0",
+      "why": "installed"
+    }
+  },
+  {
+    "name": "CLI on PATH: a client, connected when its config names our server",
+    "env": {
+      "bins": {
+        "codex": "C:/Users/u/bin/codex.exe"
+      },
+      "files": {
+        "~/.codex/config.toml": "[mcp_servers.agent-spaghetti]\ncommand = \"node\"\n"
+      }
+    },
+    "expect": {
+      "installs": 1,
+      "connected": true
     }
   },
   {
