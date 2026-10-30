@@ -1,9 +1,9 @@
 // Tray decisions (pure): menu, tooltip, placement, notifications, daemon start, launchers.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { OPS, type HubClient, type OpId } from '@agent-spaghetti/sdk';
+import { OPS, ensureDaemon, type HubClient, type OpId } from '@agent-spaghetti/sdk';
 import { BRIDGE_OPS, isBridgeOp } from '@agent-spaghetti/ui/bridge';
-import { ensureDaemon, newQuestions, placeNear, pngToIco, shortcutPaths, tooltip, trayMenu } from '../../../packages/app/src/logic.ts';
+import { newQuestions, placeNear, pngToIco, shortcutPaths, tooltip, trayMenu } from '../../../packages/app/src/logic.ts';
 
 test('menu: Rescan when up, Start daemon when down; stop-daemon only when up', () => {
   const ids = (up: boolean) => trayMenu(up, false).filter(i => i.id).map(i => `${i.id}${i.enabled === false ? '(off)' : ''}`);

@@ -1,5 +1,5 @@
 // The tray's decisions as pure functions (unit-tested); main.ts only wires them to Electron.
-import type { HubClient, TrayState } from '@agent-spaghetti/sdk';
+import type { TrayState } from '@agent-spaghetti/sdk';
 
 export interface MenuItem { id?: string; label?: string; type?: 'separator' | 'checkbox'; checked?: boolean; enabled?: boolean }
 export function trayMenu(up: boolean, autostart: boolean): MenuItem[] {
@@ -29,18 +29,6 @@ export function placeNear(tray: Rect, work: Rect, size: { width: number; height:
 }
 /** Ids of questions the user has not been notified about yet. */
 export const newQuestions = (seen: Set<string>, ids: string[]) => ids.filter(id => !seen.has(id));
-
-/** Reuse a running daemon, else start one and wait for it. */
-export async function ensureDaemon(d: { connect(): Promise<HubClient>; start(): void; timeoutMs?: number; pollMs?: number }): Promise<HubClient> {
-  try { return await d.connect(); } catch { /* not running */ }
-  d.start();
-  const until = Date.now() + (d.timeoutMs ?? 20000);
-  while (Date.now() < until) {
-    await new Promise(r => setTimeout(r, d.pollMs ?? 300));
-    try { return await d.connect(); } catch { /* still starting */ }
-  }
-  throw new Error('the agent-spaghetti daemon did not start');
-}
 
 /** A Windows .ico holding one 256×256 PNG (ICO allows PNG entries since Vista): shortcuts need .ico, the repo keeps only PNGs. */
 export function pngToIco(png: Uint8Array): Uint8Array {

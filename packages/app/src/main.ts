@@ -3,10 +3,10 @@
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, Notification, screen, shell, Tray } from 'electron';
 import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { DaemonDown, HubClient, dataDir, emptyLive, renderStats, trayState } from '@agent-spaghetti/sdk';
-import { spawnDetached } from '@agent-spaghetti/core/proc';
+import { DaemonDown, HubClient, ensureDaemon, emptyLive, renderStats, trayState } from '@agent-spaghetti/sdk';
+import { spawnDaemon } from '@agent-spaghetti/core/launch';
 import { CHANNEL, isBridgeOp, type BridgeEvent } from '@agent-spaghetti/ui/bridge';
-import { ICON, ensureDaemon, newQuestions, placeNear, shortcutPaths, tooltip, trayMenu } from './logic.ts';
+import { ICON, newQuestions, placeNear, shortcutPaths, tooltip, trayMenu } from './logic.ts';
 
 const DIR = __dirname;                                     // dist/app (bundle) — assets and the popover live next to it
 const ROOT = join(DIR, '..', '..');
@@ -18,7 +18,7 @@ let tray: Tray | null = null, pop: BrowserWindow | null = null, client: HubClien
 const seen = new Set<string>();
 
 const connect = async () => { const c = HubClient.fromDiscovery(); await c.call('status'); return c; };
-const startDaemon = () => spawnDetached('node', [join(ROOT, 'packages', 'cli', 'src', 'index.ts'), 'daemon'], { logFile: join(dataDir(), 'daemon.log') });
+const startDaemon = () => void spawnDaemon(process.env, join(ROOT, 'packages', 'cli', 'src', 'index.ts'));
 const send = (e: BridgeEvent) => { if (pop && !pop.isDestroyed()) pop.webContents.send(CHANNEL.event, e); };
 
 async function refresh() {

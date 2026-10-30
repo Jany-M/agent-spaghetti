@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // `agent-spaghetti` CLI: thin. Every command is an op through HubClient, rendered by sdk/format. No logic of its own.
 import { writeFileSync } from 'node:fs';
-import { DaemonDown, ENGINE_LABEL, HubClient, OPS, parseJson, SCOPE_LABEL, detectionRows, describeRun, eventLine, permissionRows, runLine, renderStats, renderTable, renderToolRows, renderTree, serveMcpStdio, switchRows, testLines,
+import { join } from 'node:path';
+import { DaemonDown, ENGINE_LABEL, HubClient, dataDir, ensureDaemon, logsDir, readDiscovery, OPS, parseJson, SCOPE_LABEL, detectionRows, describeRun, eventLine, permissionRows, runLine, renderStats, renderTable, renderToolRows, renderTree, serveMcpStdio, switchRows, testLines,
   type Action, type ConsentRequest, type ConsentScope, type OpId, type TaskKind } from '@agent-spaghetti/sdk';
 import { planHook } from './hook.ts';
 
@@ -9,7 +10,8 @@ export interface IO { out(s: string): void; err(s: string): void }
 const DOWN = 'agent-spaghetti daemon is not running. Start it with: agent-spaghetti daemon';
 export const usage = () => ['Usage: agent-spaghetti <command> [--json]', '',
   `  ${'help'.padEnd(44)}This list`,
-  `  ${'daemon'.padEnd(44)}Start the daemon (foreground)`,
+  `  ${'daemon [--detached]'.padEnd(44)}Start the daemon (foreground, or detached in the background)`,
+  `  ${'daemon stop'.padEnd(44)}Stop the running daemon`,
   `  ${'mcp --as <client>'.padEnd(44)}MCP server for a client (stdio; started by the client)`,
   ...Object.values(OPS).map(o => `  ${o.usage.padEnd(44)}${o.summary}`)].join('\n');
 /** CLI verbs that are not op names (from the usage strings in OPS). */
@@ -22,6 +24,20 @@ const flag = (args: string[], name: string) => { const i = args.indexOf(name); r
 export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = process.env): Promise<number> {
   const json = argv.includes('--json'), args = argv.filter(a => a !== '--json'), [cmd] = args;
   const print = (data: unknown, text: () => string) => io.out(json ? JSON.stringify(data, null, 2) : text());
+  if (cmd === 'daemon' && args[1] === 'stop') {
+    const { stopDaemon } = await import('@agent-spaghetti/core/launch');
+    io.out(await stopDaemon(env) ? 'agent-spaghetti daemon stopped' : DOWN);
+    return 0;
+  }
+  if (cmd === 'daemon' && args.includes('--detached')) {
+    const { spawnDaemon } = await import('@agent-spaghetti/core/launch');
+    const connect = async () => { const c = HubClient.fromDiscovery(env); await c.call('status'); return c; };
+    const running = await connect().then(() => true, () => false);
+    try { await ensureDaemon({ connect, start: () => void spawnDaemon(env), timeoutMs: 10000 }); }
+    catch (e) { io.err(`${(e as Error).message} (see ${join(logsDir(dataDir(env)), 'daemon.log')})`); return 1; }
+    io.out(`agent-spaghetti daemon ${running ? 'already running' : 'started'} on 127.0.0.1:${readDiscovery(dataDir(env))?.port} (data: ${dataDir(env)})`);
+    return 0;
+  }
   if (cmd === 'daemon') {
     const { runDaemon } = await import('@agent-spaghetti/core');
     const d = await runDaemon(env);

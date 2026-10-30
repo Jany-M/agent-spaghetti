@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import type { StoredEvent } from './types.ts';
 import { OPS, STREAM_PATH, type OpId, type OpIO } from './ops.ts';
-import { dataDir, discoveryPath, tokenPath } from './paths.ts';
+import { dataDir, readDiscovery, tokenPath } from './paths.ts';
 
 export class DaemonDown extends Error {}
 export class HubClient {
@@ -12,7 +12,7 @@ export class HubClient {
   static fromDiscovery(env: NodeJS.ProcessEnv = process.env): HubClient {
     const dir = dataDir(env);
     try {
-      const port = Number(env.AGENT_SPAGHETTI_PORT) || JSON.parse(readFileSync(discoveryPath(dir), 'utf8')).port;
+      const port = Number(env.AGENT_SPAGHETTI_PORT) || readDiscovery(dir)!.port;
       return new HubClient({ port, token: readFileSync(tokenPath(dir), 'utf8').trim() });
     } catch { throw new DaemonDown('the daemon is not running'); }
   }
@@ -44,4 +44,16 @@ export class HubClient {
       }
     }
   }
+}
+
+/** The running daemon, or: start it (`start`) and wait for it to answer. */
+export async function ensureDaemon(d: { connect(): Promise<HubClient>; start(): void; timeoutMs?: number; pollMs?: number }): Promise<HubClient> {
+  try { return await d.connect(); } catch { /* not running */ }
+  d.start();
+  const until = Date.now() + (d.timeoutMs ?? 20000);
+  while (Date.now() < until) {
+    await new Promise(r => setTimeout(r, d.pollMs ?? 300));
+    try { return await d.connect(); } catch { /* still starting */ }
+  }
+  throw new Error('the agent-spaghetti daemon did not start');
 }
