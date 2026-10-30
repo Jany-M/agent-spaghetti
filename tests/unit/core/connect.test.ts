@@ -116,6 +116,52 @@ test('the agent-spaghetti agent: the delegate skill under an agent header (one s
   assert.match(t, /^---\nname: agent-spaghetti\ndescription: Hand a task to .+\nargument-hint: target and task, e\.g\. lmstudio summarize README\.md\n---\n\nThe user's message is the task\./);
   assert.ok(t.endsWith(skill.slice(skill.indexOf('\n---\n') + 5)), 'the skill body, unchanged');
 });
+test('hermesModule.connect: dry-run, clean add, foreign replace, verify+restore, no-op', async () => {
+  const hermesModule = (await import('../../../integrations/hermes/index.ts')).hermesModule;
+  const exe = 'C:/Program Files/Hermes/hermes.exe', conf = '%LOCALAPPDATA%/hermes/config.yaml';
+  const det = { integration: 'hermes', name: 'Hermes Agent', envId: 'windows', installs: [{ path: exe, via: 'path' as const }], levels: [], cost: 'metered' as const, connectable: 'yes' as const, why: '' };
+  const cli = { command: 'node', args: ['/x/index.ts'] };
+  const addKey = `${exe} mcp add agent-spaghetti --command node --args /x/index.ts mcp --as hermes`, rmKey = `${exe} mcp remove agent-spaghetti`;
+  const ok = { code: 0, stdout: '', stderr: '' };
+  const yaml = (as: string, extra = '') => `mcp_servers:\n  agent-spaghetti:\n    command: node\n${extra}    args:\n      - /x/index.ts\n      - mcp\n      - --as\n      - ${as}\n  other:\n    command: x\n`;
+  const calls = (e: { calls: string[] }) => e.calls.filter(c => c.startsWith('exec '));
+
+  const dry = fakeEnv({ files: { [conf]: yaml('claude-cli') } });
+  const d = await hermesModule.connect!(dry as any, det, cli as any, true, true);
+  assert.equal(d.applied, false);
+  assert.deepEqual(calls(dry), [], 'dry run executes nothing');
+
+  // exec has no side effects, so the file read AFTER the add is scripted: reads return the given contents in order, the last one repeating
+  const reads = (e: any, ...c: string[]) => { let n = 0; e.readFile = async () => c[Math.min(n++, c.length - 1)]; const w: string[] = []; e.writeFile = async (_p: string, t: string) => { w.push(t); }; return w; };
+  const cleanBefore = fakeEnv({ exec: { [addKey]: ok }, files: { [conf]: 'mcp_servers:\n  other:\n    command: x\n' } });
+  reads(cleanBefore, 'mcp_servers:\n  other:\n    command: x\n', yaml('hermes'));
+  const c = await hermesModule.connect!(cleanBefore as any, det, cli as any, true, false);
+  assert.ok(c.applied);
+  assert.deepEqual(calls(cleanBefore), [`exec ${addKey}`], 'no remove when nothing is there');
+  assert.equal(cleanBefore.inputs[addKey], 'Y\n');
+  assert.ok(c.changes.some(x => x.includes('--as hermes')));
+
+  const prior = yaml('claude-cli');
+  const swap = fakeEnv({ exec: { [rmKey]: ok, [addKey]: ok }, files: { [conf]: prior } });
+  reads(swap, prior, yaml('hermes'));
+  const r = await hermesModule.connect!(swap as any, det, cli as any, true, false);
+  assert.deepEqual(calls(swap), [`exec ${rmKey}`, `exec ${addKey}`]);
+  assert.equal(swap.inputs[rmKey], undefined, 'remove gets no stdin');
+  assert.ok(r.changes.some(x => x.includes('claude-cli')), 'replaced identity is named');
+
+  for (const after of [yaml('hermes', '    enabled: false\n'), 'mcp_servers:\n  other:\n    command: x\n']) {
+    const bad = fakeEnv({ exec: { [rmKey]: ok, [addKey]: { code: 0, stdout: 'probe failed', stderr: '' } }, files: { [conf]: prior } });
+    const written = reads(bad, prior, after);
+    await assert.rejects(hermesModule.connect!(bad as any, det, cli as any, true, false), /verification failed.*probe failed/);
+    assert.deepEqual(written, [prior], 'the file is restored to the exact prior content');
+  }
+
+  const same = fakeEnv({ files: { [conf]: yaml('hermes') } });
+  const n = await hermesModule.connect!(same as any, det, cli as any, true, false);
+  assert.deepEqual(calls(same), [], 'already ours: no remove, no add');
+  assert.match(n.description, /already connected/);
+});
+
 test('connectionPlan: never disconnects, always connects, unset asks once; tools that cannot connect are left alone', async () => {
   const { connectionPlan } = await import('../../../packages/core/src/connections.ts');
   const d = (integration: string, connected?: boolean, envId = 'windows') => ({ ...det, integration, envId, ...(connected === undefined ? {} : { connected }) });
