@@ -116,50 +116,59 @@ test('the agent-spaghetti agent: the delegate skill under an agent header (one s
   assert.match(t, /^---\nname: agent-spaghetti\ndescription: Hand a task to .+\nargument-hint: target and task, e\.g\. lmstudio summarize README\.md\n---\n\nThe user's message is the task\./);
   assert.ok(t.endsWith(skill.slice(skill.indexOf('\n---\n') + 5)), 'the skill body, unchanged');
 });
-test('hermesModule.connect: dry-run, clean add, foreign replace, verify+restore, no-op', async () => {
-  const hermesModule = (await import('../../../integrations/hermes/index.ts')).hermesModule;
-  const exe = 'C:/Program Files/Hermes/hermes.exe', conf = '%LOCALAPPDATA%/hermes/config.yaml';
+test('hermesModule.connect: dry-run, add when absent, replace foreign, already ours, probe failure restores', async () => {
+  const { hermesModule } = await import('../../../integrations/hermes/index.ts');
+  const exe = 'C:/tools/hermes.exe', conf = '%LOCALAPPDATA%/hermes/config.yaml';
   const det = { integration: 'hermes', name: 'Hermes Agent', envId: 'windows', installs: [{ path: exe, via: 'path' as const }], levels: [], cost: 'metered' as const, connectable: 'yes' as const, why: '' };
   const cli = { command: 'node', args: ['/x/index.ts'] };
-  const addKey = `${exe} mcp add agent-spaghetti --command node --args /x/index.ts mcp --as hermes`, rmKey = `${exe} mcp remove agent-spaghetti`;
-  const ok = { code: 0, stdout: '', stderr: '' };
-  const yaml = (as: string, extra = '') => `mcp_servers:\n  agent-spaghetti:\n    command: node\n${extra}    args:\n      - /x/index.ts\n      - mcp\n      - --as\n      - ${as}\n  other:\n    command: x\n`;
-  const calls = (e: { calls: string[] }) => e.calls.filter(c => c.startsWith('exec '));
+  const entry = (as: string, disabled = false) => `  agent-spaghetti:\n    command: node\n${disabled ? '    enabled: false\n' : ''}    args:\n      - /x/index.ts\n      - mcp\n      - --as\n      - ${as}\n`;
+  const other = '  other:\n    command: x\n';
+  const claude = `mcpServers:\n${entry('claude-cli')}${other}`;
+  // A small simulation of hermes: `mcp remove` deletes the entry block, `mcp add` writes one in the real per-token format.
+  const sim = (initial: string | null, failProbe = false) => {
+    const s = { config: initial, calls: [] as string[], inputs: {} as Record<string, string | undefined> };
+    const env = {
+      async exec(cmd: string, args: string[], opts?: { input?: string }) {
+        const key = [cmd, ...args].join(' '); s.calls.push(key); s.inputs[key] = opts?.input;
+        if (args[1] === 'remove') s.config = (s.config ?? '').replace(/^ {2}agent-spaghetti:\n(?: {3,}.*\n)*/m, '');
+        else if (args[1] === 'add') {
+          const as = args[args.length - 1];
+          s.config = `${(s.config ?? 'mcpServers:\n').replace(/^ {2}agent-spaghetti:\n(?: {3,}.*\n)*/m, '')}${entry(as, failProbe)}`;
+        }
+        return { code: 0, stdout: failProbe ? 'probe failed' : '', stderr: '' };   // add exits 0 even when its probe fails
+      },
+      async readFile(p: string) { assert.equal(p, conf); return s.config; },
+      async writeFile(p: string, t: string) { assert.equal(p, conf); s.config = t; },
+    };
+    return { s, env: env as any };
+  };
+  const verbs = (s: { calls: string[] }) => s.calls.map(c => c.split(' ')[2]);
+  const ours = (c: string | null) => assert.match(c ?? '', /agent-spaghetti:\n    command: node\n    args:\n      - \/x\/index\.ts\n      - mcp\n      - --as\n      - hermes\n/);
 
-  const dry = fakeEnv({ files: { [conf]: yaml('claude-cli') } });
-  const d = await hermesModule.connect!(dry as any, det, cli as any, true, true);
-  assert.equal(d.applied, false);
-  assert.deepEqual(calls(dry), [], 'dry run executes nothing');
+  const dry = sim(claude);
+  const d = await hermesModule.connect!(dry.env, det, cli, true, true);
+  assert.deepEqual([d.applied, dry.s.calls, dry.s.config], [false, [], claude], 'dry run executes and writes nothing');
 
-  // exec has no side effects, so the file read AFTER the add is scripted: reads return the given contents in order, the last one repeating
-  const reads = (e: any, ...c: string[]) => { let n = 0; e.readFile = async () => c[Math.min(n++, c.length - 1)]; const w: string[] = []; e.writeFile = async (_p: string, t: string) => { w.push(t); }; return w; };
-  const cleanBefore = fakeEnv({ exec: { [addKey]: ok }, files: { [conf]: 'mcp_servers:\n  other:\n    command: x\n' } });
-  reads(cleanBefore, 'mcp_servers:\n  other:\n    command: x\n', yaml('hermes'));
-  const c = await hermesModule.connect!(cleanBefore as any, det, cli as any, true, false);
-  assert.ok(c.applied);
-  assert.deepEqual(calls(cleanBefore), [`exec ${addKey}`], 'no remove when nothing is there');
-  assert.equal(cleanBefore.inputs[addKey], 'Y\n');
-  assert.ok(c.changes.some(x => x.includes('--as hermes')));
+  const add = sim(`mcpServers:\n${other}`);
+  const a = await hermesModule.connect!(add.env, det, cli, true, false);
+  assert.deepEqual([a.applied, verbs(add.s)], [true, ['add']], 'no remove when nothing is there');
+  assert.equal(Object.values(add.s.inputs)[0], 'Y\n');
+  ours(add.s.config); assert.match(add.s.config!, /other:/);
 
-  const prior = yaml('claude-cli');
-  const swap = fakeEnv({ exec: { [rmKey]: ok, [addKey]: ok }, files: { [conf]: prior } });
-  reads(swap, prior, yaml('hermes'));
-  const r = await hermesModule.connect!(swap as any, det, cli as any, true, false);
-  assert.deepEqual(calls(swap), [`exec ${rmKey}`, `exec ${addKey}`]);
-  assert.equal(swap.inputs[rmKey], undefined, 'remove gets no stdin');
-  assert.ok(r.changes.some(x => x.includes('claude-cli')), 'replaced identity is named');
+  const swap = sim(claude);
+  const r = await hermesModule.connect!(swap.env, det, cli, true, false);
+  assert.deepEqual(verbs(swap.s), ['remove', 'add'], 'removed first, then added');
+  assert.equal(swap.s.inputs[`${exe} mcp remove agent-spaghetti`], undefined, 'Y is fed to add only');
+  assert.ok(r.changes.some(x => x.includes('claude-cli')), 'the replaced identity is named');
+  ours(swap.s.config);
 
-  for (const after of [yaml('hermes', '    enabled: false\n'), 'mcp_servers:\n  other:\n    command: x\n']) {
-    const bad = fakeEnv({ exec: { [rmKey]: ok, [addKey]: { code: 0, stdout: 'probe failed', stderr: '' } }, files: { [conf]: prior } });
-    const written = reads(bad, prior, after);
-    await assert.rejects(hermesModule.connect!(bad as any, det, cli as any, true, false), /verification failed.*probe failed/);
-    assert.deepEqual(written, [prior], 'the file is restored to the exact prior content');
-  }
+  const again = await hermesModule.connect!(swap.env, det, cli, true, false);
+  assert.deepEqual(verbs(swap.s), ['remove', 'add'], 'second connect runs nothing');
+  assert.match(again.description, /already connected/); ours(swap.s.config);
 
-  const same = fakeEnv({ files: { [conf]: yaml('hermes') } });
-  const n = await hermesModule.connect!(same as any, det, cli as any, true, false);
-  assert.deepEqual(calls(same), [], 'already ours: no remove, no add');
-  assert.match(n.description, /already connected/);
+  const bad = sim(claude, true);
+  await assert.rejects(hermesModule.connect!(bad.env, det, cli, true, false), /verification failed.*probe failed/);
+  assert.equal(bad.s.config, claude, 'the config is restored to the exact prior content');
 });
 
 test('connectionPlan: never disconnects, always connects, unset asks once; tools that cannot connect are left alone', async () => {
