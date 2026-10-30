@@ -5,7 +5,7 @@ import type { ConsentAnswer, ConsentRequest, ConsentScope } from '@agent-spaghet
 import type { Bus } from './bus.ts';
 
 type Open = { req: ConsentRequest; resolve(a: ConsentAnswer): void; timer?: NodeJS.Timeout };
-export type ConsentInput = Omit<ConsentRequest, 'id' | 'ts' | 'expiresAt'> & { timeoutMs?: number };
+export type ConsentInput = Omit<ConsentRequest, 'id' | 'ts' | 'expiresAt'> & { timeoutMs?: number; signal?: AbortSignal };
 const keyOf = (r: Pick<ConsentRequest, 'subject' | 'action' | 'resource'>) => `${r.subject}\u0000${r.action}\u0000${r.resource}`;
 
 export class Consent {
@@ -19,12 +19,13 @@ export class Consent {
     const key = r.task === undefined ? keyOf(r) : randomUUID();
     const existing = this.waiting.get(key);
     if (existing) return existing;
-    const { timeoutMs, ...rest } = r;
+    const { timeoutMs, signal, ...rest } = r;
     const req: ConsentRequest = { ...rest, id: randomUUID(), ts: Date.now(), ...(timeoutMs ? { expiresAt: Date.now() + timeoutMs } : {}) };
     const p = new Promise<ConsentAnswer>(resolve => {
       const o: Open = { req, resolve: a => { clearTimeout(o.timer); this.open.delete(req.id); this.waiting.delete(key); resolve(a); } };
       if (timeoutMs) o.timer = setTimeout(() => { this.emit('consent.expired', req, {}); o.resolve({ answer: 'expired' }); }, timeoutMs);
       this.open.set(req.id, o);
+      signal?.addEventListener('abort', () => { if (this.open.has(req.id)) { this.emit('consent.expired', req, {}); o.resolve({ answer: 'expired' }); } }, { once: true });   // the asker gave up: no question left waiting
     });
     this.waiting.set(key, p);
     // the task text is shown to the user from memory (consents op) and never goes into the event store

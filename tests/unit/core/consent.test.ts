@@ -22,6 +22,16 @@ test('consent: the same question is asked once; answers resolve every waiter and
   assert.deepEqual(types(), ['consent.requested', 'consent.answered']);
   assert.equal(c.pending().length, 0);
 });
+test('consent: an aborted asker withdraws its question (no question left waiting)', async () => {
+  const { c, types } = setup();
+  const ac = new AbortController();
+  const a = c.request({ ...q, action: 'run' as const, task: 't', scopes: ['once' as const], signal: ac.signal });
+  assert.equal(c.pending().length, 1);
+  ac.abort();
+  assert.deepEqual(await a, { answer: 'expired' });
+  assert.equal(c.pending().length, 0);
+  assert.deepEqual(types(), ['consent.requested', 'consent.expired']);
+});
 test('consent: deny; run requests are never merged; expiry; task text never reaches the event store', async () => {
   const { bus, c, types } = setup();
   const run = { ...q, action: 'run' as const, resource: 'claude-cli', task: 'SECRET-MARKER refactor', scopes: ['once' as const, 'job' as const, 'always' as const], cost: 'metered' as const };
