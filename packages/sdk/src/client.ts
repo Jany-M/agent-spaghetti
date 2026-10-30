@@ -20,10 +20,10 @@ export class HubClient {
     try { return await fetch(this.base + path, { ...init, headers: { authorization: `Bearer ${this.token}`, 'content-type': 'application/json' } }); }
     catch { throw new DaemonDown('the daemon is not running'); }
   }
-  async call<K extends OpId>(op: K, input: OpIO[K]['in'] = {} as OpIO[K]['in']): Promise<OpIO[K]['out']> {
+  async call<K extends OpId>(op: K, input: OpIO[K]['in'] = {} as OpIO[K]['in'], signal?: AbortSignal): Promise<OpIO[K]['out']> {
     const spec = OPS[op] as { method: string; path: string };
     const q = spec.method === 'GET' ? '?' + new URLSearchParams(Object.entries(input).map(([k, v]) => [k, String(v)])) : '';
-    const r = await this.fetch(spec.path + (q === '?' ? '' : q), spec.method === 'POST' ? { method: 'POST', body: JSON.stringify(input) } : {});
+    const r = await this.fetch(spec.path + (q === '?' ? '' : q), { signal, ...(spec.method === 'POST' ? { method: 'POST', body: JSON.stringify(input) } : {}) });
     const body = await r.json() as any;
     if (!r.ok) throw new Error(body?.error ?? `HTTP ${r.status}`);
     return body;

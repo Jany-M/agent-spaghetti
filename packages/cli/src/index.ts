@@ -2,6 +2,7 @@
 // `agent-spaghetti` CLI: thin. Every command is an op through HubClient, rendered by sdk/format. No logic of its own.
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { DaemonDown, ENGINE_LABEL, HubClient, dataDir, ensureDaemon, logsDir, readDiscovery, OPS, parseJson, SCOPE_LABEL, detectionRows, describeRun, eventLine, permissionRows, runLine, renderStats, renderTable, renderToolRows, renderTree, serveMcpStdio, switchRows, testLines,
   type Action, type ConsentRequest, type ConsentScope, type OpId, type TaskKind } from '@agent-spaghetti/sdk';
 import { planHook } from './hook.ts';
@@ -26,14 +27,15 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
   const print = (data: unknown, text: () => string) => io.out(json ? JSON.stringify(data, null, 2) : text());
   if (cmd === 'daemon' && args[1] === 'stop') {
     const { stopDaemon } = await import('@agent-spaghetti/core/launch');
-    io.out(await stopDaemon(env) ? 'agent-spaghetti daemon stopped' : DOWN);
+    try { io.out(await stopDaemon(env) ? 'agent-spaghetti daemon stopped' : DOWN); }
+    catch (e) { io.err((e as Error).message); return 1; }
     return 0;
   }
   if (cmd === 'daemon' && args.includes('--detached')) {
     const { spawnDaemon } = await import('@agent-spaghetti/core/launch');
-    const connect = async () => { const c = HubClient.fromDiscovery(env); await c.call('status'); return c; };
+    const connect = async () => { const c = HubClient.fromDiscovery(env); await c.call('status', {}, AbortSignal.timeout(3000)); return c; };
     const running = await connect().then(() => true, () => false);
-    try { await ensureDaemon({ connect, start: () => void spawnDaemon(env), timeoutMs: 10000 }); }
+    try { await ensureDaemon({ connect, start: () => void spawnDaemon(env, fileURLToPath(import.meta.url)), timeoutMs: 10000 }); }
     catch (e) { io.err(`${(e as Error).message} (see ${join(logsDir(dataDir(env)), 'daemon.log')})`); return 1; }
     io.out(`agent-spaghetti daemon ${running ? 'already running' : 'started'} on 127.0.0.1:${readDiscovery(dataDir(env))?.port} (data: ${dataDir(env)})`);
     return 0;

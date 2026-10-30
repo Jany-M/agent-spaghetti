@@ -1,7 +1,7 @@
 // The build: the env bundle (runs inside WSL distros) and the tray app bundles.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnFile } from '../../packages/core/src/proc.ts';
@@ -41,4 +41,14 @@ test('tray bundles: preload needs only electron, the renderer no Node at all, th
   assert.ok(!/require\(|["']node:/.test(app('renderer.js')));
   assert.match(app('popover.html'), /default-src 'none'; script-src 'self'; style-src 'self'/);
   for (const f of ['main.cjs', 'popover.css', 'icon.png', 'icon.ico', 'tray-idle.png', 'tray-problem@2x.png']) assert.ok(app(f).length > 0, f);
+});
+test('tray main bundle (CJS) loads under a stubbed electron: no import.meta left at module scope', async () => {
+  const stub = join(dir, 'electron-stub.cjs');
+  writeFileSync(stub, `const M = require('node:module'), load = M._load;
+const any = new Proxy(function () {}, { get: (t, k) => k === 'then' ? undefined : k === 'whenReady' ? () => new Promise(() => {}) : any, apply: () => any, construct: () => any });
+const electron = new Proxy({}, { get: (t, k) => k === '__esModule' ? false : any });
+M._load = function (r, ...a) { return r === 'electron' ? electron : load.call(this, r, ...a); };`);
+  const r = await spawnFile(process.execPath, ['-r', stub, '-e', `require(${JSON.stringify(join(dir, 'app', 'main.cjs'))}); setTimeout(() => process.exit(0), 300)`], { timeoutMs: 30000 });
+  assert.equal(r.code, 0, r.stderr.toString());
+  assert.ok(!/import_meta|import\.meta/.test(r.stderr.toString()));
 });

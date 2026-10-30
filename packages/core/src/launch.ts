@@ -1,15 +1,13 @@
 // Starting and stopping the daemon as a process: shared by the CLI (`daemon --detached`, `daemon stop`) and the tray.
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { HubClient, dataDir, discoveryPath, logsDir, pidAlive, readDiscovery } from '@agent-spaghetti/sdk';
 import { spawnDetached } from './proc.ts';
 
-const CLI = fileURLToPath(new URL('../../cli/src/index.ts', import.meta.url));
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-/** Starts `daemon` as a detached process (survives its parent); output goes to `<dataDir>/logs/daemon.log`. `cli` is overridable because the bundled tray lives elsewhere. */
-export function spawnDaemon(env: NodeJS.ProcessEnv = process.env, cli = CLI): number | undefined {
+/** Starts `daemon` as a detached process (survives its parent); output goes to `<dataDir>/logs/daemon.log`. `cli` is the path of the CLI entry (required: no `import.meta` here, the tray bundles this as CJS). */
+export function spawnDaemon(env: NodeJS.ProcessEnv = process.env, cli: string): number | undefined {
   const logs = logsDir(dataDir(env));
   mkdirSync(logs, { recursive: true });
   return spawnDetached('node', [cli, 'daemon'], { logFile: join(logs, 'daemon.log'), env });
