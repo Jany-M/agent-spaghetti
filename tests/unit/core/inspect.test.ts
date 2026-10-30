@@ -32,6 +32,15 @@ test('custom install dir via installed apps + non-default port via the process l
   assert.deepEqual(r!.backends.map(b => [b.id, b.contextLength, b.reachableFrom]), [['x:m1', 8192, ['windows']]]);
   assert.equal(r!.detection.why, '1 model(s) loaded');
 });
+test('two processes of one program (router + model child): the server is found on the model process port', async () => {
+  const { r } = await run({ detect: { process: ['srv'], http: { port: 8080, path: '/v1/models' } }, models: { list: 'data', id: 'id' } }, {
+    inventory: { processes: [{ name: 'srv', pid: 1, path: 'C:/t/srv.exe' }, { name: 'srv', pid: 2, path: 'C:/t/srv.exe' }],
+      listening: [{ port: 7001, address: '127.0.0.1', pid: 1 }, { port: 7002, address: '127.0.0.1', pid: 2 }] },
+    http: { 'http://127.0.0.1:7001/v1/models': { status: 401, body: '{}' }, 'http://127.0.0.1:7002/v1/models': body([{ id: 'm1' }]) },
+  });
+  assert.equal(r!.detection.endpoint, 'http://127.0.0.1:7002');
+  assert.deepEqual(r!.backends.map(b => b.id), ['x:m1']);
+});
 test('two installs (per-user + system) are both listed; same path twice is one', async () => {
   const { r } = await run({ detect: { installed: ['Tool*'], bin: ['tool'] } }, {
     inventory: { installed: [{ name: 'Tool (User)', location: 'C:/Users/u/Tool', source: 'uninstall' }, { name: 'Tool', location: 'C:/Program Files/Tool', source: 'uninstall' }] },

@@ -40,7 +40,7 @@ export function endpointsToTry(d: Detect, inv: Inventory, installs: Install[], h
     if (!u.port) continue;
     if (['0.0.0.0', '[::]', '::'].includes(u.hostname)) ports.push(Number(u.port)); else urls.push(`${u.protocol}//${u.host}`);
   }
-  const pids = new Set(installs.map(i => i.pid).filter(Boolean));
+  const pids = new Set([...installs, ...processInstalls(d, inv)].map(i => i.pid).filter(Boolean));   // every matching process: a router and its model child share one exe path (one install) but not one port
   for (const l of inv.listening) if (l.pid && pids.has(l.pid)) ports.push(l.port);
   if (d.http?.port) ports.push(d.http.port);
   return [...new Set([...urls, ...[...new Set(ports)].flatMap(p => hosts.map(h => `http://${h}:${p}`))])];
