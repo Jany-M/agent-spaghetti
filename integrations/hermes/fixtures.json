@@ -1,0 +1,32 @@
+[
+  {
+    "name": "on PATH with version",
+    "env": {
+      "bins": {
+        "hermes": "C:/Users/u/AppData/Local/hermes/bin/hermes.exe"
+      },
+      "exec": {
+        "C:/Users/u/AppData/Local/hermes/bin/hermes.exe --version": {
+          "code": 0,
+          "stdout": "Hermes Agent v0.22.5 (2026.9.24) · stable · local bf0203a794a0\nInstall method: git\nPython: 3.14.9\nUp to date\n",
+          "stderr": ""
+        }
+      }
+    },
+    "expect": {
+      "version": "0.22.5",
+      "levels": [
+        "detect",
+        "drive",
+        "client"
+      ],
+      "connectable": "yes",
+      "connected": false
+    }
+  },
+  {
+    "name": "absent",
+    "env": {},
+    "expect": null
+  }
+]

@@ -156,3 +156,13 @@ test('codex: read-only unless a folder and an editing kind; resume; JSONL → ev
     '{"type":"turn.completed","usage":{"input_tokens":3,"output_tokens":4}}', '{"type":"turn.failed","error":{"message":"quota"}}', 'noise'].flatMap(codexEvents),
   [{ type: 'session', id: 't1' }, { type: 'tool', name: 'command_execution', summary: 'ls' }, { type: 'text', text: 'hi' }, { type: 'usage', inputTokens: 3, outputTokens: 4 }, { type: 'error', message: 'quota' }]);
 });
+
+test('hermes: stream-json args and events', async () => {
+  const { hermesArgs, hermesEvents } = await import('../../../integrations/hermes/index.ts');
+  assert.deepEqual(hermesArgs({ target: 'hermes', task: 'x' }), ['chat', '--query-file', '-', '-Q', '--format', 'stream-json']);
+  assert.deepEqual(hermesArgs({ target: 'hermes', task: 'x', model: 'm', session: 's1' }).slice(6), ['--model', 'm', '--resume', 's1']);
+  assert.deepEqual(['Session: local-1', '{"type":"system","subtype":"init"}', '{"type":"text","text":"pong"}',
+    '{"type":"result","session_id":"local-1","exit_code":0,"text":"pong","tokens":{"input":3,"output":4}}'].flatMap(hermesEvents),
+  [{ type: 'text', text: 'pong' }, { type: 'session', id: 'local-1' }, { type: 'usage', inputTokens: 3, outputTokens: 4 }, { type: 'done', result: 'pong' }]);
+  assert.deepEqual(hermesEvents('{"type":"result","exit_code":1,"error":"quota"}').at(-1), { type: 'error', message: 'quota' });
+});

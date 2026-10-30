@@ -1,0 +1,22 @@
+{
+  "$schema": "../../packages/sdk/manifest.schema.json",
+  "manifest": 1,
+  "id": "paperclip",
+  "name": "Paperclip",
+  "roles": [
+    "tool"
+  ],
+  "cost": "free",
+  "detect": {
+    "paths": [
+      "~/.paperclip/instances/default/config.json"
+    ],
+    "version": {
+      "json": "version"
+    },
+    "http": {
+      "port": 3100,
+      "path": "/api/health"
+    }
+  }
+}

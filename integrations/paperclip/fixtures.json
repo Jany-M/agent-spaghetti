@@ -1,0 +1,28 @@
+[
+  {
+    "name": "running: version from the health endpoint",
+    "env": {
+      "files": {
+        "C:/Users/u/.paperclip/instances/default/config.json": "{}"
+      },
+      "http": {
+        "http://127.0.0.1:3100/api/health": {
+          "status": 200,
+          "body": "{\"status\":\"ok\",\"version\":\"2026.1023.0\"}"
+        }
+      }
+    },
+    "expect": {
+      "version": "2026.1023.0",
+      "levels": [
+        "detect"
+      ],
+      "connectable": "yes"
+    }
+  },
+  {
+    "name": "absent",
+    "env": {},
+    "expect": null
+  }
+]

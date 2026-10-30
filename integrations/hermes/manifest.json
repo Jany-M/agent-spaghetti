@@ -1,0 +1,34 @@
+{
+  "$schema": "../../packages/sdk/manifest.schema.json",
+  "manifest": 1,
+  "id": "hermes",
+  "name": "Hermes Agent",
+  "roles": [
+    "agent",
+    "client"
+  ],
+  "cost": "metered",
+  "detect": {
+    "bin": [
+      "hermes"
+    ],
+    "version": {
+      "args": [
+        "--version"
+      ]
+    }
+  },
+  "speaks": {
+    "mcpCli": {
+      "add": [
+        "mcp",
+        "add"
+      ],
+      "remove": [
+        "mcp",
+        "remove"
+      ],
+      "config": "%LOCALAPPDATA%/hermes/config.yaml"
+    }
+  }
+}
