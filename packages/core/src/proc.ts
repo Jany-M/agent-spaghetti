@@ -46,8 +46,9 @@ export function spawnLines(cmd: string, args: string[], onLine: (line: string) =
   if (typeof input === 'string') child.stdin!.end(input);
   else if (input) void (async () => { try { for await (const l of input) child.stdin!.write(l + '\n'); } finally { child.stdin!.end(); } })().catch(() => { /* exited */ });
   createInterface({ input: child.stdout! }).on('line', onLine);
-  const exited = new Promise<number>(r => { child.on('error', () => r(127)); child.on('close', c => r(c ?? 1)); });
-  const stop = () => { try { if (group && child.pid) process.kill(-child.pid, 'SIGTERM'); else child.kill(); } catch { child.kill(); } };
+  let stopped = false;
+  const exited = new Promise<number>(r => { child.on('error', () => r(127)); child.on('close', c => r(c ?? 1)); child.on('exit', c => { if (stopped) r(c ?? 1); }); });   // once stopped, do not wait for a grandchild that kept the pipe open
+  const stop = () => { stopped = true; try { if (group && child.pid) process.kill(-child.pid, 'SIGTERM'); else child.kill(); } catch { child.kill(); } };
   return { stop, exited, stderr: () => err };
 }
 /** Lines as an async iterable (runs); throws after the last line when the process failed. */
