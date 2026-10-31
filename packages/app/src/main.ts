@@ -1,7 +1,6 @@
 // Electron main process of the tray (Phase 2). Owns the one HubClient; renderers go through the preload bridge.
 // The daemon is independent: the tray starts it when missing and can leave it running on quit.
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, Notification, screen, shell, Tray } from 'electron';
-import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DaemonDown, HubClient, ensureDaemon, emptyLive, renderStats, trayState } from '@agent-spaghetti/sdk';
 import { spawnDaemon } from '@agent-spaghetti/core/launch';
@@ -60,13 +59,11 @@ function showPopover() {
   pop.setBounds(placeNear(b, screen.getDisplayMatching(b).workArea, SIZE));
   pop.show(); pop.focus();
 }
-/** First run on Windows: a clickable launcher on the desktop and in the Start menu (deleted ones are not recreated). */
+/** Windows: keep the desktop + Start menu launchers pointing at THIS install (self-heals moved/broken links; deleted ones are recreated on next run). */
 function ensureShortcuts() {
-  const flag = join(app.getPath('userData'), 'shortcuts-created');
-  if (process.platform !== 'win32' || existsSync(flag)) return;
+  if (process.platform !== 'win32') return;
   const link = { target: process.execPath, args: `"${app.getAppPath()}"`, icon: asset('icon.ico'), iconIndex: 0, appUserModelId: APP_ID, description: 'Agent Spaghetti tray' };
-  for (const p of shortcutPaths(app.getPath('desktop'), app.getPath('appData'), join)) shell.writeShortcutLink(p, 'create', link);
-  writeFileSync(flag, '');
+  for (const p of shortcutPaths(app.getPath('desktop'), app.getPath('appData'), join)) shell.writeShortcutLink(p, 'replace', link);
 }
 function setMenu() {
   if (!tray) return;
