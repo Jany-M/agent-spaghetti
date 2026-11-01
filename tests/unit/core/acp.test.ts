@@ -32,3 +32,15 @@ test('ACP: edits are allowed only with a folder and an editing kind; other stop 
 test('ACP: a program that is not there is an error, not a hang', async () => {
   await assert.rejects(async () => { for await (const _ of acpRun(env, 'no-such-acp-agent', [], { target: 'x', task: 'hi' }, { signal: new AbortController().signal })); }, /exited with 127/);
 });
+
+test('ACP: the initialize frame carries clientInfo {name, version} and the client capabilities', async () => {
+  const frames: any[] = [];
+  const fake = { ...env, async *execLines(_p: string, _a: string[], o: { input: AsyncIterable<string> }) {
+    for await (const line of o.input) { frames.push(JSON.parse(line)); return; }   // first frame is all we need
+  } } as typeof env;
+  for await (const _ of acpRun(fake, 'x', [], { target: 'x', task: 'hi' }, { signal: new AbortController().signal }));
+  const init = frames.find(f => f.method === 'initialize');
+  assert.equal(init.params.clientInfo.name, 'agent-spaghetti');
+  assert.match(init.params.clientInfo.version, /^\d+\.\d+\.\d+/);
+  assert.ok(init.params.clientCapabilities);
+});

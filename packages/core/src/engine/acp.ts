@@ -5,6 +5,7 @@
 import { tmpdir } from 'node:os';
 import type { Ctx, Environment, RunEvent, RunRequest } from '@agent-spaghetti/sdk';
 import { mayEdit, parseJson } from '@agent-spaghetti/sdk';
+import { VERSION } from '../version.ts';
 
 export const ACP_VERSION = 1;
 const SAFE = new Set(['read', 'search', 'think', 'fetch']);   // tool kinds that change nothing
@@ -36,7 +37,7 @@ export async function* acpRun(env: Environment, program: string, args: string[],
   const out = outbox(), cwd = req.cwd ?? tmpdir();
   let phase: 'init' | 'session' | 'prompt' = 'init', session = req.session, text = '';
   out.send({ id: 1, method: 'initialize', params: { protocolVersion: ACP_VERSION, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
-    clientInfo: { name: 'agent-spaghetti' } } });
+    clientInfo: { name: 'agent-spaghetti', version: VERSION } } });
   try {
     for await (const line of env.execLines(program, args, { input: out, cwd: req.cwd, signal: ctx.signal,
       env: ctx.runId ? { AGENT_SPAGHETTI_PARENT_RUN: String(ctx.runId) } : undefined })) {
