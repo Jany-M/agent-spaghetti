@@ -62,5 +62,14 @@ textarea { resize:vertical; }
   font:11px/1.4 ui-monospace,"Cascadia Mono",Consolas,monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .list .me { font-weight:600; }
 .mono div { font:11px/1.4 ui-monospace,"Cascadia Mono",Consolas,monospace; }
+.live { display:flex; flex-direction:column; gap:6px; padding:10px 12px; }
+.live .bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:4px; }
+.live .bar select, .live .bar button { font-size:12px; padding:3px 8px; }
+.live .group { border-bottom:1px solid var(--line); padding:4px 0; }
+.live .group-tag { font-weight:600; color:var(--muted); font-size:11px; }
+.live .entry { padding:2px 0; font-size:12px; white-space:pre-wrap; }
+.live .entry.detail { cursor:pointer; }
+.live .entry.detail .line { color:var(--fg); }
+.live .entry.detail pre { margin:4px 0 0; padding:6px; border-radius:6px; background:var(--bg); overflow:auto; max-height:240px; }
 .foot { display:flex; justify-content:space-between; align-items:center; padding:8px 12px; border-top:1px solid var(--line); color:var(--muted); font-size:12px; }
 `;

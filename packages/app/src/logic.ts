@@ -8,6 +8,7 @@ export function trayMenu(up: boolean, autostart: boolean): MenuItem[] {
     up ? { id: 'scan', label: 'Rescan' } : { id: 'start', label: 'Start daemon' },
     { type: 'separator' },
     { id: 'autostart', label: 'Start tray at login', type: 'checkbox', checked: autostart },
+    { id: 'live', label: 'Live window', type: 'checkbox', checked: false },
     { type: 'separator' },
     { id: 'quit', label: 'Quit tray' },
     { id: 'quit-all', label: 'Quit tray and stop daemon', enabled: up },

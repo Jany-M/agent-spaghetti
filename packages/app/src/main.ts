@@ -13,12 +13,13 @@ const asset = (f: string) => join(DIR, f);
 const SIZE = { width: 420, height: 600 };
 const APP_ID = 'com.agent-spaghetti.tray';
 
-let tray: Tray | null = null, pop: BrowserWindow | null = null, client: HubClient | null = null, up = false, quitting = false;
+let tray: Tray | null = null, pop: BrowserWindow | null = null, liveWin: BrowserWindow | null = null, client: HubClient | null = null, up = false, quitting = false;
 const seen = new Set<string>();
 
 const connect = async () => { const c = HubClient.fromDiscovery(); await c.call('status'); return c; };
 const startDaemon = () => void spawnDaemon(process.env, join(ROOT, 'packages', 'cli', 'src', 'index.ts'));
-const send = (e: BridgeEvent) => { if (pop && !pop.isDestroyed()) pop.webContents.send(CHANNEL.event, e); };
+const sendLive = (e: BridgeEvent) => { if (liveWin) { const w = liveWin as any; if (!w.isDestroyed()) w.webContents.send(CHANNEL.event, e); } };
+const send = (e: BridgeEvent) => { if (pop && !pop.isDestroyed()) pop.webContents.send(CHANNEL.event, e); sendLive(e); };
 
 async function refresh() {
   if (!tray) return;
@@ -53,6 +54,16 @@ async function follow() {
   }
 }
 
+function showLive() {
+  if (!liveWin || liveWin.isDestroyed()) {
+    liveWin = new BrowserWindow({ width: 700, height: 800, show: false, frame: true, resizable: true, alwaysOnTop: true, skipTaskbar: true, icon: asset('icon.png'),
+      webPreferences: { preload: asset('preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
+    liveWin.on('close', e => { if (!quitting) { e.preventDefault(); liveWin?.hide(); } });
+    liveWin.loadFile(asset('popover.html'), { searchParams: { window: 'live' } } as any).then(() => { liveWin?.show(); liveWin?.focus(); });
+  } else {
+    if (liveWin.isVisible()) liveWin.hide(); else { liveWin.show(); liveWin.focus(); }
+  }
+}
 function showPopover() {
   if (!pop || !tray) return;
   const b = tray.getBounds();
@@ -71,12 +82,14 @@ function setMenu() {
     open: showPopover,
     scan: () => void client?.call('scan').catch(() => {}),
     start: () => void ensureDaemon({ connect, start: startDaemon }).catch(e => console.error(e)),
+    live: () => showLive(),
     autostart: () => app.setLoginItemSettings({ openAtLogin: !app.getLoginItemSettings().openAtLogin, args: [app.getAppPath()] }),
     quit: () => app.quit(),
     'quit-all': () => void client?.call('shutdown').catch(() => {}).finally(() => app.quit()),
   };
   tray.setContextMenu(Menu.buildFromTemplate(trayMenu(up, app.getLoginItemSettings().openAtLogin)
-    .map(i => ({ ...i, click: i.id ? act[i.id] : undefined }))));
+    .map(i => ({ ...i, click: i.id ? act[i.id] : undefined,
+      checked: i.id === 'live' ? Boolean(liveWin && (liveWin as any).isVisible && !(liveWin as any).isDestroyed()) : i.checked }))));
 }
 
 if (!app.requestSingleInstanceLock()) app.quit();

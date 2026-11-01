@@ -89,10 +89,15 @@ export const EVENT_TYPES = [
   'session.started', 'session.updated', 'session.ended', 'backend.changed', 'tool.changed', 'switch.changed', 'permission.pending',
   'consent.requested', 'consent.answered', 'consent.expired', 'tool.checked',
   'run.started', 'run.event', 'run.finished', 'run.delivered', 'dispatcher.action', 'backend.queue', 'client.hook', 'client.connected',
+  'trace.detail',                          // the live detail channel: redacted, streamed live, never stored (ADR 0007)
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 export interface HubEvent { ts: number; type: EventType; envId: string; source: string; data: Record<string, unknown> }
 export type StoredEvent = HubEvent & { id: number };
+
+/** One detail event on the live trace channel: one type, stage-differentiated (never five). */
+export type TraceStage = 'route-prompt' | 'route-answer' | 'relay' | 'output' | 'deliver';
+export interface TraceData { runId?: number; chainId?: number; stage: TraceStage; text: string; target?: string; model?: string }
 export type Emit = (e: Pick<HubEvent, 'type' | 'data'> & Partial<HubEvent>) => void;
 
 export interface Disposable { dispose(): void }

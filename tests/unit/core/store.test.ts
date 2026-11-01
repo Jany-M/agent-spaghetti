@@ -28,6 +28,17 @@ test('bus persists then notifies; unsubscribe stops delivery; secrets are redact
   assert.deepEqual(got, [{ url: '[redacted]', token: '[redacted]', ok: 'fine' }]);
   assert.deepEqual(s.eventsSince(0)[0].data, { url: '[redacted]', token: '[redacted]', ok: 'fine' });
 });
+test('ephemeral events reach subscribers redacted but are not stored (negative id, out of liveState sequence)', () => {
+  const s = new Store(':memory:'); const b = new Bus(s); const got: { id: number; type: string }[] = [];
+  const off = b.subscribe(e => got.push({ id: e.id, type: e.type }));
+  b.emit({ ts: 1, type: 'trace.detail', envId: 'hub', source: 't', data: { stage: 'relay', text: 'hello' } }, { ephemeral: true });
+  b.emit({ ts: 2, type: 'run.started', envId: 'hub', source: 't', data: { id: 42 } });
+  assert.equal(got.length, 2);
+  assert.ok(got[0].id < 0); // ephemeral negative id
+  assert.equal(s.eventsSince(0).length, 1); // only the persisted run.started reaches the DB
+  assert.equal(s.eventsSince(0)[0].type, 'run.started');
+  off();
+});
 test('a corrupt db file fails loudly with a clear message', () => {
   const p = join(mkdtempSync(join(tmpdir(), 'as-')), 'bad.db'); writeFileSync(p, 'not a database at all, really not');
   assert.throws(() => { const s = new Store(p); s.eventsSince(0); }, /agent-spaghetti store cannot open/);

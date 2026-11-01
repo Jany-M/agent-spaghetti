@@ -7,8 +7,8 @@ import { newQuestions, placeNear, pngToIco, shortcutPaths, tooltip, trayMenu } f
 
 test('menu: Rescan when up, Start daemon when down; stop-daemon only when up', () => {
   const ids = (up: boolean) => trayMenu(up, false).filter(i => i.id).map(i => `${i.id}${i.enabled === false ? '(off)' : ''}`);
-  assert.deepEqual(ids(true), ['open', 'scan', 'autostart', 'quit', 'quit-all']);
-  assert.deepEqual(ids(false), ['open', 'start', 'autostart', 'quit', 'quit-all(off)']);
+  assert.deepEqual(ids(true), ['open', 'scan', 'autostart', 'live', 'quit', 'quit-all']);
+  assert.deepEqual(ids(false), ['open', 'start', 'autostart', 'live', 'quit', 'quit-all(off)']);
   assert.equal(trayMenu(true, true).find(i => i.id === 'autostart')!.checked, true);
 });
 test('tooltip fits the Windows 127-character limit', () => {
