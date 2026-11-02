@@ -45,12 +45,15 @@ Status keeps itself current: running tools and model servers are re-checked ever
 
   | Tool | Type | |
   |---|---|---|
-  | any | `have the local model write the tests, then Claude Code review them, then hand it back to me` | its agent calls `delegate` |
-  | VS Code | `/mcp.agent-spaghetti.delegate` | a form with a target list; or `#delegate` in a prompt |
-  | Claude Code | `@agent-spaghetti:target://openclaw review this` | `@` lists the targets |
-  | Cursor, Claude Code | `>>openclaw >>claude-cli review src/app.ts` | sent straight to the targets, not to the tool's model |
+  | any | `have the local model write the tests, then Claude Code review them, then hand it back to me` | plain words: its agent calls `delegate` |
+  | VS Code (Copilot or Claude harness) | pick **agent-spaghetti** in the agent list, then `lmstudio summarize README.md` | the first word is the target; none: you pick |
+  | VS Code (Local harness) | `/mcp.agent-spaghetti.delegate` | a form with a target list |
+  | Claude Code | `@`, pick the **agent-spaghetti** agent or a target (`@agent-spaghetti:target://openclaw review this`) | `@` lists both |
+  | Cursor, Claude Code | `>>openclaw >>claude-cli review src/app.ts`, then Enter | sent straight to the targets, not to the tool's model; nothing pops up while typing |
 
-  The open workspace goes along as the folder to work in, and attached files (`@file`, `#file`) go too: agents get their paths (translated for WSL), models get their text. No target named? The tool asks you to pick one (or `auto`), and a paid target asks for approval right there or in the tray. Agents edit files only for editing kinds (code-edit, refactor, tests, docs). A `>>` result also lands in `<workspace>/.agent-spaghetti/results/<run>.md`.
+  The open workspace goes along as the folder to work in, and attached files go too: agents get their paths (translated for WSL), models get their text. No target named? The tool asks you to pick one (or `auto`), and a paid target asks for approval right there or in the tray. Agents edit files only for editing kinds (code-edit, refactor, tests, docs). A `>>` result also lands in `<workspace>/.agent-spaghetti/results/<run>.md`.
+
+  VS Code's chat runs on a *harness* you pick per session (Local, Copilot, Claude); what each offers differs, the table says which. After connecting, reload the tool once so it picks up the server, agent and hook.
 - From the tray: **Runs → New task**. From a terminal: `delegate <target> <task> [--model <m>] [--then <target>,…]`.
 - **Chains:** a hand-off can name next steps (`then`); each step gets the previous result, and the last result goes back to whoever asked: straight into the waiting call, into the caller's own session when it can continue one, into its chat (VS Code), or as a result waiting for it (`run_status`, the tray tells you).
 - **`auto`** lets Agent Spaghetti pick the target: the best free one, or the one its dispatcher model chooses (Settings → `dispatcher.model`, off by default). With a dispatcher model set, a hand-off that stops progressing is passed to another target once.

@@ -12,8 +12,8 @@ description: Hand a task to a local model or another agent on this machine throu
    - `kind`: one of code-edit, tests, review, research, summarize, refactor, docs, other;
    - `reason`: one line saying why you hand it off;
    - `model`: optional, one of the target's models or agents listed by `targets`;
-   - `cwd`: the project folder (default: your open workspace); agents edit there only for editing kinds;
-   - `files`: the files the task is about (paths, absolute or relative to `cwd`); agents get the paths, models get the text;
+   - `cwd`: the project folder: your open workspace (pass it; not every tool sends it on its own); agents edit there only for editing kinds;
+   - `files`: the files the task is about, as absolute paths; agents get the paths, models get the text;
    - `context`: optional findings or instructions the target needs besides the task;
    - `then`: optional next targets (`target` or `target:model`), in order; each gets the previous result, and the last result comes back to you;
    - `returnTo`: `none` when you need nothing back (default: the result comes back to you);

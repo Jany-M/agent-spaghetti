@@ -39,7 +39,7 @@ export const OPS = {
         files: { type: 'array', items: { type: 'string' }, description: 'Files the user attached, referenced or named: absolute paths (relative ones only with cwd)' },
         kind: { type: 'string', enum: HANDOFF_KINDS }, reason: { type: 'string', description: 'One line: why this is handed off' },
         model: { type: 'string', description: 'A loaded model of a model target, or an agent of an agent target (see `targets`; default: the first model / the default agent)' },
-        cwd: { type: 'string', description: 'The project folder (default: your open workspace)' },
+        cwd: { type: 'string', description: 'The project folder: your open workspace (pass it; not every tool sends it)' },
         context: { type: 'string', description: 'Findings or instructions the target needs besides the task' },
         then: { type: 'array', items: { type: 'string' }, description: 'Next targets (`target`, `target:model` or `auto`), each getting the previous result' },
         returnTo: { type: 'string', enum: ['caller', 'none'], description: 'caller (default): the last result comes back to you; none: nothing comes back' },
