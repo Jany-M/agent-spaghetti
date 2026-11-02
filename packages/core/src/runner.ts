@@ -4,7 +4,7 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ConsentScope, Delivery, Environment, Integration, RunEvent, RunOutcome, RunRequest, RunRow, Snapshot, Target, TraceStage } from '@agent-spaghetti/sdk';
+import type { ConsentScope, Delivery, Environment, Integration, RunEvent, RunOutcome, RunRequest, RunRow, Snapshot, Target } from '@agent-spaghetti/sdk';
 import { AUTO, TASK_KINDS, envPath, parseHop, programOf, runDecision, withGrants } from '@agent-spaghetti/sdk';
 import type { Bus } from './bus.ts';
 import type { Consent } from './consent.ts';
@@ -137,16 +137,14 @@ export class Runner {
     const last = this.d.ledger.get(row.id)!;
     c.resolve(last);
     if (c.returnTo === 'none') return;
-    if (c.watchedAt && Date.now() - c.watchedAt < INLINE_MS) return this.setDelivered(c.id, 'inline');
-    try { this.setDelivered(c.id, deliver(c, last, this.targets().find(t => t.id === c.source), this.d.ledger, this)); }
+    if (c.watchedAt && Date.now() - c.watchedAt < INLINE_MS) return this.setDelivered(c, 'inline');
+    try { this.setDelivered(c, deliver(c, last, this.targets().find(t => t.id === c.source), this.d.ledger, this)); }
     catch (e) { this.d.ledger.update(c.id, { error: `result not delivered: ${(e as Error).message}` }); }
   }
   /** Where the chain's result went (on the chain's first row, the one its caller knows). */
-  setDelivered(chainId: number, how: Delivery) {
-    const c = [...this.chains.values()].find(x => x.id === chainId) ?? { id: chainId, source: 'unknown' } as { id: number; source: string };
-    this.d.ledger.update(chainId, { delivered: how });
-    this.d.bus.emit({ ts: Date.now(), type: 'run.delivered', envId: 'hub', source: 'runner', data: { id: chainId, how } });
-    this.trace('deliver', `Result of chain ${chainId} delivered ${how} (to ${c.source}).`, { target: c.source, chainId });
+  setDelivered(c: Pick<Chain, 'id' | 'source'>, how: Delivery) {
+    this.d.ledger.update(c.id, { delivered: how });
+    this.d.bus.emit({ ts: Date.now(), type: 'run.delivered', envId: 'hub', source: 'runner', data: { id: c.id, how, to: c.source } });
   }
 
   private async run(id: number, source: string, t: Target, req: RunRequest, ac: AbortController, o: StartOpts): Promise<RunRow> {
@@ -173,11 +171,11 @@ export class Runner {
     const OUTPUT_FLUSH_MS = 1500;
     let result = '', usage: Extract<RunEvent, { type: 'usage' }> | undefined, error: string | undefined, model = req.model, pending = '', lastFlush = 0;
     let flushTimer: ReturnType<typeof setTimeout> | undefined;
-    const flushOutput = (force = false) => { if (flushTimer) { clearTimeout(flushTimer); flushTimer = undefined; } if (pending) { this.trace('output', pending, { target: t.id, runId: id, chainId: req.chainId, model }); pending = ''; lastFlush = Date.now(); } };
+    const flushOutput = () => { if (flushTimer) { clearTimeout(flushTimer); flushTimer = undefined; } if (pending) { this.d.bus.trace('runner', { stage: 'output', text: pending, target: t.id, runId: id, chainId: req.chainId, model }); pending = ''; lastFlush = Date.now(); } };
     const noteOutput = (text: string) => { pending += text; if (flushTimer) return; if (Date.now() - lastFlush >= OUTPUT_FLUSH_MS) flushOutput(); else { flushTimer = setTimeout(flushOutput, OUTPUT_FLUSH_MS); } };
     try {
       const resolved = o.engine ? req : await this.forTarget(t, req);
-      this.trace('relay', resolved.task, { target: t.id, runId: id, chainId: req.chainId, model: req.model });
+      this.d.bus.trace('runner', { stage: 'relay', text: resolved.task, target: t.id, runId: id, chainId: req.chainId, model: req.model });
       for await (const e of o.engine ? o.engine(ac.signal) : this.engine(id, t, resolved, ac.signal, m => { model = m; })) {
         const r = this.running.get(id); if (r) r.at = Date.now();
         if (e.type === 'text') { result += e.text; noteOutput(e.text); }
@@ -188,7 +186,7 @@ export class Runner {
         else error = e.message;
       }
     } catch (err) { error = ((ac.signal.aborted ? ac.signal.reason : err) as Error).message; }   // cancel and deadline say why
-    finally { clearTimeout(deadline); flushOutput(true); }
+    finally { clearTimeout(deadline); flushOutput(); }
     const file = this.writeResult(id, req, result, error);
     const outcome: RunOutcome = !error ? 'done' : error === 'cancelled' ? 'cancelled' : 'error';
     return finish(outcome, { model, error, inputTokens: usage?.inputTokens, outputTokens: usage?.outputTokens, costUsd: usage?.costUsd, ...file });
@@ -253,9 +251,6 @@ export class Runner {
       mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, `${req.chainId ?? id}.md`), text);
     }
     return { resultPath: join(this.d.resultsDir, `${id}.md`), resultSha256: createHash('sha256').update(text).digest('hex') };
-  }
-  private trace(stage: TraceStage, text: string, extra: Record<string, unknown> = {}) {
-    this.d.bus.emit({ ts: Date.now(), type: 'trace.detail', envId: 'hub', source: 'runner', data: { stage, text, ...extra } }, { ephemeral: true });
   }
   private emit(type: 'run.started' | 'run.event' | 'run.finished', id: number, data: Record<string, unknown>) {
     this.d.bus.emit({ ts: Date.now(), type, envId: 'hub', source: 'runner', data: { id, ...data } });

@@ -21,7 +21,7 @@ export function deliver(c: Chain, last: RunRow, origin: Target | undefined, ledg
   if (how) {
     const { done } = runner.start(last.target, { target: c.source, kind: 'report', reason: `result of hand-off ${c.id}`, session, model: parent?.model, returnTo: 'none',
       parentRunId: last.id, task: reportText(c.id, ledger.hops(c.id), last, ledger.result(last)) }, { preapproved: true });
-    void done.then(r => { if (r.outcome !== 'done') runner.setDelivered(c.id, 'unread'); });   // the session could not take it: kept for the caller
+    void done.then(r => { if (r.outcome !== 'done') runner.setDelivered(c, 'unread'); });   // the session could not take it: kept for the caller
     return how;
   }
   return 'unread';

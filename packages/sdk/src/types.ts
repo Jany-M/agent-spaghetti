@@ -96,8 +96,10 @@ export interface HubEvent { ts: number; type: EventType; envId: string; source: 
 export type StoredEvent = HubEvent & { id: number };
 
 /** One detail event on the live trace channel: one type, stage-differentiated (never five). */
-export type TraceStage = 'route-prompt' | 'route-answer' | 'relay' | 'output' | 'deliver';
+export type TraceStage = 'route-prompt' | 'route-answer' | 'relay' | 'output';
 export interface TraceData { runId?: number; chainId?: number; stage: TraceStage; text: string; target?: string; model?: string }
+/** A live-only event (trace.detail): delivered but never stored, so it has a negative id. Panels and the tray badge ignore it. */
+export const isTrace = (e: { id: number }) => e.id < 0;
 export type Emit = (e: Pick<HubEvent, 'type' | 'data'> & Partial<HubEvent>) => void;
 
 export interface Disposable { dispose(): void }

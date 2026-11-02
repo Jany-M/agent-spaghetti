@@ -46,11 +46,12 @@ export const OPS = {
         returnSession: { type: 'string', description: 'Your own session id, so a late result can be resumed into it' } } } } },
   targets:      { method: 'GET',  path: '/v1/targets', gui: 'runs',      usage: 'targets',                  summary: 'What tasks can be handed to right now',
     mcp: { name: 'targets', description: 'List the local models and agents `delegate` can use now, with their cost class (free / metered).', input: { type: 'object', additionalProperties: false, properties: {} } } },
-  runs:         { method: 'GET',  path: '/v1/runs', gui: 'runs',         usage: 'runs [<id>]',              summary: 'The run record; with an id: its hand-off chain and result',
+  runs:         { method: 'GET',  path: '/v1/runs', gui: 'runs',         usage: 'runs [<id> | --unread [<caller>]]', summary: 'The run record; with an id: its hand-off chain and result',
     mcp: { name: 'run_status', description: 'Status and result of a run you handed off; without an id: results of your hand-offs that finished after you stopped waiting (each given once).',
       input: { type: 'object', additionalProperties: false, properties: { id: { type: 'integer' } } } } },
   cancel:       { method: 'POST', path: '/v1/cancel', gui: 'runs',       usage: 'cancel <id>',              summary: 'Stop a running delegation' },
   verdict:      { method: 'POST', path: '/v1/verdict', gui: 'runs',      usage: 'verdict <id> up|down|redo', summary: 'Rate a run (kept in the run record)' },
+  dismiss:      { method: 'POST', path: '/v1/dismiss', gui: 'runs',      usage: 'dismiss <id>',             summary: 'Stop keeping a waiting result for its caller (it stays in the run record)' },
   connect:      { method: 'POST', path: '/v1/connect', gui: 'tools',      usage: 'connect|disconnect <integration> [--dry-run]', summary: 'Give a client the agent-spaghetti tools (MCP + plugin), or take them away' },
   setup:        { method: 'POST', path: '/v1/setup',        gui: 'tools', usage: 'setup <integration> [--check] [--dry-run]', summary: 'Set a tool up for agent-spaghetti (e.g. its workflow pack), or check it' },
   handback:     { method: 'POST', path: '/v1/handback', gui: 'machine', usage: 'handback <run id> <result> --as <tool> [--failed]', summary: 'Send the result of a task a tool was given in its chat (its agent calls `report`)',
@@ -93,6 +94,7 @@ export interface OpIO {
     out: { runs: RunRow[]; result?: string; final?: RunView; unread?: RunView[] } };   // final: the chain's view (id = chain); unread: given once
   cancel: { in: { id: number }; out: { cancelled: boolean } };
   verdict: { in: { id: number; value: 'up' | 'down' | 'redo' }; out: { ok: true } };
+  dismiss: { in: { id: number }; out: { ok: true } };
   connect: { in: { integration: string; on?: boolean; envId?: string; dryRun?: boolean }; out: ConnectResult };
   setup: { in: { integration: string; check?: boolean; dryRun?: boolean; envId?: string }; out: Array<EnvResult<TestResult>> };
   hook: { in: { client: string; event: string; data?: Record<string, unknown> }; out: { ok: true } };

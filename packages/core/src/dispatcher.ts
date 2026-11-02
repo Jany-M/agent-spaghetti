@@ -2,7 +2,7 @@
 // when it is on, one that is not available), and hands a run without progress for `dispatcher.stuckMin` to the next target,
 // once per chain. It thinks with `dispatcher.model` through the runner itself (its runs are recorded like any other);
 // without a model it is off and `auto` takes the best-ranked target (sdk rankTargets: free first, no tool preferred).
-import type { Disposable, RunRequest, Target, TraceStage } from '@agent-spaghetti/sdk';
+import type { Disposable, RunRequest, Target } from '@agent-spaghetti/sdk';
 import { AUTO, parseHop, rankTargets } from '@agent-spaghetti/sdk';
 import type { Bus } from './bus.ts';
 import type { Ledger } from './ledger.ts';
@@ -38,12 +38,10 @@ export class Dispatcher {
     let pick: { target: string; model?: string } = { target: options[0].id }, why = 'best-ranked target';
     if (this.on()) {
       const prompt = routePrompt(req.task, options);
-      this.d.bus.emit({ ts: Date.now(), type: 'trace.detail', envId: 'hub', source: SELF,
-        data: { stage: 'route-prompt' as TraceStage, text: prompt } }, { ephemeral: true });
+      this.d.bus.trace(SELF, { stage: 'route-prompt', text: prompt });
       const answer = await this.think(prompt).catch(e => { why = `dispatcher model failed (${(e as Error).message}): best-ranked target`; return ''; });
       const p = parseRoute(answer, options);
-      this.d.bus.emit({ ts: Date.now(), type: 'trace.detail', envId: 'hub', source: SELF,
-        data: { stage: 'route-answer' as TraceStage, text: `model answer: ${answer}\nparsed: ${JSON.stringify(p ?? null)}` } }, { ephemeral: true });
+      this.d.bus.trace(SELF, { stage: 'route-answer', text: p ? `picked ${p.model ? `${p.target}:${p.model}` : p.target}` : `no target in the answer: ${answer || '(empty)'}` });
       if (p) { pick = p; why = 'chosen by the dispatcher model'; } else if (answer) why = 'dispatcher answer not a target: best-ranked target';
     }
     this.act('routed', { asked: req.target, to: pick.target, why });

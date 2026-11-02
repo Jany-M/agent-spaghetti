@@ -2,13 +2,13 @@
 import type { TrayState } from '@agent-spaghetti/sdk';
 
 export interface MenuItem { id?: string; label?: string; type?: 'separator' | 'checkbox'; checked?: boolean; enabled?: boolean }
-export function trayMenu(up: boolean, autostart: boolean): MenuItem[] {
+export function trayMenu(up: boolean, autostart: boolean, live = false): MenuItem[] {
   return [
     { id: 'open', label: 'Show status' },
+    { id: 'live', label: 'Live activity', type: 'checkbox', checked: live },
     up ? { id: 'scan', label: 'Rescan' } : { id: 'start', label: 'Start daemon' },
     { type: 'separator' },
     { id: 'autostart', label: 'Start tray at login', type: 'checkbox', checked: autostart },
-    { id: 'live', label: 'Live window', type: 'checkbox', checked: false },
     { type: 'separator' },
     { id: 'quit', label: 'Quit tray' },
     { id: 'quit-all', label: 'Quit tray and stop daemon', enabled: up },

@@ -62,14 +62,23 @@ textarea { resize:vertical; }
   font:11px/1.4 ui-monospace,"Cascadia Mono",Consolas,monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .list .me { font-weight:600; }
 .mono div { font:11px/1.4 ui-monospace,"Cascadia Mono",Consolas,monospace; }
-.live { display:flex; flex-direction:column; gap:6px; padding:10px 12px; }
-.live .bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:4px; }
-.live .bar select, .live .bar button { font-size:12px; padding:3px 8px; }
-.live .group { border-bottom:1px solid var(--line); padding:4px 0; }
-.live .group-tag { font-weight:600; color:var(--muted); font-size:11px; }
-.live .entry { padding:2px 0; font-size:12px; white-space:pre-wrap; }
-.live .entry.detail { cursor:pointer; }
-.live .entry.detail .line { color:var(--fg); }
-.live .entry.detail pre { margin:4px 0 0; padding:6px; border-radius:6px; background:var(--bg); overflow:auto; max-height:240px; }
+.head .live-btn { margin-left:auto; font-size:12px; padding:2px 10px; }
+[class*="tone-"], .runs .line[class*="tone-"] { border-left:3px solid var(--line); padding-left:6px; }
+.tone-ok, .runs .line.tone-ok { border-left-color:var(--idle); } .tone-fail, .runs .line.tone-fail { border-left-color:var(--problem); }
+.tone-run, .runs .line.tone-run { border-left-color:var(--working); }
+button.badge { border:0; cursor:pointer; }
+.live { display:flex; flex-direction:column; height:100vh; }
+.live .bar { display:flex; gap:6px; align-items:center; padding:6px 8px; border-bottom:1px solid var(--line); background:var(--card); -webkit-app-region:drag; user-select:none; }
+.live .bar .label { font-weight:600; } .live .bar .grow { flex:1; }
+.live .bar select, .live .bar button { -webkit-app-region:no-drag; width:auto; font-size:12px; padding:2px 8px; }
+.live .chip { border-radius:10px; }
+.live .feed { flex:1; overflow:auto; padding:4px 8px; }
+.live .entry { padding:2px 0 2px 6px; margin:2px 0; }
+.live .line { display:flex; gap:6px; align-items:baseline; }
+.live .line .tag { flex:none; border:0; background:none; padding:0; color:var(--muted); font:inherit; }
+.live .line .text { border:0; background:none; padding:0; text-align:left; font:inherit; color:inherit; white-space:pre-wrap; word-break:break-word; }
+.live .line span { white-space:pre-wrap; word-break:break-word; }
+.live pre { margin:4px 0 2px; padding:6px; border-radius:6px; background:var(--bg); white-space:pre-wrap; word-break:break-word; max-height:260px; overflow:auto; }
+.live .empty { padding:16px 10px; }
 .foot { display:flex; justify-content:space-between; align-items:center; padding:8px 12px; border-top:1px solid var(--line); color:var(--muted); font-size:12px; }
 `;

@@ -1,6 +1,6 @@
 // Tray popover: frame, Home, the panel host (ADR 0009). Plain React.createElement (no JSX): the same files run in tests under node and in the bundle.
 import { createElement as h, useEffect, useState, type ReactNode } from 'react';
-import { ACTION_LABEL, PANELS, SCOPE_LABEL, emptyLive, renderStats, trayState, type ConsentRequest, type ConsentScope, type OpIO, type Panel } from '@agent-spaghetti/sdk/web';
+import { ACTION_LABEL, PANELS, SCOPE_LABEL, emptyLive, isTrace, renderStats, trayState, type ConsentRequest, type ConsentScope, type OpIO, type Panel } from '@agent-spaghetti/sdk/web';
 import { ToolsPanel } from './tools.ts';
 import { RunsPanel } from './runs.ts';
 import { SettingsPanel } from './settings.ts';
@@ -36,9 +36,9 @@ function sessions(s: Status) {
 const section = (title: string, ...children: ReactNode[]) => h('section', null, h('h2', null, title), ...children);
 
 const PANEL_LABEL: Record<Panel, string> = { home: 'Home', tools: 'Tools', runs: 'Runs', settings: 'Settings', activity: 'Activity' };
-export interface PopoverProps { view: HubView; now: number; onAnswer: Answer; onScan(): void; scanning: boolean; panel?: Panel; onPanel?(p: Panel): void; children?: ReactNode }
+export interface PopoverProps { view: HubView; now: number; onAnswer: Answer; onScan(): void; scanning: boolean; panel?: Panel; onPanel?(p: Panel): void; onLive?(): void; children?: ReactNode }
 /** The popover frame: status header, one tab per panel, the panel (Home: questions + what runs), rescan footer. */
-export function PopoverView({ view, now, onAnswer, onScan, scanning, panel = 'home', onPanel, children }: PopoverProps) {
+export function PopoverView({ view, now, onAnswer, onScan, scanning, panel = 'home', onPanel, onLive, children }: PopoverProps) {
   const s = view.status;
   const consents = s?.consents ?? [];
   const live = s?.live ?? emptyLive(), snap = s?.snapshot ?? null;
@@ -52,7 +52,8 @@ export function PopoverView({ view, now, onAnswer, onScan, scanning, panel = 'ho
   return h('div', { className: 'pop' },
     h('header', { className: 'head' }, h('img', { src: 'icon.png', alt: '' }),
       h('div', { className: 'lines' }, h('div', null, h('span', { className: `dot ${state}`, 'aria-label': state }), lines[0]),
-        ...lines.slice(1).map(l => h('div', { key: l }, l)))),
+        ...lines.slice(1).map(l => h('div', { key: l }, l))),
+      onLive ? h('button', { className: 'live-btn', title: 'A small window that stays on top and shows each step of the work as it happens', onClick: onLive }, 'Live') : null),
     h('nav', { className: 'tabs', 'aria-label': 'Panels' }, ...PANELS.map(p => h('button', { key: p, 'aria-current': p === shown ? 'page' : undefined,
       disabled: !view.up && p !== 'home', onClick: () => onPanel?.(p) }, PANEL_LABEL[p], p === 'home' && consents.length ? h('span', { className: 'count' }, String(consents.length)) : null))),
     h('main', { className: 'body' }, ...(shown === 'home' ? home : [children])),
@@ -68,7 +69,7 @@ export function useHub(bridge: Bridge): HubView & { refresh(): Promise<void> } {
   useEffect(() => {
     void refresh();
     let t: ReturnType<typeof setTimeout> | undefined;
-    const off = bridge.onEvent(e => { clearTimeout(t); if (e.type === 'hub.down') setView({ up: false, status: null }); else t = setTimeout(refresh, 150); });
+    const off = bridge.onEvent(e => { if ('id' in e && isTrace(e)) return; clearTimeout(t); if (e.type === 'hub.down') setView({ up: false, status: null }); else t = setTimeout(refresh, 150); });
     return () => { off(); clearTimeout(t); };
   }, [bridge]);
   return { ...view, refresh };
@@ -83,6 +84,6 @@ export function Popover({ bridge }: { bridge: Bridge }) {
   useEffect(() => { const i = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(i); }, []);
   const onAnswer: Answer = (id, allow, scope) => void bridge.call('consent', { id, allow, scope }).catch(() => {}).finally(hub.refresh);
   const onScan = () => { setScanning(true); void bridge.call('scan').catch(() => {}).finally(() => { setScanning(false); void hub.refresh(); }); };
-  return h(PopoverView, { view: hub, now, onAnswer, onScan, scanning, panel, onPanel: setPanel },
+  return h(PopoverView, { view: hub, now, onAnswer, onScan, scanning, panel, onPanel: setPanel, onLive: () => void window.open('popover.html?window=live') },   // the tray opens its live pane
     panel === 'home' ? null : h(PANEL_COMPONENT[panel], { bridge }));
 }

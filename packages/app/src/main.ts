@@ -2,7 +2,7 @@
 // The daemon is independent: the tray starts it when missing and can leave it running on quit.
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, Notification, screen, shell, Tray } from 'electron';
 import { join } from 'node:path';
-import { DaemonDown, HubClient, ensureDaemon, emptyLive, renderStats, trayState } from '@agent-spaghetti/sdk';
+import { DaemonDown, HubClient, ensureDaemon, emptyLive, isTrace, renderStats, trayState } from '@agent-spaghetti/sdk';
 import { spawnDaemon } from '@agent-spaghetti/core/launch';
 import { CHANNEL, isBridgeOp, type BridgeEvent } from '@agent-spaghetti/ui/bridge';
 import { ICON, newQuestions, placeNear, shortcutPaths, tooltip, trayMenu } from './logic.ts';
@@ -10,7 +10,7 @@ import { ICON, newQuestions, placeNear, shortcutPaths, tooltip, trayMenu } from 
 const DIR = __dirname;                                     // dist/app (bundle) — assets and the popover live next to it
 const ROOT = join(DIR, '..', '..');
 const asset = (f: string) => join(DIR, f);
-const SIZE = { width: 420, height: 600 };
+const SIZE = { width: 420, height: 600 }, LIVE = { width: 420, height: 480 };
 const APP_ID = 'com.agent-spaghetti.tray';
 
 let tray: Tray | null = null, pop: BrowserWindow | null = null, liveWin: BrowserWindow | null = null, client: HubClient | null = null, up = false, quitting = false;
@@ -18,8 +18,9 @@ const seen = new Set<string>();
 
 const connect = async () => { const c = HubClient.fromDiscovery(); await c.call('status'); return c; };
 const startDaemon = () => void spawnDaemon(process.env, join(ROOT, 'packages', 'cli', 'src', 'index.ts'));
-const sendLive = (e: BridgeEvent) => { if (liveWin) { const w = liveWin as any; if (!w.isDestroyed()) w.webContents.send(CHANNEL.event, e); } };
-const send = (e: BridgeEvent) => { if (pop && !pop.isDestroyed()) pop.webContents.send(CHANNEL.event, e); sendLive(e); };
+const to = (w: BrowserWindow | null, e: BridgeEvent) => { if (w && !w.isDestroyed()) w.webContents.send(CHANNEL.event, e); };
+/** Hub events to the windows: live-only traces (negative id) only to the live pane, while it shows. */
+const send = (e: BridgeEvent) => { if (!('id' in e) || !isTrace(e)) to(pop, e); if (liveWin?.isVisible()) to(liveWin, e); };
 
 async function refresh() {
   if (!tray) return;
@@ -46,7 +47,7 @@ async function follow() {
     try {
       client = await connect(); up = true; wait = 1000;
       send({ type: 'hub.up' }); refreshSoon();
-      for await (const e of client.stream()) { send(e); refreshSoon(); if (e.type === 'run.delivered' && e.data.how === 'unread') notify(`Result of run ${e.data.id} is waiting`, 'Its caller was no longer waiting: see Runs.');
+      for await (const e of client.stream()) { send(e); if (isTrace(e)) continue; refreshSoon(); if (e.type === 'run.delivered' && e.data.how === 'unread') notify(`Result of run ${e.data.id} is waiting`, 'Its caller was no longer waiting: see Runs.');
         if (e.type === 'dispatcher.action' && e.data.what === 'stuck') notify(`Run ${e.data.id} on ${e.data.target} is not progressing`, 'Cancel it in Runs, or let its deadline end it.'); }
     } catch (e) { if (!(e instanceof DaemonDown)) console.error(e); }
     if (up) { up = false; client = null; send({ type: 'hub.down' }); void refresh(); }
@@ -54,15 +55,22 @@ async function follow() {
   }
 }
 
-function showLive() {
-  if (!liveWin || liveWin.isDestroyed()) {
-    liveWin = new BrowserWindow({ width: 700, height: 800, show: false, frame: true, resizable: true, alwaysOnTop: true, skipTaskbar: true, icon: asset('icon.png'),
-      webPreferences: { preload: asset('preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
-    liveWin.on('close', e => { if (!quitting) { e.preventDefault(); liveWin?.hide(); } });
-    liveWin.loadFile(asset('popover.html'), { searchParams: { window: 'live' } } as any).then(() => { liveWin?.show(); liveWin?.focus(); });
-  } else {
-    if (liveWin.isVisible()) liveWin.hide(); else { liveWin.show(); liveWin.focus(); }
+/** The live pane: small, on top, stays open when you click elsewhere; it opens bottom-right and remembers where you put it. */
+function showLive(toggle = false) {
+  if (liveWin && !liveWin.isDestroyed()) {
+    if (toggle && liveWin.isVisible()) liveWin.hide(); else liveWin.showInactive();
+    return;
   }
+  const area = screen.getPrimaryDisplay().workArea;
+  liveWin = new BrowserWindow({ ...LIVE, x: area.x + area.width - LIVE.width - 16, y: area.y + area.height - LIVE.height - 16, show: false, frame: false,
+    resizable: true, minWidth: 300, minHeight: 200, alwaysOnTop: true, skipTaskbar: true, icon: asset('icon.png'), title: 'Agent Spaghetti: live',
+    webPreferences: { preload: asset('preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
+  liveWin.setAlwaysOnTop(true, 'floating');
+  liveWin.on('close', e => { if (!quitting) { e.preventDefault(); liveWin?.hide(); } });   // its × hides it: it lives as long as the tray
+  liveWin.on('show', setMenu); liveWin.on('hide', setMenu);
+  liveWin.webContents.on('will-navigate', e => e.preventDefault());
+  liveWin.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  void liveWin.loadFile(asset('popover.html'), { query: { window: 'live' } }).then(() => liveWin?.showInactive());
 }
 function showPopover() {
   if (!pop || !tray) return;
@@ -82,14 +90,13 @@ function setMenu() {
     open: showPopover,
     scan: () => void client?.call('scan').catch(() => {}),
     start: () => void ensureDaemon({ connect, start: startDaemon }).catch(e => console.error(e)),
-    live: () => showLive(),
+    live: () => showLive(true),
     autostart: () => app.setLoginItemSettings({ openAtLogin: !app.getLoginItemSettings().openAtLogin, args: [app.getAppPath()] }),
     quit: () => app.quit(),
     'quit-all': () => void client?.call('shutdown').catch(() => {}).finally(() => app.quit()),
   };
-  tray.setContextMenu(Menu.buildFromTemplate(trayMenu(up, app.getLoginItemSettings().openAtLogin)
-    .map(i => ({ ...i, click: i.id ? act[i.id] : undefined,
-      checked: i.id === 'live' ? Boolean(liveWin && (liveWin as any).isVisible && !(liveWin as any).isDestroyed()) : i.checked }))));
+  tray.setContextMenu(Menu.buildFromTemplate(trayMenu(up, app.getLoginItemSettings().openAtLogin, !!liveWin && !liveWin.isDestroyed() && liveWin.isVisible())
+    .map(i => ({ ...i, click: i.id ? act[i.id] : undefined }))));
 }
 
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -113,7 +120,7 @@ else {
     });
     pop.on('close', e => { if (!quitting) { e.preventDefault(); pop?.hide(); } });   // Alt+F4 hides: the popover lives as long as the tray
     pop.webContents.on('will-navigate', e => e.preventDefault());
-    pop.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    pop.webContents.setWindowOpenHandler(({ url }) => { if (new URL(url).searchParams.get('window') === 'live') showLive(); return { action: 'deny' }; });   // its Live button
     ipcMain.handle(CHANNEL.call, (_e, op: unknown, input: Record<string, unknown>) => {   // before the page loads: it calls at once
       if (!isBridgeOp(op)) throw new Error(`op not allowed: ${String(op)}`);
       if (!client) throw new Error('agent-spaghetti daemon is not running');

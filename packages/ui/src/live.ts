@@ -1,80 +1,74 @@
-// Live trace: the detachable always-on-top window (?window=live) — one grouped list,
-// thin lines for normal events (sdk eventLine), expandable monospace blocks for trace.detail.
-import { createElement as h, useEffect, useRef, useState } from 'react';
-import { eventLine, type StoredEvent } from '@agent-spaghetti/sdk/web';
+// The live pane (?window=live): a small window that stays on top and stays open when you click elsewhere. One line per step of the
+// work as it happens: hand-offs and hops, Agent Spaghetti's choices, questions, the task as sent, answers as they stream, where results
+// went. Trace lines (never stored, ADR 0007) open to their full text. Lines and colors come from sdk storyLine / eventTone.
+import { createElement as h, useEffect, useState } from 'react';
+import { eventTone, isTrace, storyLine, type StoredEvent } from '@agent-spaghetti/sdk/web';
 import type { Bridge } from './bridge.ts';
+import { useEvents } from './hooks.ts';
 
-const MAX = 500;
-const runOf = (e: StoredEvent): string => {
-  const d = e.data as Record<string, unknown>;
-  if (e.type === 'trace.detail') return String(d.runId ?? d.chainId ?? '-');
-  if (d && typeof d.id === 'number') return String(d.id);
-  return '-';
+const KEEP = 400;
+/** The run an event belongs to, if any. */
+export const runOf = (e: StoredEvent): number | null => {
+  const d = e.data as Record<string, unknown>, n = Number(e.type === 'trace.detail' ? d.runId ?? d.chainId : e.type.startsWith('run.') || e.type === 'dispatcher.action' ? d.id : NaN);
+  return Number.isFinite(n) ? n : null;
 };
-const isDetail = (e: StoredEvent) => e.type === 'trace.detail';
+const ABOUT_WORK = (e: StoredEvent) => e.type.startsWith('run.') || e.type.startsWith('consent.') || e.type === 'dispatcher.action' || e.type === 'trace.detail';
+export interface LiveRow { key: number; tone: string; line: string; run: number | null; text?: string }
+/** What the pane shows: work events only unless `all`, one run when `run` is set; streamed output of a run is one growing line. */
+export function liveRows(events: StoredEvent[], o: { all?: boolean; run?: number | null } = {}): LiveRow[] {
+  const rows: LiveRow[] = [];
+  let last: { e: StoredEvent; text: string } | null = null;
+  for (const e of events) {
+    if (!o.all && !ABOUT_WORK(e)) continue;
+    const run = runOf(e);
+    if (o.run != null && run !== o.run) continue;
+    const d = e.data as Record<string, unknown>;
+    if (e.type === 'trace.detail' && d.stage === 'output' && last && last.e.type === 'trace.detail' && (last.e.data as Record<string, unknown>).stage === 'output' && runOf(last.e) === run) {
+      last.text += String(d.text ?? '');
+      const merged = { ...last.e, data: { ...last.e.data, text: last.text } };
+      rows[rows.length - 1] = { key: last.e.id, tone: eventTone(merged), line: storyLine(merged), run, text: last.text };
+      continue;
+    }
+    last = isTrace(e) ? { e, text: String(d.text ?? '') } : null;
+    rows.push({ key: e.id, tone: eventTone(e), line: storyLine(e), run, ...(isTrace(e) ? { text: String(d.text ?? '') } : {}) });
+  }
+  return rows;
+}
+
+export interface LiveProps { rows: LiveRow[]; all: boolean; run: number | null; paused: boolean; open: Set<number>;
+  onAll(all: boolean): void; onRun(run: number | null): void; onPause(): void; onClear(): void; onToggle(key: number): void; onClose(): void }
+export function LiveList(p: LiveProps) {
+  return h('div', { className: 'live' },
+    h('header', { className: 'bar' },
+      h('span', { className: 'label' }, 'Live'),
+      h('select', { 'aria-label': 'What to show', value: p.all ? 'all' : 'work', onChange: (e: { target: { value: string } }) => p.onAll(e.target.value === 'all') },
+        h('option', { value: 'work' }, 'Runs and hand-offs'), h('option', { value: 'all' }, 'Everything')),
+      p.run !== null ? h('button', { className: 'chip', title: 'Show every run', onClick: () => p.onRun(null) }, `run ${p.run} ×`) : null,
+      h('span', { className: 'grow' }),
+      h('button', { onClick: p.onPause, 'aria-pressed': p.paused }, p.paused ? 'Resume' : 'Pause'),
+      h('button', { onClick: p.onClear }, 'Clear'),
+      h('button', { 'aria-label': 'Close', title: 'Close (tray menu → Live activity opens it again)', onClick: p.onClose }, '×')),
+    p.rows.length ? h('div', { className: 'feed mono', role: 'log', 'aria-live': 'polite' }, ...p.rows.map(r => h('div', { key: r.key, className: `entry tone-${r.tone}` },
+      h('div', { className: 'line' },
+        r.run !== null && p.run === null ? h('button', { className: 'tag', title: `Only run ${r.run}`, onClick: () => p.onRun(r.run) }, `#${r.run}`) : null,
+        r.text !== undefined ? h('button', { className: 'text', 'aria-expanded': p.open.has(r.key), onClick: () => p.onToggle(r.key) }, r.line) : h('span', null, r.line)),
+      r.text !== undefined && p.open.has(r.key) ? h('pre', null, r.text) : null)))
+      : h('div', { className: 'empty' }, p.paused ? 'Paused.' : 'Nothing yet: hand a task to a tool and its steps show here as they happen.'));
+}
 
 export function LiveView({ bridge }: { bridge: Bridge }) {
-  const [items, setItems] = useState<StoredEvent[]>([]);
-  const [paused, setPaused] = useState(false);
-  const [filter, setFilter] = useState('all');
-  const [expanded, setExpanded] = useState<Set<number>>(new Set());
-  const list = useRef<HTMLDivElement | null>(null);
-  const atBottom = useRef(true);
-
-  useEffect(() => {
-    const off = bridge.onEvent(e => {
-      if ('id' in e) {
-        if (!paused) setItems(old => { const n = [...old, e]; return n.length > MAX ? n.slice(-MAX) : n; });
-      }
-    });
-    return () => off();
-  }, [bridge, paused]);
-
-  const runs = new Map<string, StoredEvent[]>();
-  for (const e of items) { const r = String(runOf(e) ?? '-'); (runs.get(r) ?? runs.set(r, []).get(r)!).push(e); }
-  const groups = [...runs.entries()].sort((a, b) => {
-    const ta = a[1][a[1].length - 1].ts, tb = b[1][b[1].length - 1].ts; return tb - ta;
-  });
-  const firstRun = groups[0]?.[0] ?? null;
-  const showLatestOnly = filter === 'latest';
-  const showById = filter !== 'all' && filter !== 'latest';
-
-  const scroll = () => { if (!paused && atBottom.current && list.current) { list.current.scrollTop = list.current.scrollHeight; } };
-  useEffect(() => scroll(), [items, paused]);
-
-  return h('div', { className: 'live' },
-    h('div', { className: 'bar' },
-      h('span', { className: 'label' }, 'Live'),
-      h('select', { value: filter, onChange: (e: Event) => setFilter((e.target as HTMLSelectElement).value),
-        title: 'Filter by run' },
-        h('option', { value: 'all' }, 'All runs'), h('option', { value: 'latest' }, 'Latest'),
-        ...groups.map(([k]) => h('option', { value: k, key: k }, `Run ${k}`))
-      ),
-      h('button', { onClick: () => setPaused(p => !p) }, paused ? 'Resume' : 'Pause'),
-      h('button', { onClick: () => { setItems([]); setExpanded(new Set()); setFilter('all'); } }, 'Clear')
-    ),
-    h('div', { className: 'list', ref: list, onScroll: () => {
-      const el = list.current; if (!el) return;
-      atBottom.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 30;
-    } },
-      groups.map(([runId, entries]) => {
-        if (showLatestOnly && runId !== firstRun) return null;
-        if (showById && String(runId) !== filter) return null;
-        const header = `Run ${runId}`;
-        return h('div', { className: 'group', key: runId },
-          h('div', { className: 'group-tag' }, header, ' · ', entries.length, ' event(s)'),
-          ...entries.map(e => {
-            const detail = isDetail(e);
-            const text = detail ? String((e.data as Record<string, unknown>).text ?? '') : '';
-            return detail
-              ? h('div', { className: 'entry detail', key: e.id, onClick: () => setExpanded(s => new Set(s.has(e.id) ? [...s].filter(x => x !== e.id) : [...s, e.id])) },
-                  h('div', { className: 'line' }, '▶ ', String((e.data as Record<string, unknown>).stage ?? 'detail'), ' ', String(runId), ' · ', text.slice(0, 90) + (text.length > 90 ? '...' : '')),
-                  expanded.has(e.id) ? h('pre', { className: 'mono' }, text) : null
-                )
-              : h('div', { className: 'entry', key: e.id }, eventLine(e));
-          })
-        );
-      })
-    )
-  );
+  const [events, setEvents] = useEvents(bridge, KEEP, true);
+  const [all, setAll] = useState(false);
+  const [run, setRun] = useState<number | null>(null);
+  const [frozen, setFrozen] = useState<StoredEvent[] | null>(null);       // paused: the lines as they were
+  const [open, setOpen] = useState<Set<number>>(new Set());
+  const rows = liveRows(frozen ?? events, { all, run });
+  useEffect(() => {                                                       // follow the newest line unless the reader scrolled up
+    const el = document.querySelector<HTMLDivElement>('.feed');
+    if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 60) el.scrollTop = el.scrollHeight;
+  }, [rows.length, rows[rows.length - 1]?.text]);
+  return h(LiveList, { rows, all, run, paused: frozen !== null, open,
+    onAll: setAll, onRun: setRun, onPause: () => setFrozen(f => (f ? null : events)), onClear: () => { setEvents([]); setFrozen(null); setOpen(new Set()); },
+    onToggle: k => setOpen(s => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; }),
+    onClose: () => window.close() });
 }

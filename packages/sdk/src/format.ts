@@ -1,5 +1,5 @@
 // The one place that turns data into text (CLI, tray tooltip, app). Names always come from manifests.
-import type { AgentInfo, BackendInfo, Delivery, Level, Role, RunRow, Snapshot, StoredEvent, Switch, Target, TestResult } from './types.ts';
+import type { AgentInfo, BackendInfo, Delivery, Level, Role, RunRow, Snapshot, StoredEvent, Switch, Target, TestResult, TraceStage } from './types.ts';
 import { AUTO } from './types.ts';
 import type { LiveState } from './state.ts';
 import type { ConsentRequest, DeclaredAction, Grant } from './permissions.ts';
@@ -101,6 +101,43 @@ export const ENGINE_LABEL: Record<Target['engine'], string> = { openai: 'model A
 export const DELIVERY_LABEL: Record<Delivery, string> = { inline: 'returned', resumed: 'resumed in its session', injected: 'sent to its chat', unread: 'waiting to be read', read: 'read' };
 /** One event as a line (CLI `events`, the Activity panel). */
 export const eventLine = (e: StoredEvent) => `${new Date(e.ts).toTimeString().slice(0, 8)}  ${e.type}  ${e.source}  ${e.envId}${eventFacts(e.data)}`;
+/** How an event reads at a glance (Activity and the live pane color it): done, failed, in progress, or just information. */
+export type Tone = 'ok' | 'fail' | 'run' | 'info';
+export function eventTone(e: Pick<StoredEvent, 'type' | 'data'>): Tone {
+  const d = e.data;
+  if (e.type === 'run.finished') return d.outcome === 'done' ? 'ok' : d.outcome === 'cancelled' ? 'info' : 'fail';
+  if (e.type === 'tool.checked') return d.ok ? 'ok' : 'fail';
+  if (e.type === 'consent.answered') return d.answer === 'granted' ? 'ok' : 'fail';
+  if (e.type === 'consent.expired' || e.type === 'scan.integration_error' || (e.type === 'dispatcher.action' && d.what === 'stuck')) return 'fail';
+  if (e.type === 'run.started' || e.type === 'run.event' || e.type === 'consent.requested' || e.type === 'trace.detail') return 'run';
+  if (e.type === 'run.delivered') return d.how === 'unread' ? 'info' : 'ok';
+  return 'info';
+}
+const TRACE_LABEL: Record<TraceStage, string> = { 'route-prompt': 'asks its dispatcher model', 'route-answer': 'dispatcher model', relay: 'sends the task to', output: 'answers' };
+/** One event as a sentence (Activity, the live pane): runs, hand-offs, routing and questions in words; anything else as eventLine. */
+export function storyLine(e: StoredEvent): string {
+  const d = e.data, at = new Date(e.ts).toTimeString().slice(0, 8), run = d.id ?? d.runId;
+  const s = (() => {
+    switch (e.type) {
+      case 'run.started': return `run ${d.id}: ${d.source} → ${d.target}${d.kind && d.kind !== 'other' ? ` (${d.kind})` : ''}${d.parentRunId ? `, next step of run ${d.parentRunId}` : ''}${d.reason ? ` · ${d.reason}` : ''}`;
+      case 'run.event': return `run ${d.id}: ${e.source === 'runner' ? '' : `${e.source} `}uses ${d.tool}${d.summary ? `: ${String(d.summary).slice(0, 80)}` : ''}`;
+      case 'run.finished': return `run ${d.id}: ${d.target} ${d.outcome}${d.error ? ` (${String(d.error).slice(0, 120)})` : ''}`;
+      case 'run.delivered': return `run ${d.id}: result ${DELIVERY_LABEL[d.how as Delivery] ?? d.how}${d.to ? ` (${d.to})` : ''}`;
+      case 'dispatcher.action': return d.what === 'routed' ? `Agent Spaghetti picks ${d.to} for ${d.asked} (${d.why})`
+        : d.what === 'handed-over' ? `run ${d.id}: no progress on ${d.from}, handed to ${d.to}` : d.what === 'stuck' ? `run ${d.id}: no progress on ${d.target}` : null;
+      case 'consent.requested': return `${e.source} asks to ${d.action} ${d.resource}${d.cost && d.cost !== 'free' ? ` (${d.cost === 'metered' ? 'paid' : d.cost})` : ''}: waiting for you`;
+      case 'consent.answered': return `${e.source}: ${d.answer}${d.scope ? ` (${d.scope})` : ''}`;
+      case 'consent.expired': return `${e.source}: question expired (denied)`;
+      case 'trace.detail': {
+        const stage = d.stage as TraceStage, who = d.target ? String(d.target) + (d.model ? `:${d.model}` : '') : '';
+        const text = String(d.text ?? '').replace(/\s+/g, ' ').trim();
+        return `${run ? `run ${run}: ` : ''}${stage === 'output' ? `${who} ${TRACE_LABEL.output}` : stage === 'relay' ? `${TRACE_LABEL.relay} ${who}` : `Agent Spaghetti ${TRACE_LABEL[stage] ?? stage}`}: ${text.slice(0, 160)}${text.length > 160 ? '…' : ''}`;
+      }
+      default: return null;
+    }
+  })();
+  return s ? `${at}  ${s}` : eventLine(e);
+}
 /** An event's short facts (plain values only, each cut short): what makes a line in Activity readable. */
 const eventFacts = (d: Record<string, unknown>) => {
   const kv = Object.entries(d).filter(([, v]) => ['string', 'number', 'boolean'].includes(typeof v)).slice(0, 6).map(([k, v]) => `${k}=${String(v).slice(0, 40)}`);

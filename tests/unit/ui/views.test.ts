@@ -94,13 +94,18 @@ test('runs panel: form fields → delegate input (auto, then, return); list line
   const form = html(h(RunsView, { ...base, chain: null, selected: null }));
   assert.match(form, /<option value="oc"[^>]*>OpenClaw \(unknown\)<\/option>/); assert.match(form, /Agent<select name="model">/);
   assert.match(form, /<textarea name="task"[^>]*required=""/);
-  assert.equal([...form.matchAll(/class="line"/g)].length, 2);
+  assert.equal([...form.matchAll(/class="line tone-ok"/g)].length, 2, 'run lines colored by outcome');
   assert.match(form, /<option value="auto">Let Agent Spaghetti choose<\/option>/); assert.match(form, /<select name="returnTo">/); assert.match(form, /name="cwd"/, 'agents get a folder field');
   assert.match(form, /<select aria-label="Add a next step"><option value="" selected="">nobody \(one step\)<\/option><option value="oc">OpenClaw \(unknown\)<\/option><option value="oc:main">OpenClaw: main<\/option>/);
   const two = html(h(RunsView, { ...base, chain: null, selected: null, then: ['oc:worker', 'auto'] }));
   assert.match(two, /then:<\/span><span class="step">OpenClaw: worker<button type="button" aria-label="Remove step 1">×<\/button><\/span><span class="step">Let Agent Spaghetti choose/);
   assert.match(two, /<input type="hidden" name="then" value="oc:worker,auto"\/>/);
-  assert.match(form, /Runs<span class="badge"[^>]*> 1 waiting<\/span>/); assert.match(form, /↩ waiting to be read/);
+  assert.match(form, /Runs<button class="badge" aria-pressed="false"[^>]*>1 waiting<\/button>/); assert.match(form, /↩ waiting to be read/);
+  const waiting = html(h(RunsView, { ...base, chain: null, selected: null, waitingOnly: true }));
+  assert.equal([...waiting.matchAll(/class="line tone-/g)].length, 1, 'the waiting filter shows only results nobody collected');
+  assert.match(waiting, />1 waiting ×<\/button>/);
+  const unread = html(h(RunsView, { ...base, chain: [r(1, { delivered: 'unread', outcome: 'error', error: 'next hop not started' })], selected: 1 }));
+  assert.match(unread, /<div class="card error">next hop not started<\/div>/); assert.match(unread, /waiting for tray to collect it/); assert.match(unread, />Dismiss<\/button>/);
   const one = html(h(RunsView, { ...base, chain: [r(1, { delivered: 'resumed' }), r(2, { parentRunId: 1, source: 'oc', target: 'cc' }), r(3, { parentRunId: 2, source: 'cc', outcome: 'running' })], selected: 3, result: 'partial <b>' }));
   assert.match(one, /tray → oc .*↩ resumed in its session/); assert.match(one, /oc → cc/); assert.match(one, /cc → oc/);
   assert.match(one, /← All runs/); assert.match(one, /<div class="me">/); assert.match(one, /<pre>partial &lt;b&gt;<\/pre>/);
@@ -121,5 +126,27 @@ test('settings and activity panels: grouped fields, pick lists from the daemon\'
   const ev = (id: number, type: string, data = {}) => ({ id, ts: 0, type, envId: 'hub', source: 's', data }) as never;
   const a = html(h(ActivityView, { events: [ev(1, 'scan.completed'), ev(2, 'tool.checked', { action: 'test', ok: false, envs: 'windows', deep: { x: 1 } })] }));
   assert.ok(a.indexOf('tool.checked') < a.indexOf('scan.completed'));
-  assert.match(a, /tool.checked  s  hub  action=test ok=false envs=windows</);
+  assert.match(a, /<div class="tone-fail">[^<]*tool.checked  s  hub  action=test ok=false envs=windows</, 'a failed check reads red');
+  const story = html(h(ActivityView, { events: [ev(3, 'run.started', { id: 7, source: 'cursor', target: 'lmstudio', kind: 'summarize', reason: 'cheap' }), ev(4, 'run.finished', { id: 7, target: 'lmstudio', outcome: 'done' })] }));
+  assert.match(story, /<div class="tone-ok">[^<]*run 7: lmstudio done<\/div><div class="tone-run">[^<]*run 7: cursor → lmstudio \(summarize\) · cheap</);
+});
+
+test('live pane: work events only by default, one run on request, streamed output as one growing line; header controls', async () => {
+  const { LiveList, liveRows } = await import('@agent-spaghetti/ui/live');
+  const ev = (id: number, type: string, data: Record<string, unknown>) => ({ id, ts: 0, type, envId: 'hub', source: 'runner', data }) as never;
+  const events = [ev(1, 'scan.completed', { detections: 3 }), ev(2, 'run.started', { id: 5, source: 'claude-desktop', target: 'lmstudio' }),
+    ev(-1, 'trace.detail', { stage: 'relay', runId: 5, target: 'lmstudio', text: 'Research X' }),
+    ev(-2, 'trace.detail', { stage: 'output', runId: 5, target: 'lmstudio', text: 'Hello ' }), ev(-3, 'trace.detail', { stage: 'output', runId: 5, target: 'lmstudio', text: 'world' }),
+    ev(3, 'run.started', { id: 6, source: 'cursor', target: 'codex' }), ev(4, 'dispatcher.action', { what: 'routed', asked: 'auto', to: 'lmstudio', why: 'best-ranked target' })];
+  const rows = liveRows(events);
+  assert.deepEqual(rows.map(r => r.line.slice(10)), ['run 5: claude-desktop → lmstudio', 'run 5: sends the task to lmstudio: Research X', 'run 5: lmstudio answers: Hello world',
+    'run 6: cursor → codex', 'Agent Spaghetti picks lmstudio for auto (best-ranked target)']);
+  assert.equal(rows[2].text, 'Hello world');
+  assert.equal(liveRows(events, { all: true }).length, 6, 'everything: the scan too');
+  assert.deepEqual(liveRows(events, { run: 6 }).map(r => r.run), [6]);
+  const page = html(h(LiveList, { rows, all: false, run: null, paused: false, open: new Set([-2]), onAll: noop, onRun: noop, onPause: noop, onClear: noop, onToggle: noop, onClose: noop }));
+  assert.match(page, /<header class="bar">.*<option value="work" selected="">Runs and hand-offs<\/option>.*>Pause<\/button>.*>Clear<\/button><button aria-label="Close"/s);
+  assert.match(page, /<button class="tag" title="Only run 5">#5<\/button>/); assert.match(page, /<pre>Hello world<\/pre>/, 'an opened trace shows its full text');
+  const one = html(h(LiveList, { rows: liveRows(events, { run: 6 }), all: false, run: 6, paused: true, open: new Set<number>(), onAll: noop, onRun: noop, onPause: noop, onClear: noop, onToggle: noop, onClose: noop }));
+  assert.match(one, /class="chip"[^>]*>run 6 ×</); assert.match(one, /aria-pressed="true">Resume</);
 });

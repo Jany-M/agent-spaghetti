@@ -156,6 +156,11 @@ export const handlers: Handlers = {
     if (!s.ledger.get(num(i.id, 0))) throw new Error(`no run ${i.id}`);
     s.ledger.update(num(i.id, 0), { verdict: i.value }); return { ok: true };
   },
+  dismiss: (i, s) => {
+    const run = s.ledger.get(num(i.id, 0)), chainId = run?.chainId ?? 0;
+    if (s.ledger.get(chainId)?.delivered !== 'unread') throw new Error(`run ${i.id} has no result waiting for its caller`);
+    s.ledger.update(chainId, { delivered: 'read' }); return { ok: true };
+  },
   connect: async (i, s) => {   // where the last scan found it as a client (else every env it was found in), until one works
     const id = need(i.integration, 'integration'), on = i.on !== false;
     const found = snapshot(s)?.detections.filter(d => d.integration === id && (!i.envId || d.envId === i.envId)) ?? [];

@@ -40,6 +40,7 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
     io.out(`agent-spaghetti daemon ${running ? 'already running' : 'started'} on 127.0.0.1:${readDiscovery(dataDir(env))?.port} (data: ${dataDir(env)})`);
     return 0;
   }
+  if (cmd === 'daemon' && args.length > 1) { io.err(`unknown daemon option ${args[1]} (daemon [--detached | stop])`); return 1; }
   if (cmd === 'daemon') {
     const { runDaemon } = await import('@agent-spaghetti/core');
     const d = await runDaemon(env);
@@ -145,6 +146,11 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
       }
       case 'targets': { const r = await c.call('targets'); print(r, () => r.length ? renderTable([['Target', 'Name', 'Kind', 'Cost', 'Takes tasks via', 'Models / agents'], ...r.map(t => [t.id, t.name, t.kind, t.cost, ENGINE_LABEL[t.engine], t.models.join(', ') || '-'])]) : 'Nothing to delegate to yet (scan first; start a local model server or install an agent).'); break; }
       case 'runs': {
+        if (a1 === '--unread') {                                  // results waiting for a caller: given once, then read
+          const r = await c.call('runs', { unread: true, source: a2 ?? 'cli' });
+          print(r, () => (r.unread ?? []).map(v => [runLine(v.run), v.result ?? ''].join('\n')).join('\n\n') || `No results waiting for ${a2 ?? 'cli'}.`);
+          break;
+        }
         const r = await c.call('runs', a1 ? { id: Number(a1) } : {});
         print(r, () => [...r.runs.map(runLine), ...(r.result ? ['', r.result] : [])].join('\n') || 'No runs yet.');
         break;
@@ -168,6 +174,7 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
         print(r, () => `run ${id}: result sent`); break;
       }
       case 'cancel': { const r = await c.call('cancel', { id: Number(a1) }); print(r, () => (r.cancelled ? `run ${a1} cancelled` : `run ${a1} is not running`)); break; }
+      case 'dismiss': { const r = await c.call('dismiss', { id: Number(a1) }); print(r, () => `run ${a1}: result no longer kept for its caller`); break; }
       case 'verdict': { const r = await c.call('verdict', { id: Number(a1), value: a2 as 'up' }); print(r, () => `run ${a1}: ${a2}`); break; }
       case 'connect': {
         const r = await c.call('connect', { integration: a1, on: cmd !== 'disconnect', dryRun: args.includes('--dry-run') });

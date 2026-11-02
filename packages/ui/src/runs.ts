@@ -16,8 +16,8 @@ export function delegateInput(f: Record<string, string>): DelegateIn {
 export interface RunsProps {
   runs: RunRow[]; chain: RunRow[] | null; result?: string; selected: number | null; targets: Target[]; target: string;
   then: string[]; onThen(steps: string[]): void;                 // next steps picked so far (target, target:model or auto)
-  busy: string | null; error: string | null;
-  onSelect(id: number | null): void; onVerdict(id: number, v: 'up' | 'down' | 'redo'): void; onCancel(id: number): void;
+  busy: string | null; error: string | null; waitingOnly?: boolean; onWaitingOnly?(on: boolean): void;
+  onSelect(id: number | null): void; onVerdict(id: number, v: 'up' | 'down' | 'redo'): void; onCancel(id: number): void; onDismiss?(id: number): void;
   onTarget(id: string): void; onSend(f: Record<string, string>): void;
 }
 
@@ -26,7 +26,8 @@ export function RunsView(p: RunsProps) {
   const steps = [...p.targets.flatMap(x => [{ value: x.id, label: `${x.name} (${x.cost})` }, ...x.models.map(m => ({ value: `${x.id}:${m}`, label: `${x.name}: ${m}` }))]),
     { value: AUTO, label: 'Let Agent Spaghetti choose' }];
   const stepLabel = (v: string) => steps.find(s => s.value === v)?.label ?? v;
-  const unread = p.runs.filter(r => r.delivered === 'unread').length;
+  const unread = p.runs.filter(r => r.delivered === 'unread').length, shown = p.waitingOnly ? p.runs.filter(r => r.delivered === 'unread') : p.runs;
+  const first = p.chain?.[0];                                   // the chain's first run: who asked, where the result went
   const sel = p.chain?.find(r => r.id === p.selected);
   const form = h('form', { className: 'card form', onSubmit: (e: { preventDefault(): void; currentTarget: unknown }) => {
       e.preventDefault(); p.onSend(Object.fromEntries(new FormData(e.currentTarget as HTMLFormElement) as unknown as Iterable<[string, string]>));
@@ -53,28 +54,36 @@ export function RunsView(p: RunsProps) {
     sel ? h('div', { className: 'card' },
       h('div', { className: 'row' }, h('button', { onClick: () => p.onSelect(null) }, '← All runs')),
       h('h2', null, 'Hand-off chain'), h('div', { className: 'list' }, ...p.chain!.map(r => h('div', { key: r.id, className: r.id === sel.id ? 'me' : '' }, runLine(r)))),
+      sel.error ? h('div', { className: 'card error' }, sel.error) : null,
       p.result !== undefined ? h('pre', null, p.result) : null,
+      first?.delivered === 'unread' ? h('div', { className: 'why' }, `The result is waiting for ${first.source} to collect it (it asks with run_status). Dismiss it if nobody will.`) : null,
       h('div', { className: 'row' },
+        first?.delivered === 'unread' ? h('button', { disabled: !!p.busy, onClick: () => p.onDismiss?.(first.id) }, 'Dismiss') : null,
         sel.outcome === 'running' ? h('button', { disabled: !!p.busy, onClick: () => p.onCancel(sel.id) }, 'Cancel') : null,
         ...(['up', 'down', 'redo'] as const).map(v => h('button', { key: v, disabled: !!p.busy || sel.verdict === v, onClick: () => p.onVerdict(sel.id, v) },
           v === 'up' ? 'Good' : v === 'down' ? 'Bad' : 'Redo'))))
       : form,
-    h('section', null, h('h2', null, 'Runs', unread ? h('span', { className: 'badge', title: 'Results their caller has not collected yet' }, ` ${unread} waiting`) : null), p.runs.length
-      ? h('div', { className: 'card list runs' }, ...p.runs.map(r => h('button', { key: r.id, className: 'line', onClick: () => p.onSelect(r.id) }, runLine(r))))
-      : h('div', { className: 'empty' }, 'No runs yet.')));
+    h('section', null, h('h2', null, 'Runs', unread || p.waitingOnly ? h('button', { className: 'badge', 'aria-pressed': !!p.waitingOnly,
+        title: p.waitingOnly ? 'Show every run' : 'Results their caller has not collected yet: show only these', onClick: () => p.onWaitingOnly?.(!p.waitingOnly) },
+        p.waitingOnly ? `${unread} waiting ×` : `${unread} waiting`) : null), shown.length
+      ? h('div', { className: 'card list runs' }, ...shown.map(r => h('button', { key: r.id, className: `line tone-${r.outcome === 'running' ? 'run' : r.outcome === 'done' ? 'ok' : r.outcome === 'cancelled' ? 'info' : 'fail'}`,
+        onClick: () => p.onSelect(r.id) }, runLine(r))))
+      : h('div', { className: 'empty' }, p.waitingOnly ? 'No results waiting.' : 'No runs yet.')));
 }
 
 export function RunsPanel({ bridge }: { bridge: Bridge }) {
   const [selected, setSelected] = useState<number | null>(null);
   const [target, setTarget] = useState('');
   const [then, setThen] = useState<string[]>([]);
+  const [waitingOnly, setWaitingOnly] = useState(false);
   const list = useOp(bridge, 'runs', { limit: 50 });
   const one = useOp(bridge, 'runs', selected === null ? { limit: 0 } : { id: selected, watch: true, source: 'tray' });   // a tray hand-off being looked at: its caller has it
   const targets = useOp(bridge, 'targets');
   const { busy, error, act } = useAct(list.reload);
   return h(RunsView, {
     runs: list.data?.runs ?? [], chain: selected === null ? null : one.data?.runs ?? null, result: selected === null ? undefined : one.data?.result,
-    selected, targets: targets.data ?? [], target, then, onThen: setThen, busy, error: error ?? list.error,
+    selected, targets: targets.data ?? [], target, then, onThen: setThen, busy, error: error ?? list.error, waitingOnly, onWaitingOnly: setWaitingOnly,
+    onDismiss: id => act('dismiss', () => bridge.call('dismiss', { id }).then(one.reload)),
     onSelect: setSelected, onTarget: setTarget,
     onVerdict: (id, v) => act('verdict', () => bridge.call('verdict', { id, value: v }).then(one.reload)),
     onCancel: id => act('cancel', () => bridge.call('cancel', { id })),
