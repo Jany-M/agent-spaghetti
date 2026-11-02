@@ -86,13 +86,15 @@ export async function listModels(env: Environment, m: Manifest, hit: Hit): Promi
     });
 }
 /** Whether the client already has agent-spaghetti (its plugin folder, the entry in its MCP config, or a config its CLI writes naming it). Read-only. */
+/** Connected = our server is there and starts as this tool (`mcp --as <id>`), not just any agent-spaghetti entry (backlog B8). */
 export async function isConnected(env: Environment, m: Manifest): Promise<boolean> {
   const s = m.speaks;
   if (!await extrasThere(env, m)) return false;
   if (s?.agentPlugins && await env.glob(`${pluginDir(s.agentPlugins.dir)}/mcp.json`)) return true;
-  if (!s?.mcpClient) return !!s?.mcpCli?.config && !!(await env.readFile(s.mcpCli.config))?.includes('agent-spaghetti');
-  const servers = pick(parseJsonc(await env.readFile(s.mcpClient.config)), s.mcpClient.key);
-  return !!servers && typeof servers === 'object' && 'agent-spaghetti' in servers;
+  const asMe = new RegExp(`--as["'\\s,\\-\\[\\]]*${m.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-])`);   // JSON, TOML or YAML lists alike
+  if (!s?.mcpClient) return !!s?.mcpCli?.config && asMe.test((await env.readFile(s.mcpCli.config)) ?? '');
+  const entry = (pick(parseJsonc(await env.readFile(s.mcpClient.config)), s.mcpClient.key) as Record<string, unknown> | undefined)?.['agent-spaghetti'];
+  return !!entry && asMe.test(JSON.stringify(entry));
 }
 function explain(m: Manifest, installs: Install[], hit: unknown, backends: BackendInfo[], inv: Inventory, connected: boolean | undefined): Pick<Detection, 'connectable' | 'why'> {
   const partial = inv.partial.length ? ` (partial scan: ${inv.partial.join(', ')})` : '';

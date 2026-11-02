@@ -30,7 +30,7 @@
         "kilo": "C:/Users/u/bin/kilo.exe"
       },
       "files": {
-        "~/.config/kilo/kilo.jsonc": "{\n  // mine\n  \"mcp\": { \"agent-spaghetti\": { \"type\": \"local\" }, },\n}"
+        "~/.config/kilo/kilo.jsonc": "{\n  // mine\n  \"mcp\": { \"agent-spaghetti\": { \"type\": \"local\", \"command\": [\"node\", \"C:/as/cli.ts\", \"mcp\", \"--as\", \"kilo\"] }, },\n}"
       }
     },
     "expect": {

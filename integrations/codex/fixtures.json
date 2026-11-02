@@ -26,12 +26,27 @@
         "codex": "C:/Users/u/bin/codex.exe"
       },
       "files": {
-        "~/.codex/config.toml": "[mcp_servers.agent-spaghetti]\ncommand = \"node\"\n"
+        "~/.codex/config.toml": "[mcp_servers.agent-spaghetti]\ncommand = \"node\"\nargs = [\"C:/as/cli.ts\", \"mcp\", \"--as\", \"codex\"]\n"
       }
     },
     "expect": {
       "installs": 1,
       "connected": true
+    }
+  },
+  {
+    "name": "our server set up for another tool is not a connection of this one",
+    "env": {
+      "bins": {
+        "codex": "C:/Users/u/bin/codex.exe"
+      },
+      "files": {
+        "~/.codex/config.toml": "[mcp_servers.agent-spaghetti]\ncommand = \"node\"\nargs = [\"C:/as/cli.ts\", \"mcp\", \"--as\", \"claude-cli\"]\n"
+      }
+    },
+    "expect": {
+      "installs": 1,
+      "connected": false
     }
   },
   {
