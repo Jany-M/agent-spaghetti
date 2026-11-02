@@ -19,7 +19,8 @@ import { Runner } from '../../../packages/core/src/runner.ts';
 test('paths across environments: Windows ↔ WSL, \\\\wsl$ shares, file: URIs from MCP roots', () => {
   assert.deepEqual(['E:\\Dropbox\\proj', 'C:/x/y.ts', 'E:\\', '\\\\wsl$\\Ubuntu\\home\\u', '//wsl.localhost/Ubuntu/home/u', '/home/u'].map(p => envPath(p, 'posix')),
     ['/mnt/e/Dropbox/proj', '/mnt/c/x/y.ts', '/mnt/e', '/home/u', '/home/u', '/home/u']);
-  assert.deepEqual(['/mnt/e/Dropbox/proj', '/mnt/c', '/home/u', 'C:\\x', 'e:/proj/a.ts'].map(p => envPath(p, 'windows')), ['E:\\Dropbox\\proj', 'C:\\', '/home/u', 'C:\\x', 'e:\\proj\\a.ts']);
+  assert.deepEqual(['/mnt/e/Dropbox/proj', '/mnt/c', '/home/u', 'C:\\x', 'e:/proj/a.ts', '/e:/proj'].map(p => envPath(p, 'windows')), ['E:\\Dropbox\\proj', 'C:\\', '/home/u', 'C:\\x', 'e:\\proj\\a.ts', 'e:\\proj']);
+  assert.equal(envPath('/e:/proj', 'posix'), '/mnt/e/proj', 'a URI-style drive path (Cursor) is a drive path');
   assert.deepEqual(['file:///e%3A/My%20proj', 'file:///home/u/p', 'file://wsl.localhost/Ubuntu/home', 'http://x'].map(uriPath),
     ['e:/My proj', '/home/u/p', '//wsl.localhost/Ubuntu/home', undefined]);
 });

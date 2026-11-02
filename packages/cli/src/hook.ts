@@ -5,7 +5,7 @@
 // (https://code.claude.com/docs/en/hooks: block = {"decision":"block","reason"}), checked 2026-10-17. Cursor also runs Claude Code's
 // hooks (https://cursor.com/docs/reference/third-party-hooks, on by default). A client that runs hooks names itself in the input
 // (`<client>_version`, e.g. Cursor's `cursor_version`); a hook installed for another client stays out, the client's own hook answers.
-import { parseHop, type RunRequest } from '@agent-spaghetti/sdk';
+import { drivePath, parseHop, type RunRequest } from '@agent-spaghetti/sdk';
 
 export const PREFIX = '>>';
 const META = ['conversation_id', 'session_id', 'generation_id', 'tool_name', 'mcp_server_name', 'status', 'model'];
@@ -38,8 +38,8 @@ export function planHook(input: Record<string, any>, client = 'client'): HookPla
   if (!kind) return { reply: {}, report };
   const p = parsePrefix(String(input.prompt ?? ''));
   if (!p) return { reply: kind.pass, report };
-  const root = Array.isArray(input.workspace_roots) ? String(input.workspace_roots[0] ?? '') : String(input.cwd ?? '');
-  const files = (Array.isArray(input.attachments) ? input.attachments : []).filter((a: any) => a?.type === 'file' && a.file_path).map((a: any) => String(a.file_path));
+  const root = drivePath(Array.isArray(input.workspace_roots) ? String(input.workspace_roots[0] ?? '') : String(input.cwd ?? ''));
+  const files = (Array.isArray(input.attachments) ? input.attachments : []).filter((a: any) => a?.type === 'file' && a.file_path).map((a: any) => drivePath(String(a.file_path)));
   return { block: kind.block, delegate: { target: p.target, ...(p.model ? { model: p.model } : {}), ...(p.then.length ? { then: p.then } : {}), task: p.task,
     ...(files.length ? { files } : {}), reason: 'sent with the >> prefix', ...(root ? { cwd: root, resultDir: under(root, '.agent-spaghetti', 'results') } : {}) } };
 }

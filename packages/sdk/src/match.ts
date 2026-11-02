@@ -23,7 +23,10 @@ export function fillEnv(headers: Record<string, string> | undefined, env: Record
   return ok ? out : null;
 }
 /** A path as an environment spells it: Windows `C:\\x` (backslashes) ↔ WSL `/mnt/c/x`, and `\\\\wsl$\\<distro>\\x` → `/x` inside the distro. Others unchanged. */
+/** `/e:/x` (a drive path written URI-style, e.g. by Cursor's hooks and file URIs) → `e:/x`; anything else unchanged. */
+export const drivePath = (p: string) => (/^\/[a-zA-Z]:/.test(p) ? p.slice(1) : p);
 export function envPath(p: string, kind: 'windows' | 'posix'): string {
+  p = drivePath(p);
   if (kind === 'posix') {
     const unc = /^(?:\\\\|\/\/)wsl(?:\$|\.localhost)[\\/][^\\/]+(.*)$/i.exec(p);
     if (unc) return unc[1].replaceAll('\\', '/') || '/';
@@ -37,6 +40,6 @@ export function envPath(p: string, kind: 'windows' | 'posix'): string {
 export function uriPath(uri: string): string | undefined {
   if (!uri.startsWith('file://')) return undefined;
   const [, host, rest] = /^file:\/\/([^/]*)(.*)$/.exec(uri)!, p = decodeURIComponent(rest);
-  return host && host !== 'localhost' ? `//${host}${p}` : /^\/[a-zA-Z]:/.test(p) ? p.slice(1) : p;   // a host: a UNC path (e.g. wsl.localhost)
+  return host && host !== 'localhost' ? `//${host}${p}` : drivePath(p);   // a host: a UNC path (e.g. wsl.localhost)
 }
 export const samePath = (a: string, b: string, kind: EnvKind) => norm(a, kind) === norm(b, kind);

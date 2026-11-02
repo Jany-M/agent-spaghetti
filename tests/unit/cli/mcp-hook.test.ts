@@ -81,6 +81,10 @@ test('>> hooks (Cursor, Claude Code): one parser for target[:model] and chains; 
   assert.ok('delegate' in p);
   assert.deepEqual(p.delegate, { target: 'lmstudio', then: ['openclaw:worker'], task: 'write tests for utils.ts', files: ['/w/utils.ts'], reason: 'sent with the >> prefix', cwd: '/w', resultDir: '/w/.agent-spaghetti/results' });
   assert.deepEqual(p.block('sent'), { continue: false, user_message: 'sent' });
+  const cur = planHook({ hook_event_name: 'beforeSubmitPrompt', prompt: '>>lmstudio say hi', workspace_roots: ['/e:/Dropbox/proj'], attachments: [{ type: 'file', file_path: '/e:/Dropbox/proj/a.ts' }] });
+  assert.ok('delegate' in cur);
+  assert.deepEqual([cur.delegate.cwd, cur.delegate.files, cur.delegate.resultDir], ['e:/Dropbox/proj', ['e:/Dropbox/proj/a.ts'], 'e:/Dropbox/proj/.agent-spaghetti/results'],
+    'Cursor on Windows writes drive paths as /e:/…');
   const cc = planHook({ hook_event_name: 'UserPromptSubmit', prompt: '>>codex fix it', cwd: 'E:\\proj', session_id: 's' });
   assert.ok('delegate' in cc);
   assert.deepEqual([cc.delegate.cwd, cc.delegate.resultDir, cc.block('sent')], ['E:\\proj', 'E:\\proj\\.agent-spaghetti\\results', { decision: 'block', reason: 'sent' }]);
