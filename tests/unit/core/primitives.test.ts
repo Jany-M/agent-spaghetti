@@ -63,3 +63,14 @@ test('spawnLines stop() returns even when a detached grandchild keeps the pipe o
     assert.notEqual(exit, 'hung', 'exited waits for the grandchild to close the pipe');
   } finally { try { process.kill(pid); } catch { /* gone */ } }
 });
+test('spawnLines exited settles when the child ends on its own while a detached grandchild keeps the pipe open', async () => {
+  const grandchild = 'console.log(process.pid); setTimeout(() => {}, 60000)';
+  const parent = `require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(grandchild)}], { stdio: 'inherit', detached: true }).unref(); setTimeout(() => process.exit(3), 300)`;
+  let pid = 0;
+  const p = spawnLines(node, ['-e', parent], l => { pid = Number(l); });
+  try {
+    const exit = await Promise.race([p.exited, new Promise(r => setTimeout(() => r('hung'), 5000))]);
+    assert.equal(exit, 3, 'the child\'s own exit code, without waiting for the grandchild');
+    p.stop();                                                   // stopping after the exit is harmless
+  } finally { for (let i = 0; i < 50 && !pid; i++) await new Promise(r => setTimeout(r, 20)); try { process.kill(pid); } catch { /* gone */ } }
+});

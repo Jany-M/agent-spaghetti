@@ -31,6 +31,7 @@ export function spawnFile(cmd: string, args: string[], opts: SpawnOpts = {}): Pr
   });
 }
 
+const EXIT_GRACE_MS = 1000;
 export interface LinesOpts { env?: NodeJS.ProcessEnv; input?: string | AsyncIterable<string>; cwd?: string }
 /** Long-running process: one callback per stdout line. Returns a stop function, the exit promise and the stderr tail. */
 export function spawnLines(cmd: string, args: string[], onLine: (line: string) => void, opts: LinesOpts = {}):
@@ -46,9 +47,12 @@ export function spawnLines(cmd: string, args: string[], onLine: (line: string) =
   if (typeof input === 'string') child.stdin!.end(input);
   else if (input) void (async () => { try { for await (const l of input) child.stdin!.write(l + '\n'); } finally { child.stdin!.end(); } })().catch(() => { /* exited */ });
   createInterface({ input: child.stdout! }).on('line', onLine);
-  let stopped = false;
-  const exited = new Promise<number>(r => { child.on('error', () => r(127)); child.on('close', c => r(c ?? 1)); child.on('exit', c => { if (stopped) r(c ?? 1); }); });   // once stopped, do not wait for a grandchild that kept the pipe open
-  const stop = () => { stopped = true; try { if (group && child.pid) process.kill(-child.pid, 'SIGTERM'); else child.kill(); } catch { child.kill(); } };
+  // Exit, not only close: a grandchild that inherited stdout can keep the pipe open long after the child is gone. Once stopped
+  // the exit settles at once; an exit of its own gets EXIT_GRACE_MS for the last lines to arrive.
+  let stopped = false, code: number | null = null, settle!: (c: number) => void;
+  const exited = new Promise<number>(r => { settle = r; child.on('error', () => r(127)); child.on('close', c => r(c ?? code ?? 1));
+    child.on('exit', c => { code = c ?? 1; if (stopped) r(code); else setTimeout(() => r(code!), EXIT_GRACE_MS).unref(); }); });
+  const stop = () => { stopped = true; if (code !== null) settle(code); try { if (group && child.pid) process.kill(-child.pid, 'SIGTERM'); else child.kill(); } catch { child.kill(); } };
   return { stop, exited, stderr: () => err };
 }
 /** Lines as an async iterable (runs); throws after the last line when the process failed. */
