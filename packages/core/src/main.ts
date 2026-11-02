@@ -81,7 +81,7 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
       if (!e) throw new Error(`environment ${envId} is gone (rescan)`);
       yield* runOnEnv(e, await ctx(), id, req, ro);
     } });
-  const dispatcher = new Dispatcher({ runner, settings, bus, ledger });
+  const dispatcher = new Dispatcher({ runner, settings, bus, ledger, live: () => live });
   const gateway = new Gateway({ settings, store, runner });
   const watchdog = dispatcher.watch();
   const hubFiles = new Map<string, string>();

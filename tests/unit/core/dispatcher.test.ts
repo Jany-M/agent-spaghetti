@@ -24,13 +24,13 @@ const agent = (id: string, cost: 'free' | 'metered'): Integration => ({ source: 
 const agents = [agent('paid', 'metered'), agent('coder', 'free'), agent('brain', 'free'), agent('helper', 'free')];
 const det = (i: Integration): Detection => ({ integration: i.manifest.id, name: i.manifest.id, envId: 'windows', installs: [{ path: '/b/x', via: 'bin' }], levels: [], cost: i.manifest.cost!, connectable: 'yes', why: '' });
 const snap: Snapshot = { ts: 1, envs: [{ id: 'windows', state: 'running' }], agents: [], rejected: [], backends: [], detections: agents.map(det) };
-function setup() {
+function setup(queues: Record<string, { waiting: number; running: number }> = {}) {
   const store = new Store(':memory:'), bus = new Bus(store), consent = new Consent(bus), settings = new Settings(store), ledger = new Ledger(store), host = fakeEnv({});
   let dispatcher!: Dispatcher;
   const runner = new Runner({ bus, consent, ledger, settings, resultsDir: mkdtempSync(join(tmpdir(), 'as-disp-')), host: () => host, snapshot: () => snap, integrations: () => agents,
     route: (s, r) => dispatcher.route(s, r),
     runOn: (_e, id, req, o) => agents.find(a => a.manifest.id === id)!.module!.run!(host, det(agents.find(a => a.manifest.id === id)!), req, { ...o, inventory: { installed: [], processes: [], listening: [], env: {}, partial: [] } }) });
-  dispatcher = new Dispatcher({ runner, settings, bus, ledger });
+  dispatcher = new Dispatcher({ runner, settings, bus, ledger, live: () => ({ queues }) as never });
   const actions = () => store.eventsSince(0).filter(e => e.type === 'dispatcher.action').map(e => e.data);
   return { store, settings, ledger, runner, dispatcher, actions };
 }
@@ -84,4 +84,8 @@ test('watchdog: off without a model; a stuck run goes to the next target once pe
   assert.equal(s.ledger.get(own.id)!.outcome, 'running');
   s.runner.active().forEach(a => s.runner.cancel(a.id));
   await r.done; await own.done;
+});
+test('auto: among equally cheap targets the one with the shortest queue', async () => {
+  const { dispatcher } = setup({ coder: { waiting: 2, running: 1 } });
+  assert.equal((await dispatcher.route('cli', { target: 'auto', task: 't' })).target, 'brain', 'coder is busy: the next free one');
 });

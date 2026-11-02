@@ -2,7 +2,7 @@
 // when it is on, one that is not available), and hands a run without progress for `dispatcher.stuckMin` to the next target,
 // once per chain. It thinks with `dispatcher.model` through the runner itself (its runs are recorded like any other);
 // without a model it is off and `auto` takes the best-ranked target (sdk rankTargets: free first, no tool preferred).
-import type { Disposable, RunRequest, Target } from '@agent-spaghetti/sdk';
+import type { Disposable, LiveState, RunRequest, Target } from '@agent-spaghetti/sdk';
 import { AUTO, parseHop, rankTargets } from '@agent-spaghetti/sdk';
 import type { Bus } from './bus.ts';
 import type { Ledger } from './ledger.ts';
@@ -24,16 +24,21 @@ export function parseRoute(answer: string, options: Target[]): { target: string;
 }
 
 export class Dispatcher {
-  private d: { runner: Runner; settings: Settings; bus: Bus; ledger: Ledger };
+  private d: { runner: Runner; settings: Settings; bus: Bus; ledger: Ledger; live?(): LiveState };
   private handed = new Set<number>();                       // chains handed over once
   private reported = new Set<number>();                     // runs reported stuck
   constructor(d: Dispatcher['d']) { this.d = d; }
   on(): boolean { return !!this.d.settings.get('dispatcher.model'); }
+  /** Available targets, best first; among equals the one with the shortest queue (two free model servers share the load). */
+  private ranked(skip: string[]): Target[] {
+    const q = this.d.live?.().queues ?? {};
+    return rankTargets(this.d.runner.targets().filter(t => !skip.includes(t.id)), { queued: id => (q[id]?.waiting ?? 0) + (q[id]?.running ?? 0) });
+  }
 
   /** The request with a target chosen: the model's pick when on, else the ranking's first. Never the caller itself. */
   async route(source: string, req: RunRequest): Promise<RunRequest> {
     if (req.target !== AUTO && !this.on()) return req;      // an unknown target stays an error when the dispatcher is off
-    const options = rankTargets(this.d.runner.targets().filter(t => t.id !== source));
+    const options = this.ranked([source]);
     if (!options.length) throw new Error('no target is available for this task (see: targets)');
     let pick: { target: string; model?: string } = { target: options[0].id }, why = 'best-ranked target';
     if (this.on()) {
@@ -58,7 +63,7 @@ export class Dispatcher {
     const limit = this.d.settings.get('dispatcher.stuckMin') * 60_000;
     for (const r of this.d.runner.active()) {
       if (r.source === SELF || now - r.at < limit) continue;  // never acts on its own runs
-      const next = rankTargets(this.d.runner.targets().filter(t => t.id !== r.target && t.id !== r.source))[0];
+      const next = this.ranked([r.target, r.source])[0];
       if (this.handed.has(r.chainId) || !next) { if (!this.reported.has(r.id)) { this.reported.add(r.id); this.act('stuck', { id: r.id, target: r.target }); } continue; }   // the deadline ends it
       this.handed.add(r.chainId);
       if (this.d.runner.handOver(r.id, next.id)) this.act('handed-over', { id: r.id, from: r.target, to: next.id });
