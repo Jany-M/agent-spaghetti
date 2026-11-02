@@ -58,7 +58,8 @@ Status keeps itself current: running tools and model servers are re-checked ever
 - **Chains:** a hand-off can name next steps (`then`); each step gets the previous result, and the last result goes back to whoever asked: straight into the waiting call, into the caller's own session when it can continue one, into its chat (VS Code), or as a result waiting for it (`run_status`, the tray tells you).
 - **`auto`** lets Agent Spaghetti pick the target: the best free one, or the one its dispatcher model chooses (Settings → `dispatcher.model`, off by default). With a dispatcher model set, a hand-off that stops progressing is passed to another target once.
 - Targets take tasks through the standard each tool offers: the model API (LM Studio, Ollama, …), ACP (OpenCode, Kilo, Cline), their own CLI (Claude Code, Codex, OpenClaw) or their chat (VS Code). ACP and CLI targets need the tool's CLI (Kilo Desktop bundles one; the OpenCode and Cline apps don't). **Tools** shows which ones can take tasks now.
-- **Runs** shows each hand-off chain, where its result went and the result; rate it or cancel it there.
+- **Runs** shows each hand-off chain, where its result went and the result; rate it or cancel it there. **N waiting** lists results whose caller has not collected them yet (it asks with `run_status`); open one to read it or **Dismiss** it.
+- **Live** (popover header, or tray menu → Live activity): a small window that stays on top while you work and shows each step as it happens: who handed what to whom, Agent Spaghetti's choices, questions, the task as sent and the answer as it streams. Click a line to read it in full, `#n` to follow one run.
 - Third-party integrations (JSON files in the data folder's `integrations/`) do nothing until you allow each action (Tools → More).
 
 ## Choose the LLM per tool (model gateway)
