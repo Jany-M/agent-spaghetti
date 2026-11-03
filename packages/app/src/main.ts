@@ -58,19 +58,19 @@ async function follow() {
 /** The live pane: small, on top, stays open when you click elsewhere; it opens bottom-right and remembers where you put it. */
 function showLive(toggle = false) {
   if (liveWin && !liveWin.isDestroyed()) {
-    if (toggle && liveWin.isVisible()) liveWin.hide(); else liveWin.showInactive();
+    if (toggle && liveWin.isVisible()) liveWin.hide(); else liveWin.show();
     return;
   }
   const area = screen.getPrimaryDisplay().workArea;
   liveWin = new BrowserWindow({ ...LIVE, x: area.x + area.width - LIVE.width - 16, y: area.y + area.height - LIVE.height - 16, show: false, frame: false,
     resizable: true, minWidth: 300, minHeight: 200, alwaysOnTop: true, skipTaskbar: true, icon: asset('icon.png'), title: 'Agent Spaghetti: live',
     webPreferences: { preload: asset('preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
-  liveWin.setAlwaysOnTop(true, 'floating');
   liveWin.on('close', e => { if (!quitting) { e.preventDefault(); liveWin?.hide(); } });   // its × hides it: it lives as long as the tray
-  liveWin.on('show', setMenu); liveWin.on('hide', setMenu);
+  liveWin.on('show', () => { liveWin?.setAlwaysOnTop(true, 'floating'); liveWin?.moveTop(); setMenu(); });   // Windows keeps "on top" only when set on a shown window
+  liveWin.on('hide', setMenu);
   liveWin.webContents.on('will-navigate', e => e.preventDefault());
   liveWin.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  void liveWin.loadFile(asset('popover.html'), { query: { window: 'live' } }).then(() => liveWin?.showInactive());
+  void liveWin.loadFile(asset('popover.html'), { query: { window: 'live' } }).then(() => liveWin?.show());
 }
 function showPopover() {
   if (!pop || !tray) return;

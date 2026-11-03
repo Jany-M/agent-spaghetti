@@ -121,7 +121,7 @@ export function storyLine(e: StoredEvent): string {
     switch (e.type) {
       case 'run.started': return `run ${d.id}: ${d.source} → ${d.target}${d.kind && d.kind !== 'other' ? ` (${d.kind})` : ''}${d.parentRunId ? `, next step of run ${d.parentRunId}` : ''}${d.reason ? ` · ${d.reason}` : ''}`;
       case 'run.event': return `run ${d.id}: ${e.source === 'runner' ? '' : `${e.source} `}uses ${d.tool}${d.summary ? `: ${String(d.summary).slice(0, 80)}` : ''}`;
-      case 'run.finished': return `run ${d.id}: ${d.target} ${d.outcome}${d.error ? ` (${String(d.error).slice(0, 120)})` : ''}`;
+      case 'run.finished': return `run ${d.id}: ${d.target} ${d.outcome}${d.error && d.error !== d.outcome ? ` (${String(d.error).slice(0, 120)})` : ''}`;
       case 'run.delivered': return `run ${d.id}: result ${DELIVERY_LABEL[d.how as Delivery] ?? d.how}${d.to ? ` (${d.to})` : ''}`;
       case 'dispatcher.action': return d.what === 'routed' ? `Agent Spaghetti picks ${d.to} for ${d.asked} (${d.why})`
         : d.what === 'handed-over' ? `run ${d.id}: no progress on ${d.from}, handed to ${d.to}` : d.what === 'stuck' ? `run ${d.id}: no progress on ${d.target}` : null;
