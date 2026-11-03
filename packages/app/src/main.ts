@@ -66,7 +66,7 @@ function showLive(toggle = false) {
     resizable: true, minWidth: 300, minHeight: 200, alwaysOnTop: true, skipTaskbar: true, icon: asset('icon.png'), title: 'Agent Spaghetti: live',
     webPreferences: { preload: asset('preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
   liveWin.on('close', e => { if (!quitting) { e.preventDefault(); liveWin?.hide(); } });   // its × hides it: it lives as long as the tray
-  liveWin.on('show', () => { liveWin?.setAlwaysOnTop(true, 'floating'); liveWin?.moveTop(); setMenu(); });   // Windows keeps "on top" only when set on a shown window
+  liveWin.on('show', () => { liveWin?.setAlwaysOnTop(true, 'floating'); setMenu(); });   // set again once shown (no moveTop: on Windows it clears "on top")
   liveWin.on('hide', setMenu);
   liveWin.webContents.on('will-navigate', e => e.preventDefault());
   liveWin.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
