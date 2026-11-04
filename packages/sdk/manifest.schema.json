@@ -22,7 +22,7 @@
         "processNotIn": { "type": "array", "items": { "type": "string" }, "description": "Path fragments of copies bundled inside other tools (e.g. LM Studio's own llama-server): such processes are not this tool" },
         "bin": { "type": "array", "items": { "type": "string" } },
         "env": { "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" } },
-        "paths": { "anyOf": [
+        "paths": { "description": "default places of its program (globs; %VAR% and ~ expanded); {installed}/… = inside an install the OS lists (e.g. a Store app's folder)", "anyOf": [
           { "type": "array", "items": { "type": "string" } },
           { "type": "object", "additionalProperties": false, "properties": {
             "windows": { "type": "array", "items": { "type": "string" } },

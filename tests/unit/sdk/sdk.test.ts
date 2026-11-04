@@ -23,6 +23,7 @@ test('programOf: the tool\'s own program by name (any extension); never an app o
     { path: 'C:\\u\\AppData\\Local\\KiloDesktop\\app-1\\resources\\kilo\\win\\bin\\kilo.exe', via: 'path' as const }] };
   assert.match(programOf(det, 'kilo')!, /kilo\.exe$/);
   assert.equal(programOf(det, 'cline'), undefined);
+  assert.match(programOf({ installs: [{ path: 'C:/u/Cline/cline-cli.exe', via: 'path' }] }, 'cline')!, /cline-cli\.exe$/, 'an app\'s bundled <name>-cli');
   assert.equal(programOf({ installs: [{ path: 'C:/Apps/OpenCode/OpenCode.exe', via: 'process' }] }, 'opencode'), undefined, 'a desktop app\'s own exe is not its CLI');
   assert.equal(programOf({ installs: [{ path: '/usr/bin/x', via: 'bin' }] }), '/usr/bin/x');
 });

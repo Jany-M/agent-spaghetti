@@ -20,6 +20,14 @@ function serverBlock(yaml: string | null): { tokens: string[]; disabled: boolean
   return { tokens: body.map(l => /^\s*-\s+(.*?)\s*$/.exec(l)?.[1]).filter((t): t is string => t !== undefined).map(t => t.replace(/^(['"])(.*)\1$/, '$2')), disabled: body.some(l => /^\s*enabled:\s*false\b/i.test(l)) };
 }
 const isOurs = (a: string[]) => a.length >= 3 && a.slice(-3).join(' ') === 'mcp --as hermes';
+/** The model server Hermes uses: `model.base_url` in config.yaml (its `hermes model` choice). */
+export function modelBaseUrl(yaml: string | null): string | null {
+  const lines = (yaml ?? '').split(/\r?\n/), at = lines.findIndex(l => /^model:\s*$/.test(l));
+  if (at < 0) return null;
+  for (const l of lines.slice(at + 1)) { if (l.trim() && !/^\s/.test(l)) break; const m = /^\s{1,4}base_url:\s*["']?([^"'\s#]+)/.exec(l); if (m) return m[1]; }
+  return null;
+}
+const LOCAL = /^https?:\/\/(127\.\d+\.\d+\.\d+|localhost|\[::1\])(:\d+)?(\/|$)/i;
 
 export function hermesArgs(req: RunRequest): string[] {
   return ['chat', '--query-file', '-', '-Q', '--format', 'stream-json', ...(req.model ? ['--model', req.model] : []), ...(req.session ? ['--resume', req.session] : [])];
@@ -38,6 +46,11 @@ export function hermesEvents(line: string): RunEvent[] {
 }
 export const hermesModule: IntegrationModule = {
   resumes: true,
+  /** Free when Hermes runs a model on this machine (its model.base_url is local), else the manifest's cost (paid). */
+  async inspect(env, base) {
+    const url = modelBaseUrl(await env.readFile(CONFIG).catch(() => null));
+    return url && LOCAL.test(url) ? { ...base, detection: { ...base.detection, cost: 'free', why: `${base.detection.why}; its model runs locally (${url})` } } : base;
+  },
   async *run(env, det, req, ctx) {
     const exe = programOf(det, 'hermes');
     if (!exe) throw new Error('Hermes Agent not found');

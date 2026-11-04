@@ -15,6 +15,7 @@ export const SETTINGS = {
   'backend.concurrency': { default: 1, help: 'Requests a local model server runs at once (the rest wait in its queue)' },
   'consent.timeoutSec': { default: 120, help: 'Seconds a delegation waits for your answer before it is denied' },
   'delegate.deadlineSec': { default: 1800, help: 'Longest a delegated run may take' },
+  'delegate.models': { default: [] as string[], help: 'The model (or agent) an agent target uses when a task names none, instead of the tool\'s own default: <target>=<model> (e.g. a free one)' },
   'delegate.maxHops': { default: 8, help: 'Most hand-offs in one chain (hops plus nested delegations); stops loops' },
   'dispatcher.model': { default: '', help: 'Model the dispatcher thinks with: <target>:<model> from targets (empty = off: auto hand-offs go to the best-ranked target)', choices: { from: 'models', extra: [''] } },
   'dispatcher.stuckMin': { default: 10, help: 'Minutes without progress before the dispatcher hands a run to another target (once per chain)' },

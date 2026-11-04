@@ -29,6 +29,12 @@ test('ACP: edits are allowed only with a folder and an editing kind; other stop 
   assert.equal(permissionChoice({}, 'read', [{ optionId: 'a', kind: 'allow_always' }]), 'a');
   assert.equal(permissionChoice({}, 'execute', [{ optionId: 'a', kind: 'allow_once' }]), null, 'no reject option: cancelled');
 });
+test('ACP: the task\'s model is set through the session\'s model option; an unknown one is named; a sign-in need says how', async () => {
+  assert.deepEqual((await run({ model: 'm-b' })).at(-1), { type: 'done', result: 'echo fake-cwd: [m-b] hi' });
+  assert.deepEqual((await run({ model: 'm-a' })).at(-1), { type: 'done', result: 'echo fake-cwd: hi' }, 'already the current one: nothing to set');
+  assert.deepEqual((await run({ model: 'zz' })).at(-1), { type: 'error', message: 'no model zz here (some it has: m-a, m-b)' });
+  assert.deepEqual(await run({}, '--auth'), [{ type: 'error', message: 'session: Authentication required (sign in to the tool first: Run `fake auth login`)' }]);
+});
 test('ACP: a program that is not there is an error, not a hang', async () => {
   await assert.rejects(async () => { for await (const _ of acpRun(env, 'no-such-acp-agent', [], { target: 'x', task: 'hi' }, { signal: new AbortController().signal })); }, /exited with 127/);
 });

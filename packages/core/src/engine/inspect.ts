@@ -10,6 +10,7 @@ const PROBE_MS = 2500, EXEC_MS = 10000, DEFAULT_VERSION = /(\d+\.\d+\.\d+)/;
 export const platformOf = (k: Environment['kind']) => (k === 'windows' ? 'windows' : k === 'macos' ? 'macos' : 'linux');
 const pathsFor = (p: Detect['paths'], k: Environment['kind']) => (Array.isArray(p) ? p : p?.[platformOf(k)] ?? []);
 const exeName = (n: string) => n.replace(/\.exe$/i, '');
+const INSTALLED = '{installed}';
 export const httpGet = (env: Environment, url: string, headers?: Record<string, string>) => env.http({ url, headers, timeoutMs: PROBE_MS });
 
 const processInstalls = (d: Detect, inv: Inventory): Install[] =>
@@ -27,8 +28,10 @@ async function findInstalls(env: Environment, d: Detect, inv: Inventory): Promis
   for (const x of processInstalls(d, inv)) add(x);
   // bin names and default paths are alternatives for ONE install: the first hit counts (several installs come from the OS list)
   for (const b of d.bin ?? []) { const p = await env.which(b); if (p) { add({ path: p, via: 'bin' }); break; } }
-  if (!out.some(i => i.via === 'bin'))
-    for (const g of pathsFor(d.paths, env.kind)) { const p = await env.glob(g); if (p) { add({ path: p, via: 'path' }); break; } }
+  if (!out.some(i => i.via === 'bin'))                                    // {installed}: inside an install the OS listed (e.g. a Store app's folder)
+    for (const g of pathsFor(d.paths, env.kind).flatMap(g => g.startsWith(INSTALLED) ? out.filter(i => i.via === 'installed').map(i => i.path + g.slice(INSTALLED.length)) : [g])) {
+      const p = await env.glob(g); if (p) { add({ path: p, via: 'path' }); break; }
+    }
   return out;
 }
 export function endpointsToTry(d: Detect, inv: Inventory, installs: Install[], hosts: string[]): string[] {

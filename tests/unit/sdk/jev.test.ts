@@ -16,6 +16,8 @@ test('the action said first outweighs the topic (live run 29, 2026-11-04: a summ
   assert.equal(classify('Summarize in two lines why unit tests matter.').kind, 'summarize');
   assert.equal(classify('Write unit tests that check the summary function').kind, 'tests');
   assert.equal(classify('Please can you review this: it adds a new endpoint').kind, 'review');
+  assert.equal(classify('In two sentences, explain what a hash map is.').kind, 'research', 'live run 35, 2026-11-04: explaining is answering a question');
+  assert.equal(classify('Spiega in breve cosa fa questa funzione').kind, 'research');
 });
 test('confidence: the lead of the top kind over the next one; a tie goes to the more specific kind', () => {
   assert.equal(classify('Summarize the changelog').confidence, 0, 'summarize and docs tie');

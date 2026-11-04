@@ -1,6 +1,7 @@
 // Agent Client Protocol engine (ADR 0010 §2): any agent that speaks ACP over stdio runs tasks the same way.
 // Spec checked 2026-10-17: agentclientprotocol.com/protocol (v1: initialize → session/new | session/load → session/prompt;
-// session/update notifications; session/request_permission; newline-delimited JSON-RPC on stdio).
+// session/update notifications; session/request_permission; newline-delimited JSON-RPC on stdio). The task's model is set through the
+// session's model config option (session/set_config_option, checked 2026-11-04: agentclientprotocol.com/protocol/session-config-options).
 // We offer no fs/terminal capabilities; tool permissions follow least privilege (sdk mayEdit), like the CLI modules.
 import { tmpdir } from 'node:os';
 import type { Ctx, Environment, RunEvent, RunRequest } from '@agent-spaghetti/sdk';
@@ -11,6 +12,9 @@ export const ACP_VERSION = 1;
 const SAFE = new Set(['read', 'search', 'think', 'fetch']);   // tool kinds that change nothing
 type Msg = { id?: number | string; method?: string; params?: any; result?: any; error?: { message?: string } };
 type Option = { optionId: string; kind: string };
+type ConfigOption = { id: string; category?: string; type?: string; currentValue?: string; options?: Array<{ value: string; name?: string }> };
+/** The session's model selector (category `model`, else id `model`). */
+export const modelOption = (opts: ConfigOption[] | undefined) => opts?.find(o => o.category === 'model') ?? opts?.find(o => o.id === 'model');
 
 /** Which permission option to pick for a tool call; null = cancel (no fitting option). */
 export function permissionChoice(req: Pick<RunRequest, 'cwd' | 'kind'>, toolKind: string | undefined, options: Option[]): string | null {
@@ -35,7 +39,8 @@ function outbox() {
 /** One task: a new session (or `req.session` loaded, when the agent can), one prompt, its updates as RunEvents. */
 export async function* acpRun(env: Environment, program: string, args: string[], req: RunRequest, ctx: Pick<Ctx, 'signal' | 'runId'>): AsyncIterable<RunEvent> {
   const out = outbox(), cwd = req.cwd ?? tmpdir();
-  let phase: 'init' | 'session' | 'prompt' = 'init', session = req.session, text = '';
+  let phase: 'init' | 'session' | 'prompt' = 'init', session = req.session, text = '', auth = '';
+  const prompt = () => out.send({ id: 3, method: 'session/prompt', params: { sessionId: session, prompt: [{ type: 'text', text: req.task }] } });
   out.send({ id: 1, method: 'initialize', params: { protocolVersion: ACP_VERSION, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
     clientInfo: { name: 'agent-spaghetti', version: VERSION } } });
   try {
@@ -57,16 +62,21 @@ export async function* acpRun(env: Environment, program: string, args: string[],
         } else out.send({ id: m.id, error: { code: -32601, message: `${m.method} is not offered` } });
         continue;
       }
-      if (m.error) { yield { type: 'error', message: `${phase === 'init' ? 'initialize' : phase === 'session' ? 'session' : 'prompt'}: ${m.error.message ?? 'failed'}` }; return; }
+      if (m.error) { yield { type: 'error', message: `${phase === 'init' ? 'initialize' : phase === 'session' ? 'session' : 'prompt'}: ${m.error.message ?? 'failed'}${phase === 'session' && auth ? ` (sign in to the tool first: ${auth})` : ''}` }; return; }
       if (m.id === 1) {
+        auth = (m.result?.authMethods ?? []).map((a: { name?: string; description?: string }) => a.description ?? a.name).filter(Boolean).join(' or ');
         if (session && !m.result?.agentCapabilities?.loadSession) { yield { type: 'error', message: 'this agent cannot continue a session (no session/load)' }; return; }
         phase = 'session';
         out.send(session ? { id: 2, method: 'session/load', params: { sessionId: session, cwd, mcpServers: [] } } : { id: 2, method: 'session/new', params: { cwd, mcpServers: [] } });
       } else if (m.id === 2) {
         session ??= String(m.result?.sessionId);
         yield { type: 'session', id: session };
-        phase = 'prompt';
-        out.send({ id: 3, method: 'session/prompt', params: { sessionId: session, prompt: [{ type: 'text', text: req.task }] } });
+        const sel = modelOption(m.result?.configOptions);
+        if (!req.model || !sel || sel.currentValue === req.model) { phase = 'prompt'; prompt(); continue; }
+        if (!sel.options?.some(o => o.value === req.model)) { yield { type: 'error', message: `no model ${req.model} here (some it has: ${sel.options?.slice(0, 8).map(o => o.value).join(', ')})` }; return; }
+        out.send({ id: 4, method: 'session/set_config_option', params: { sessionId: session, configId: sel.id, value: req.model } });
+      } else if (m.id === 4) {
+        phase = 'prompt'; prompt();
       } else if (m.id === 3) {
         const stop = String(m.result?.stopReason ?? 'end_turn');
         yield stop === 'end_turn' ? { type: 'done', result: text } : { type: 'error', message: stop === 'cancelled' ? 'cancelled' : `the agent stopped: ${stop}` };

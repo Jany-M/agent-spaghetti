@@ -71,6 +71,8 @@ export class Runner {
   start(source: string, req: RunRequest, o: StartOpts = {}): { id: number; done: Promise<RunRow> } {
     const t = this.targets().find(x => x.id === req.target);
     if (!t) throw new Error(`unknown or unavailable target ${req.target} (see: targets)`);
+    const own = t.kind === 'agent' && !req.model ? this.d.settings.get('delegate.models').find(x => x.startsWith(`${t.id}=`))?.slice(t.id.length + 1) : undefined;
+    if (own) req = { ...req, model: own };                                  // the owner's default model for this agent (delegate.models)
     if (req.model && t.models.length && !t.models.includes(req.model))
       throw new Error(`${t.name} has no ${t.kind === 'model' ? 'loaded model' : 'agent'} ${req.model} (${t.kind === 'model' ? 'loaded' : 'agents'}: ${t.models.join(', ')})`);
     for (const hop of req.then ?? []) if (parseHop(hop).target !== AUTO && !this.targets().some(x => x.id === parseHop(hop).target)) throw new Error(`unknown or unavailable target ${parseHop(hop).target} in then (see: targets)`);

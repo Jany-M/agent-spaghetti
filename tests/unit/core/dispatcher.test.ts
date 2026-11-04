@@ -110,3 +110,9 @@ test('routing settings shape the pick: your pick per kind first, never for a kin
   assert.equal(s.actions().at(-1)!.to, 'helper');
   assert.match(String(s.actions().at(-1)!.why), /^your pick for summarize, free/);
 });
+test('delegate.models: an agent target without a model in the task uses the owner\'s default for it', async () => {
+  const s = setup(); s.settings.setText('delegate.models', 'coder=fast');
+  const r = s.runner.start('cli', { target: 'coder', task: 'summarize x' });
+  assert.equal((await r.done).model, 'fast');
+  assert.equal((await s.runner.start('cli', { target: 'coder', task: 'summarize y', model: 'other' }).done).model, 'other', 'the task\'s own model wins');
+});

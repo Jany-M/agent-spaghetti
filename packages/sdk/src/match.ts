@@ -9,12 +9,12 @@ const norm = (p: string, kind: EnvKind) => {
   const s = p.replaceAll('\\', '/').replace(/\/+$/, '');
   return kind === 'windows' ? s.toLowerCase() : s;
 };
-/** A tool's own program among the installs found on PATH or at a manifest path: the one named `name` (any extension), else the
+/** A tool's own program among the installs found on PATH or at a manifest path: the one named `name` or `name`-cli (any extension), else the
  *  first. A companion app, a desktop app's own exe or an extension folder never counts. */
 export function programOf(det: Pick<Detection, 'installs'>, name?: string): string | undefined {
   const base = (p: string) => p.split(/[\\/]/).pop()!.replace(/\.(exe|cmd|bat|ps1)$/i, '').toLowerCase();
   const progs = det.installs.filter(i => i.path && (i.via === 'bin' || i.via === 'path'));
-  return (name ? progs.find(i => base(i.path!) === name.toLowerCase()) : progs[0])?.path;
+  return (name ? progs.find(i => [name.toLowerCase(), `${name.toLowerCase()}-cli`].includes(base(i.path!))) : progs[0])?.path;   // an app's bundled CLI is often <name>-cli
 }
 /** Header values with {env:NAME} filled from `env`; null when a variable is not set (the tool needs setup). */
 export function fillEnv(headers: Record<string, string> | undefined, env: Record<string, string | undefined>): Record<string, string> | null {

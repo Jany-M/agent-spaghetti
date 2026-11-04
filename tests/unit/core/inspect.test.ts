@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeEnv, fakeInventory, type FakeSpec } from '@agent-spaghetti/sdk/testing';
-import type { Integration, Manifest } from '@agent-spaghetti/sdk';
+import { programOf, type Integration, type Manifest } from '@agent-spaghetti/sdk';
 import { inspect } from '../../../packages/core/src/engine/inspect.ts';
 import { BUILTINS } from '@agent-spaghetti/integrations';
 
@@ -74,6 +74,9 @@ test('server up with nothing loaded; models.path fetched separately; per-platfor
   assert.deepEqual(b.r!.backends.map(x => [x.model, x.contextLength]), [['m:8b', 8192]]);
   const c = await run({ detect: { paths: { linux: ['~/x'], windows: ['~/y.exe'] } } }, { kind: 'wsl', files: { '~/x': '' } });
   assert.deepEqual(c.r!.detection.installs, [{ path: '~/x', via: 'path' }]);
+  const store = { installed: [{ name: 'Acme.Tool', location: 'C:/Program Files/WindowsApps/Acme.Tool_1', source: 'msix' as const }] };
+  const d = await run({ detect: { installed: ['Acme.Tool'], bin: ['tool'], paths: { windows: ['{installed}/app/tool.exe'] } } }, { inventory: store, files: { 'C:/Program Files/WindowsApps/Acme.Tool_1/app/tool.exe': '' } });
+  assert.equal(programOf(d.r!.detection, 'tool'), 'C:/Program Files/WindowsApps/Acme.Tool_1/app/tool.exe', '{installed}: the CLI inside a Store app\'s folder');
 });
 test('version from args runs the found executable, never an install folder; process without path still counts', async () => {
   const a = await run({ detect: { bin: ['t'], version: { args: ['--version'] } } }, { bins: { t: '/usr/bin/t' }, exec: { '/usr/bin/t --version': { code: 0, stdout: 'T 1.2.3\n', stderr: '' } } });

@@ -18,6 +18,11 @@
     ],
     "version": {
       "from": "installed"
+    },
+    "paths": {
+      "windows": [
+        "{installed}/app/resources/codex.exe"
+      ]
     }
   },
   "speaks": {

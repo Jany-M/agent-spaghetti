@@ -6,7 +6,7 @@
     "review": ["review", "check", "audit", "critique", "look over", "feedback", "find bugs", "is this correct", "revisiona", "rivedi", "controlla", "verifica", "valuta", "trova errori"],
     "docs": ["document", "docs", "write the readme", "update the readme", "docstring", "comments", "changelog", "jsdoc", "documenta", "documentazione", "commenti"],
     "summarize": ["summarize", "summarise", "summary", "tl;dr", "condense", "key points", "recap", "shorten", "riassumi", "riassunto", "sintesi", "punti chiave", "accorcia"],
-    "research": ["research", "find out", "look up", "compare", "latest", "sources", "what is", "how does", "ricerca", "cerca", "trova", "confronta", "informazioni", "ultime"],
+    "research": ["research", "find out", "look up", "compare", "latest", "sources", "what is", "how does", "explain", "describe", "ricerca", "cerca", "trova", "confronta", "informazioni", "ultime", "spiega", "descrivi"],
     "code-edit": ["implement", "add", "fix", "bug", "feature", "function", "endpoint", "change the code", "implementa", "aggiungi", "correggi", "modifica", "funzione"]
   },
   "lead": { "words": 5, "weight": 3 },
