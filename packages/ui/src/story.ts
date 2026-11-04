@@ -3,7 +3,7 @@
 import { createElement as h } from 'react';
 import { eventLine, storyParts, toolLabel, type Part, type StoredEvent } from '@agent-spaghetti/sdk/web';
 
-export const TOOL_COLORS = 8;                                     // .tc0 … .tc7 in styles.ts (hues kept apart from the action colors)
+export const TOOL_COLORS = 7;                                     // .tc0 … .tc6 in styles.ts (hues kept apart from the action colors)
 const KEY = 'agent-spaghetti.toolColors';
 let memory: Record<string, number> = {};
 /** The color slot of a tool: the next free one the first time it shows up, then always the same. */
@@ -15,7 +15,7 @@ export function toolSlot(id: string): number {
     try { localStorage.setItem(KEY, JSON.stringify(map)); } catch { /* convenience only */ }
     memory = map;
   }
-  return map[id];
+  return map[id] % TOOL_COLORS;                                  // a slot saved when there were more colors still maps to one
 }
 const base = (id: string) => id.split(':')[0];                    // lmstudio:gemma → the tool's color
 export function PartsView({ parts }: { parts: Part[] }) {

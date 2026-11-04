@@ -1,9 +1,9 @@
 // The one stylesheet for the tray popover (Phase 4 app reuses it). Follows the OS light/dark setting.
 export const CSS = `
-/* tools (tc0-7: hues 80, 175-318 every 24°) never share a hue with the actions (red 0, orange 25, gold 45, green 142): ≥ 30° apart */
-:root { --tc0:#6c9c0d; --tc1:#0d9c90; --tc2:#0d719c; --tc3:#0d389c; --tc4:#1b0d9c; --tc5:#540d9c; --tc6:#8d0d9c; --tc7:#9c0d71;
+/* tools (tc0-6: hues 175-319 every 24°) never share a hue with the actions (red 0, orange 25, gold 45, green 142): ≥ 30° apart */
+:root { --tc0:#0d9c90; --tc1:#0d6e9c; --tc2:#0d359c; --tc3:#1d0d9c; --tc4:#570d9c; --tc5:#900d9c; --tc6:#9c0d6e;
   --a-send:#c2410c; --a-answer:#15803d; --a-decide:#a16207; --a-fail:#dc2626; }
-@media (prefers-color-scheme: dark) { :root { --tc0:#c5f368; --tc1:#68f3e7; --tc2:#68c9f3; --tc3:#6892f3; --tc4:#7668f3; --tc5:#ad68f3; --tc6:#e568f3; --tc7:#f368c9;
+@media (prefers-color-scheme: dark) { :root { --tc0:#68f3e7; --tc1:#68c7f3; --tc2:#688ff3; --tc3:#7868f3; --tc4:#b068f3; --tc5:#e768f3; --tc6:#f368c7;
   --a-send:#fb923c; --a-answer:#4ade80; --a-decide:#facc15; --a-fail:#f87171; } }
 :root { --bg:#f7f7f8; --card:#fff; --fg:#1d1f23; --muted:#646a73; --line:#e3e5e8; --accent:#e8892b;
   --idle:#4b9c6b; --working:#3b82f6; --approval:#f59e0b; --problem:#dc2626; --btn:#eceef1; color-scheme: light dark; }
@@ -70,7 +70,7 @@ textarea { resize:vertical; }
 .runs .detail pre { white-space:pre-wrap; max-height:220px; overflow:auto; background:var(--bg); border-radius:6px; padding:8px; margin-top:6px; }
 .mono div { font:11px/1.4 ui-monospace,"Cascadia Mono",Consolas,monospace; }
 .story .tool { font-weight:600; } .story .tool.hub { color:var(--fg); }
-.tc0{color:var(--tc0)} .tc1{color:var(--tc1)} .tc2{color:var(--tc2)} .tc3{color:var(--tc3)} .tc4{color:var(--tc4)} .tc5{color:var(--tc5)} .tc6{color:var(--tc6)} .tc7{color:var(--tc7)}
+.tc0{color:var(--tc0)} .tc1{color:var(--tc1)} .tc2{color:var(--tc2)} .tc3{color:var(--tc3)} .tc4{color:var(--tc4)} .tc5{color:var(--tc5)} .tc6{color:var(--tc6)}
 .story .act { font-weight:600; } .act.send{color:var(--a-send)} .act.answer{color:var(--a-answer)} .act.decide{color:var(--a-decide)} .act.fail{color:var(--a-fail)} .act.note{color:var(--muted)}
 .head .live-btn { margin-left:auto; font-size:12px; padding:2px 10px; }
 [class*="tone-"], .runs .line[class*="tone-"] { border-left:3px solid var(--line); padding-left:6px; }
