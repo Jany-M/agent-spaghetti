@@ -37,7 +37,8 @@ export async function globFirst(pattern: string): Promise<string | null> {
   return walk('', 0);
 }
 export async function whichBin(bin: string, env: NodeJS.ProcessEnv = process.env): Promise<string | null> {
-  const exts = process.platform === 'win32' ? ['', ...(env.PATHEXT ?? '.EXE;.CMD;.BAT').toLowerCase().split(';')] : [''];
+  // Windows runs only files with a PATHEXT extension: npm's extensionless sh shim next to a .cmd one is never the program (live 2026-11-04)
+  const exts = process.platform === 'win32' && !/\.[a-z0-9]+$/i.test(bin) ? (env.PATHEXT ?? '.EXE;.CMD;.BAT').toLowerCase().split(';').filter(Boolean) : [''];
   for (const dir of (env.PATH ?? env.Path ?? '').split(delimiter).filter(Boolean))
     for (const ext of exts) { const p = join(dir, bin + ext); if (await exists(p)) return p; }
   return null;

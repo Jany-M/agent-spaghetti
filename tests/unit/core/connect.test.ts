@@ -181,7 +181,7 @@ test('hermesModule.inspect: free when its model server is on this machine (model
     { detection: det, agents: [], backends: [] }, {} as never)).detection;
   assert.deepEqual([(await inspect('http://127.0.0.1:18434/v1')).cost, (await inspect('http://127.0.0.1:18434/v1')).unready], ['free', undefined]);
   assert.equal((await inspect('https://openrouter.ai/api/v1')).cost, 'metered');
-  assert.match((await inspect('http://127.0.0.1:18434/v1', false)).unready!, /model server http:\/\/127\.0\.0\.1:18434\/v1 is not answering/, 'down: not a target until it answers');
+  assert.match((await inspect('http://127.0.0.1:18434/v1', false)).unready!, /model server http:\/\/127\.0\.0\.1:18434\/v1 is not running/, 'down: not a target until it answers');
 });
 test('connectionPlan: never disconnects, always connects, unset asks once; tools that cannot connect are left alone', async () => {
   const { connectionPlan } = await import('../../../packages/core/src/connections.ts');

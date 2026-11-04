@@ -47,13 +47,15 @@ export function hermesEvents(line: string): RunEvent[] {
 export const hermesModule: IntegrationModule = {
   resumes: true,
   /** Free when Hermes runs a model on this machine (its model.base_url is local), else the manifest's cost (paid); not ready while
-   *  that local server does not answer (each task would wait for Hermes' gateway deadline, then fail). */
+   *  that local server does not answer: its managed llama.cpp router (local_runtime) is booted by the Hermes app's backend, not by
+   *  `hermes chat`, so without it each task waits for Hermes' retries, then fails (live 2026-11-04). A running router whose model is
+   *  not loaded yet answers at once and loads the model on the first request (Hermes waits up to its request_timeout_seconds). */
   async inspect(env, base) {
     const url = modelBaseUrl(await env.readFile(CONFIG).catch(() => null));
     if (!url || !LOCAL.test(url)) return base;
     const up = await env.http({ url: `${url.replace(/\/+$/, '')}/models`, timeoutMs: 2500 }).catch(() => null);
     return { ...base, detection: { ...base.detection, cost: 'free', why: `${base.detection.why}; its model runs locally (${url})`,
-      ...(up ? {} : { unready: `its model server ${url} is not answering: start it, then rescan` }) } };
+      ...(up ? {} : { unready: `its model server ${url} is not running (the Hermes app starts it): open Hermes, then rescan` }) } };
   },
   async *run(env, det, req, ctx) {
     const exe = programOf(det, 'hermes');

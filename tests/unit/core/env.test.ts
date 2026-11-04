@@ -35,6 +35,11 @@ test('globFirst handles one * per segment, spaces and non-ASCII; whichBin finds 
   assert.ok(await whichBin('node'));
   assert.equal(await whichBin('definitely-not-a-binary-xyz'), null);
 });
+test('whichBin on Windows: npm\'s .cmd shim, never the extensionless sh shim beside it', { skip: process.platform !== 'win32' }, async () => {
+  const d = mkdtempSync(join(tmpdir(), 'as-bin-'));
+  writeFileSync(join(d, 'tool'), '#!/bin/sh'); writeFileSync(join(d, 'tool.cmd'), '@echo off');
+  assert.equal(await whichBin('tool', { PATH: d, PATHEXT: '.EXE;.CMD' }), join(d, 'tool.cmd'));
+});
 test('windows inventory: location from InstallLocation (quotes dropped) or DisplayIcon folder, MSIX, empty names dropped, partial kept', () => {
   const inv = parseWindowsInventory(fx('windows.json'));
   assert.deepEqual(inv.installed.map(i => [i.name, i.location, i.source]), [
