@@ -3,6 +3,7 @@
   "manifest": 1,
   "id": "claude-desktop",
   "name": "Claude Desktop",
+  "color": "#ea580c",
   "roles": [
     "client"
   ],

@@ -43,7 +43,7 @@ export interface Environment {
 
 export interface Manifest {
   $schema?: string;
-  manifest: 1; id: string; name: string; roles: Role[]; cost?: Cost; platforms?: Platform[];
+  manifest: 1; id: string; name: string; color?: string; roles: Role[]; cost?: Cost; platforms?: Platform[];
   detect?: {
     installed?: string[];
     process?: string[]; processNotIn?: string[];   // path fragments of copies bundled in other tools

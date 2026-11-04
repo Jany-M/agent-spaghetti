@@ -130,7 +130,7 @@ export function storyParts(e: StoredEvent): Part[] | null {
   const d = e.data, run = d.id ?? d.runId, R = run ? [`run ${run}: `] : [];
   const a = (act: Act, text: string) => ({ act, text });
   switch (e.type) {
-    case 'run.started': return [...R, { tool: String(d.source) }, a('send', ' → '), { tool: String(d.target) },
+    case 'run.started': return [...R, { tool: String(d.source) }, ' → ', { tool: String(d.target) },
       d.kind ? ` (${[d.kind, d.difficulty].filter(Boolean).join(' · ')}${d.classifiedBy === 'rules' ? `, ${Math.round(Number(d.confidence ?? 0) * 100)}% sure` : ''})` : '',
       d.parentRunId ? `, next step of run ${d.parentRunId}` : '', d.reason ? ` · ${d.reason}` : ''];
     case 'run.event': return [...R, ...(e.source === 'runner' ? [] : [{ tool: e.source }, ' ']), a('note', 'uses'), ` ${d.tool}${d.summary ? `: ${String(d.summary).slice(0, 80)}` : ''}`];
@@ -178,7 +178,7 @@ export const TOOL_GROUPS = [
 export type ToolGroup = (typeof TOOL_GROUPS)[number]['id'];
 export type ToolState = 'ready' | 'running' | 'stopped' | 'installed' | 'not found' | 'skipped';
 export interface ToolRow {
-  id: string; name: string; group: ToolGroup; source: 'builtin' | 'user'; levels: Level[]; envs: string[]; version?: string;
+  id: string; name: string; color?: string; group: ToolGroup; source: 'builtin' | 'user'; levels: Level[]; envs: string[]; version?: string;
   state: ToolState; why: string;
   connection?: 'connected' | 'not connected';               // clients only
   preference?: 'always' | 'never' | 'ask';                  // clients only (ADR 0009)
@@ -188,7 +188,7 @@ export interface ToolRow {
   gateway?: { model: string; key: boolean };                // takes a custom model endpoint: its model through the gateway, whether it has a key
 }
 export interface ToolInput {
-  loaded: Array<{ id: string; name: string; source: 'builtin' | 'user'; roles: Role[]; levels: Level[]; disabled: boolean; setup?: boolean; needsEnv?: string[]; gatewayClient?: boolean }>;   // needsEnv: a hosted API's key variables
+  loaded: Array<{ id: string; name: string; color?: string; source: 'builtin' | 'user'; roles: Role[]; levels: Level[]; disabled: boolean; setup?: boolean; needsEnv?: string[]; gatewayClient?: boolean }>;   // needsEnv: a hosted API's key variables
   snapshot: Snapshot | null; live: LiveState; targets: Target[]; prefs: { auto: string[]; never: string[] }; consents: Array<{ subject: string }>;
   gateway?: { routes: string[]; keyed: string[] };
 }
@@ -202,7 +202,7 @@ export function toolRows(x: ToolInput): ToolRow[] {
       : live.some(t => t.running) ? 'running' : live.length || dets.every(d => d.connectable === 'needs-setup') ? 'stopped'
       : dets.some(d => d.installs.some(n => n.via === 'process')) ? 'running' : 'installed';
     return {
-      id: i.id, name: i.name, group: TOOL_GROUPS.find(g => i.roles.includes(g.role))?.id ?? 'tools', source: i.source, levels: i.levels,
+      id: i.id, name: i.name, ...(i.color ? { color: i.color } : {}), group: TOOL_GROUPS.find(g => i.roles.includes(g.role))?.id ?? 'tools', source: i.source, levels: i.levels,
       envs: [...new Set(dets.map(d => d.envId))], version: dets.find(d => d.version)?.version, state,
       why: i.disabled ? 'skipped in scans' : (client[0] ?? dets[0])?.why ?? (i.needsEnv ? `set ${i.needsEnv.join(', ')} where Agent Spaghetti runs, then rescan` : 'not found on this machine'),
       ...(client.length ? { connection: client.some(d => d.connected) ? 'connected' as const : 'not connected' as const,

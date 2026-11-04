@@ -4,7 +4,7 @@ import { createElement as h } from 'react';
 import { eventTone, type StoredEvent } from '@agent-spaghetti/sdk/web';
 import type { Bridge } from './bridge.ts';
 import { useEvents } from './hooks.ts';
-import { Story } from './story.ts';
+import { Story, useToolColors } from './story.ts';
 
 export const ActivityView = ({ events }: { events: StoredEvent[] }) => h('div', { className: 'panel' },
   events.length ? h('div', { className: 'card list mono' }, ...[...events].reverse().map(e => h('div', { key: e.id, className: `tone-${eventTone(e)}` }, h(Story, { e }))))
@@ -12,5 +12,6 @@ export const ActivityView = ({ events }: { events: StoredEvent[] }) => h('div', 
 
 export function ActivityPanel({ bridge }: { bridge: Bridge }) {
   const [events] = useEvents(bridge, 200);
+  useToolColors(bridge);
   return h(ActivityView, { events });
 }

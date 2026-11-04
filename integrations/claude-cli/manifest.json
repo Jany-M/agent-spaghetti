@@ -3,6 +3,7 @@
   "manifest": 1,
   "id": "claude-cli",
   "name": "Claude Code CLI",
+  "color": "#ea580c",
   "roles": [
     "agent",
     "client"

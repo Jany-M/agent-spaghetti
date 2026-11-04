@@ -1,10 +1,10 @@
 // The live pane (?window=live): a small window that stays on top and stays open when you click elsewhere. One line per step of the
-// work as it happens: hand-offs and hops, Agent Spaghetti's choices, questions, the task as sent, answers as they stream, where results
+// work as it happens, newest on top: hand-offs and hops, Agent Spaghetti's choices, questions, the task as sent, answers as they stream, where results
 // went. Trace lines (never stored, ADR 0007) open to their full text. Lines from sdk storyParts, tools and actions colored (story.ts).
-import { createElement as h, useEffect, useState } from 'react';
+import { createElement as h, useState } from 'react';
 import { eventTone, isTrace, storyLine, type StoredEvent } from '@agent-spaghetti/sdk/web';
 import type { Bridge } from './bridge.ts';
-import { Story } from './story.ts';
+import { Story, useToolColors } from './story.ts';
 import { useEvents } from './hooks.ts';
 
 const KEEP = 400;
@@ -15,7 +15,7 @@ export const runOf = (e: StoredEvent): number | null => {
 };
 const ABOUT_WORK = (e: StoredEvent) => e.type.startsWith('run.') || e.type.startsWith('consent.') || e.type === 'dispatcher.action' || e.type === 'trace.detail';
 export interface LiveRow { key: number; tone: string; line: string; event: StoredEvent; run: number | null; text?: string }
-/** What the pane shows: work events only unless `all`, one run when `run` is set; streamed output of a run is one growing line. */
+/** What the pane shows, oldest first: work events only unless `all`, one run when `run` is set; streamed output of a run is one growing line. */
 export function liveRows(events: StoredEvent[], o: { all?: boolean; run?: number | null } = {}): LiveRow[] {
   const rows: LiveRow[] = [];
   let last: { e: StoredEvent; text: string } | null = null;
@@ -49,7 +49,7 @@ export function LiveList(p: LiveProps) {
       h('button', { onClick: p.onPause, 'aria-pressed': p.paused }, p.paused ? 'Resume' : 'Pause'),
       h('button', { onClick: p.onClear }, 'Clear'),
       h('button', { 'aria-label': 'Close', title: 'Close (tray menu → Live activity opens it again)', onClick: p.onClose }, '×')),
-    p.rows.length ? h('div', { className: 'feed mono', role: 'log', 'aria-live': 'polite' }, ...p.rows.map(r => h('div', { key: r.key, className: `entry tone-${r.tone}` },
+    p.rows.length ? h('div', { className: 'feed mono', role: 'log', 'aria-live': 'polite' }, ...[...p.rows].reverse().map(r => h('div', { key: r.key, className: `entry tone-${r.tone}` },
       h('div', { className: 'line' },
         r.run !== null && p.run === null ? h('button', { className: 'tag', title: `Only run ${r.run}`, onClick: () => p.onRun(r.run) }, `#${r.run}`) : null,
         r.text !== undefined ? h('button', { className: 'text', title: 'Show the full text', 'aria-expanded': p.open.has(r.key), onClick: () => p.onToggle(r.key) }, h(Story, { e: r.event })) : h(Story, { e: r.event })),
@@ -64,10 +64,7 @@ export function LiveView({ bridge }: { bridge: Bridge }) {
   const [frozen, setFrozen] = useState<StoredEvent[] | null>(null);       // paused: the lines as they were
   const [open, setOpen] = useState<Set<number>>(new Set());
   const rows = liveRows(frozen ?? events, { all, run });
-  useEffect(() => {                                                       // follow the newest line unless the reader scrolled up
-    const el = document.querySelector<HTMLDivElement>('.feed');
-    if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 60) el.scrollTop = el.scrollHeight;
-  }, [rows.length, rows[rows.length - 1]?.text]);
+  useToolColors(bridge);
   return h(LiveList, { rows, all, run, paused: frozen !== null, open,
     onAll: setAll, onRun: setRun, onPause: () => setFrozen(f => (f ? null : events)), onClear: () => { setEvents([]); setFrozen(null); setOpen(new Set()); },
     onToggle: k => setOpen(s => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; }),
