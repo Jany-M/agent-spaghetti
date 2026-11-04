@@ -1,20 +1,21 @@
-// Settings panel: every setting from the `settings` op, grouped by its prefix. Pick lists where the daemon offers choices
-// (tools, clients, loaded models): a select for one value, checkboxes for a list; numbers and free text save when the field is
-// left. Each save is confirmed next to its name. The machine report shows inline and downloads as a file.
+// Settings panel: every setting from the `settings` op (routing.* in the Routing panel), grouped by its prefix. Pick lists where the
+// daemon offers choices (tools, clients, loaded models): a select for one value, checkboxes for a list; a switch is a checkbox;
+// numbers and free text save when the field is left. Each save is confirmed next to its name. The machine report shows inline and downloads as a file.
 import { createElement as h, useState } from 'react';
-import type { OpIO } from '@agent-spaghetti/sdk/web';
+import { settingText, type OpIO } from '@agent-spaghetti/sdk/web';
 import type { Bridge } from './bridge.ts';
 import { useAct, useOp } from './hooks.ts';
 
 type All = OpIO['settings']['out'];
-export const settingText = (v: unknown) => (Array.isArray(v) ? v.join(', ') : String(v ?? ''));
 const groupOf = (k: string) => (k.includes('.') ? k.slice(0, k.indexOf('.')) : 'general');
 
 export interface SettingsProps { settings: All | null; busy: string | null; error: string | null; saved: string | null; report: string | null;
   onSave(key: string, text: string): void; onReport(): void }
 
-function Field({ k, s, busy, onSave }: { k: string; s: All[string]; busy: boolean; onSave(key: string, text: string): void }) {
+export function Field({ k, s, busy, onSave }: { k: string; s: All[string]; busy: boolean; onSave(key: string, text: string): void }) {
   const value = settingText(s.value);
+  if (typeof s.value === 'boolean') return h('label', { className: 'check' },
+    h('input', { type: 'checkbox', name: k, checked: s.value, disabled: busy, onChange: () => onSave(k, s.value ? 'off' : 'on') }), ` ${value}`);
   if (s.choices && Array.isArray(s.value)) {                // a list of known things: tick them
     const on = new Set(s.value as string[]);
     return h('div', { className: 'checks' }, ...s.choices.map(c => h('label', { key: c.value, className: 'check' },
@@ -33,7 +34,7 @@ function Field({ k, s, busy, onSave }: { k: string; s: All[string]; busy: boolea
 }
 
 export function SettingsView(p: SettingsProps) {
-  const entries = Object.entries(p.settings ?? {});
+  const entries = Object.entries(p.settings ?? {}).filter(([k]) => !k.startsWith('routing.'));   // in the Routing panel
   const groups = [...new Set(entries.map(([k]) => groupOf(k)))];
   return h('div', { className: 'panel' },
     p.error ? h('div', { className: 'card error', role: 'alert' }, p.error) : null,

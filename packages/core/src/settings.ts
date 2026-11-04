@@ -19,13 +19,21 @@ export const SETTINGS = {
   'dispatcher.model': { default: '', help: 'Model the dispatcher thinks with: <target>:<model> from targets (empty = off: auto hand-offs go to the best-ranked target)', choices: { from: 'models', extra: [''] } },
   'dispatcher.stuckMin': { default: 10, help: 'Minutes without progress before the dispatcher hands a run to another target (once per chain)' },
   'gateway.port': { default: 0, help: 'Port of the model gateway on 127.0.0.1, the OpenAI-compatible endpoint tools can use (0 = off; e.g. 4141)' },
+  'routing.learn': { default: true, help: 'Order targets for each kind of task by how their past runs went (finished, failed, your grades); off: cost, tier and queue only' },
+  'routing.stretch': { default: true, help: 'A free target one tier below the task may try it first (a failure escalates)' },
+  'routing.escalate': { default: true, help: 'When a target Agent Spaghetti chose fails or answers nothing, the next one in the ranking tries (once per chain; paid ones ask first)' },
+  'routing.prefer': { default: [] as string[], help: 'Your pick per kind of task, tried first: <kind>=<target> (Routing panel)' },
+  'routing.never': { default: [] as string[], help: 'Targets never used for a kind of task: <kind>=<target> (Routing panel)' },
+  'routing.tiers': { default: [] as string[], help: 'The hardest task a target takes, when its size does not say: <target>[:model]=light|medium|heavy' },
   'gateway.routes': { default: [] as string[], help: 'Each tool\'s model through the gateway: <tool>=<target>:<model> or <tool>=auto (Tools → the tool → Model)' },
 } as const;
 export type SettingKey = keyof typeof SETTINGS;
-export type SettingValue<K extends SettingKey> = (typeof SETTINGS)[K]['default'] extends readonly string[] ? string[] : (typeof SETTINGS)[K]['default'] extends string ? string : number;
+export type SettingValue<K extends SettingKey> = (typeof SETTINGS)[K]['default'] extends readonly string[] ? string[] : (typeof SETTINGS)[K]['default'] extends string ? string
+  : (typeof SETTINGS)[K]['default'] extends boolean ? boolean : number;
 
 const valid = (d: SettingDef['default'], v: unknown) => (Array.isArray(d) ? Array.isArray(v) && v.every(x => typeof x === 'string')
-  : typeof d === 'string' ? typeof v === 'string' : typeof v === 'number' && Number.isFinite(v));
+  : typeof d === 'number' ? typeof v === 'number' && Number.isFinite(v) : typeof v === typeof d);
+const BOOL: Record<string, boolean> = { on: true, true: true, yes: true, '1': true, off: false, false: false, no: false, '0': false };
 
 export class Settings {
   private store: Store;
@@ -42,11 +50,12 @@ export class Settings {
     if (!valid(d.default, v)) throw new Error(`invalid value for ${k}`);
     this.store.setKv(`setting:${k}`, v);
   }
-  /** From CLI/REST text: lists are comma separated ('' = empty), numbers as numbers, text as is. */
+  /** From CLI/REST text: lists are comma separated ('' = empty), numbers as numbers, switches as on/off, text as is. */
   setText(k: string, text: string): void {
     const d = this.defs()[k];
     if (!d) throw new Error(`unknown setting ${k} (known: ${Object.keys(this.defs()).join(', ')})`);
-    this.put(k, d, Array.isArray(d.default) ? text.split(',').map(x => x.trim()).filter(Boolean) : typeof d.default === 'string' ? text.trim() : Number(text));
+    this.put(k, d, Array.isArray(d.default) ? text.split(',').map(x => x.trim()).filter(Boolean) : typeof d.default === 'string' ? text.trim()
+      : typeof d.default === 'boolean' ? BOOL[text.trim().toLowerCase()] : Number(text));
   }
   all(): Record<string, { value: unknown; help: string; choices?: SettingChoices }> {
     return Object.fromEntries(Object.entries(this.defs()).map(([k, d]) => [k, { value: this.value(k, d), help: d.help, ...(d.choices ? { choices: d.choices } : {}) }]));

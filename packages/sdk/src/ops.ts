@@ -1,12 +1,13 @@
 // The one list of operations: REST routes, CLI usage text and the MCP tools (`mcp`) are all generated from it.
-import type { Snapshot, StoredEvent, RunRequest, RunRow, Switch, Target, TestResult } from './types.ts';
+import type { Difficulty, Snapshot, StoredEvent, RunRequest, RunRow, Switch, Target, TaskKind, TestResult } from './types.ts';
+import type { Ranked } from './routing.ts';
 import type { ToolRow } from './format.ts';
 import { DIFFICULTIES, HANDOFF_KINDS } from './types.ts';
 import type { Action, ConsentRequest, ConsentScope, DeclaredAction, Grant, Mode } from './permissions.ts';
 import type { LiveState } from './state.ts';
 
 /** The GUI's pages (tray popover now, the app window in Phase 4): every op names the one that offers it (ADR 0009). */
-export const PANELS = ['home', 'tools', 'runs', 'settings', 'activity'] as const;
+export const PANELS = ['home', 'tools', 'runs', 'routing', 'settings', 'activity'] as const;
 export type Panel = (typeof PANELS)[number];
 /** `gui`: the panel offering the op, `tray-menu` (main process), or `machine` (only programs call it). */
 export type Gui = Panel | 'tray-menu' | 'machine';
@@ -50,6 +51,7 @@ export const OPS = {
   runs:         { method: 'GET',  path: '/v1/runs', gui: 'runs',         usage: 'runs [<id> | --unread [<caller>]]', summary: 'The run record; with an id: its hand-off chain and result',
     mcp: { name: 'run_status', description: 'Status and result of a run you handed off; without an id: results of your hand-offs that finished after you stopped waiting (each given once).',
       input: { type: 'object', additionalProperties: false, properties: { id: { type: 'integer' } } } } },
+  routing:      { method: 'GET',  path: '/v1/routing', gui: 'routing',   usage: 'routing [--difficulty light|medium|heavy]', summary: 'The targets each kind of task would go to, best first, and why' },
   cancel:       { method: 'POST', path: '/v1/cancel', gui: 'runs',       usage: 'cancel <id>',              summary: 'Stop a running delegation' },
   verdict:      { method: 'POST', path: '/v1/verdict', gui: 'runs',      usage: 'verdict <id> up|down|redo', summary: 'Rate a run (kept in the run record)' },
   dismiss:      { method: 'POST', path: '/v1/dismiss', gui: 'runs',      usage: 'dismiss <id>',             summary: 'Stop keeping a waiting result for its caller (it stays in the run record)' },
@@ -93,6 +95,7 @@ export interface OpIO {
   handback: { in: { run_id: number; result: string; status?: 'done' | 'failed'; source?: string }; out: { ok: true } };
   runs: { in: { id?: number; since?: number; limit?: number; watch?: boolean; unread?: boolean; source?: string };   // watch + source: the chain's caller polling
     out: { runs: RunRow[]; result?: string; final?: RunView; unread?: RunView[] } };   // final: the chain's view (id = chain); unread: given once
+  routing: { in: { difficulty?: Difficulty }; out: { difficulty: Difficulty; kinds: Array<{ kind: TaskKind; ranked: Ranked[] }> } };
   cancel: { in: { id: number }; out: { cancelled: boolean } };
   verdict: { in: { id: number; value: 'up' | 'down' | 'redo' }; out: { ok: true } };
   dismiss: { in: { id: number }; out: { ok: true } };

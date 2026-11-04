@@ -3,7 +3,7 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DaemonDown, ENGINE_LABEL, HubClient, dataDir, ensureDaemon, logsDir, readDiscovery, OPS, parseJson, SCOPE_LABEL, detectionRows, describeRun, eventLine, permissionRows, runLine, renderStats, renderTable, renderToolRows, renderTree, serveMcpStdio, switchRows, testLines,
+import { DaemonDown, ENGINE_LABEL, HubClient, dataDir, ensureDaemon, logsDir, readDiscovery, OPS, parseJson, SCOPE_LABEL, detectionRows, describeRun, eventLine, permissionRows, runLine, renderStats, renderTable, settingText, renderToolRows, renderTree, serveMcpStdio, switchRows, testLines,
   type Action, type ConsentRequest, type ConsentScope, type Difficulty, type OpId, type TaskKind } from '@agent-spaghetti/sdk';
 import { planHook, under } from './hook.ts';
 
@@ -123,7 +123,7 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
       }
       case 'settings': case 'setting': {
         const r = op === 'setting' ? await c.call('setting', { key: a1, value: a2 ?? '' }) : await c.call('settings');
-        print(r, () => renderTable([['Key', 'Value', 'Help'], ...Object.entries(r).map(([k, v]) => [k, Array.isArray(v.value) ? v.value.join(',') || '-' : String(v.value), v.help])]));
+        print(r, () => renderTable([['Key', 'Value', 'Help'], ...Object.entries(r).map(([k, v]) => [k, settingText(v.value) || '-', v.help])]));
         break;
       }
       case 'disable': case 'enable': { const r = await c.call(op, { id: a1 }); print(r, () => `disabled: ${r.disabled.join(', ') || 'none'}`); break; }
@@ -145,6 +145,11 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
         return 'isError' in d ? 1 : 0;
       }
       case 'targets': { const r = await c.call('targets'); print(r, () => r.length ? renderTable([['Target', 'Name', 'Kind', 'Cost', 'Takes tasks via', 'Models / agents'], ...r.map(t => [t.id, t.name, t.kind, t.cost, ENGINE_LABEL[t.engine], t.models.join(', ') || '-'])]) : 'Nothing to delegate to yet (scan first; start a local model server or install an agent).'); break; }
+      case 'routing': {
+        const r = await c.call('routing', { difficulty: flag(args, '--difficulty') as Difficulty | undefined });
+        print(r, () => r.kinds.map(k => [`${k.kind} (${r.difficulty}):`, ...(k.ranked.length ? k.ranked.map((x, i) => `  ${x.skip ? '-' : `${i + 1}.`} ${x.target.id}  ${x.why}`) : ['  nothing to hand it to now'])].join('\n')).join('\n\n'));
+        break;
+      }
       case 'runs': {
         if (a1 === '--unread') {                                  // results waiting for a caller: given once, then read
           const r = await c.call('runs', { unread: true, source: a2 ?? 'cli' });

@@ -51,7 +51,8 @@ export const withoutGrants = (grants: Grant[], subject: string, action?: Action,
 
 /** A question for the user (ADR 0005): third-party actions now, `run` requests from Phase 3. Answered in the tray or CLI. */
 /** Least privilege for agents that run tasks: they may change files only with a working folder and a kind that edits. */
-const EDIT_KINDS = new Set(['code-edit', 'refactor', 'tests', 'docs']);
+/** The kinds whose agents may edit files in the task's folder (and so, with a folder, need an agent: routing). */
+export const EDIT_KINDS = new Set<string>(['code-edit', 'refactor', 'tests', 'docs']);
 export const mayEdit = (req: { cwd?: string; kind?: string }) => !!req.cwd && EDIT_KINDS.has(req.kind ?? 'other');
 export type ConsentScope = 'once' | 'job' | 'always';
 export interface ConsentRequest {

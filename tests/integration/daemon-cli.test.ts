@@ -11,6 +11,7 @@ import { Consent } from '../../packages/core/src/consent.ts';
 import { Ledger } from '../../packages/core/src/ledger.ts';
 import { Runner } from '../../packages/core/src/runner.ts';
 import { Gateway } from '../../packages/core/src/gateway.ts';
+import { Dispatcher } from '../../packages/core/src/dispatcher.ts';
 import { BUILTINS } from '@agent-spaghetti/integrations';
 import { Store } from '../../packages/core/src/store.ts';
 import { Bus } from '../../packages/core/src/bus.ts';
@@ -38,7 +39,7 @@ async function boot(scan: () => Promise<Snapshot> = async () => SNAP) {
   const resultsDir = mkdtempSync(join(tmpdir(), 'as-results-'));
   const runner = new Runner({ bus, consent, ledger, settings, resultsDir, host: () => host, snapshot: () => store.loadSnapshot('scan'), integrations: () => integrations,
     runOn: () => { throw new Error('no agents in this test'); } });
-  const services: Services = { store, bus, settings, consent, ledger, runner, gateway: new Gateway({ settings, store, runner }), host: () => host, cli: () => ({ command: 'node', args: ['/x/cli.ts'] }),
+  const services: Services = { store, bus, settings, consent, ledger, runner, gateway: new Gateway({ settings, store, runner }), dispatcher: new Dispatcher({ runner, settings, bus, ledger, live: () => live }), host: () => host, cli: () => ({ command: 'node', args: ['/x/cli.ts'] }),
     shutdown: () => { stopped++; }, live: () => live, scan: async () => { const snap = await scan(); store.saveSnapshot('scan', snap); return snap; },
     loaded: () => ({ integrations, rejected: [] }),
     onEnvs: async (cmd, args, envIds) => {
@@ -127,6 +128,8 @@ test('CLI 1b: switches, on (env resolved, switch.changed → live), test (record
   r = await cli('allow', 'lmstudio'); assert.equal(r.code, 1); assert.match(r.err, /not a third-party integration/);
   r = await cli('set', 'llmHosts', '192.0.2.5, 192.0.2.6'); assert.match(r.out, /llmHosts\s+192\.0\.2\.5,192\.0\.2\.6/);
   r = await cli('set', 'nope', '1'); assert.equal(r.code, 1); assert.match(r.err, /unknown setting nope/);
+  r = await cli('set', 'routing.learn', 'off'); assert.match(r.out, /routing\.learn\s+off/);
+  r = await cli('set', 'routing.learn', 'maybe'); assert.equal(r.code, 1); assert.match(r.err, /invalid value for routing\.learn/);
   r = await cli('disable', 'acme'); assert.match(r.out, /disabled: acme/);
   r = await cli('integrations'); assert.match(r.out, /^Model servers:\n/m); assert.match(r.out, /acme\s+Acme\s+skipped\s+-\s+-\s+skipped in scans/);
   r = await cli('enable', 'acme'); assert.match(r.out, /disabled: none/);
@@ -135,6 +138,7 @@ test('CLI 1b: switches, on (env resolved, switch.changed → live), test (record
   assert.deepEqual(b.services.store.eventsSince(0).filter(e => e.type === 'client.hook').map(e => [e.source, e.data.name]), [['acme', 'acme desk'], ['claude-desktop', 'Some Client']]);
   r = await cli('report'); assert.equal(r.code, 1); assert.match(r.err, /no scan yet/);
   await cli('scan');
+  r = await cli('routing', '--difficulty', 'light'); assert.match(r.out, /^code-edit \(light\):\n  - lmstudio  edits files: needs an agent$/m); assert.match(r.out, /^summarize \(light\):\n  1\. lmstudio  free, /m);
   const out = join(b.dir, 'report.md');
   r = await cli('report', '--out', out); assert.equal(r.code, 0);
   const { readFileSync } = await import('node:fs');

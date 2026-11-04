@@ -1,5 +1,5 @@
 {
-  "$comment": "JEV's shipped defaults (finish-line plan, Part I): word lists per hand-off kind (English and Italian; more languages are more entries), the order that breaks ties, the words that make a task heavy, and the difficulty thresholds. Data only: classify() in routing.ts reads it.",
+  "$comment": "JEV's shipped defaults (finish-line plan, Part I): word lists per hand-off kind (English and Italian; more languages are more entries), the order that breaks ties, the words that make a task heavy, and the difficulty thresholds; then how routing (route() in routing.ts) matches a task to a target: model sizes per tier (billions of parameters, from the model name) and how past runs count (half-life in days, runs needed before they move a target). Data only.",
   "kinds": {
     "tests": ["test", "tests", "unit test", "unit tests", "spec", "coverage", "pytest", "jest", "vitest", "failing test", "collaudo", "copertura", "test unitari"],
     "refactor": ["refactor", "rename", "restructure", "clean up", "simplify", "extract", "deduplicate", "split into", "rifattorizza", "ristruttura", "semplifica", "rinomina", "pulisci"],
@@ -14,5 +14,6 @@
   "heavyWords": ["architecture", "design", "migrate", "migration", "across the codebase", "debug why", "race condition", "security", "performance",
     "architettura", "migra", "migrazione", "in tutto il progetto", "sicurezza", "prestazioni"],
   "heavy": { "words": 2000, "files": 5, "editKinds": ["code-edit", "refactor"], "editFiles": 2 },
-  "light": { "words": 300, "files": 1, "codeLines": 50, "kinds": ["summarize", "docs", "research", "other"] }
+  "light": { "words": 300, "files": 1, "codeLines": 50, "kinds": ["summarize", "docs", "research", "other"] },
+  "route": { "lightMaxB": 8, "mediumMaxB": 32, "halfLifeDays": 30, "minRuns": 5 }
 }

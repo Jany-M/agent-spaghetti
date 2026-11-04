@@ -1,6 +1,6 @@
 // Handlers for the operations declared once in sdk/ops.ts. Per-environment work goes through Services.onEnvs (core/dispatch).
 import type { EnvResult, Grant, LiveState, OpId, OpIO, RunView, SettingsOut, Snapshot, Target } from '@agent-spaghetti/sdk';
-import { AUTO, OPS, declaredActions, rankTargets, levelsOf, renderConfigReport, toolRows, withGrants, withoutGrants } from '@agent-spaghetti/sdk';
+import { AUTO, DIFFICULTIES, EDIT_KINDS, HANDOFF_KINDS, OPS, declaredActions, rankTargets, levelsOf, renderConfigReport, toolRows, withGrants, withoutGrants } from '@agent-spaghetti/sdk';
 import type { Store } from './store.ts';
 import type { Bus } from './bus.ts';
 import type { Loaded } from './registry.ts';
@@ -11,10 +11,11 @@ import type { EnvCommand, EnvResults } from './actions.ts';
 import type { Ledger } from './ledger.ts';
 import type { Runner } from './runner.ts';
 import type { Gateway } from './gateway.ts';
+import type { Dispatcher } from './dispatcher.ts';
 import { ENGINES } from './engine/inspect.ts';
 
 export interface Services {
-  store: Store; bus: Bus; settings: Settings; consent: Consent; ledger: Ledger; runner: Runner; gateway: Gateway;
+  store: Store; bus: Bus; settings: Settings; consent: Consent; ledger: Ledger; runner: Runner; gateway: Gateway; dispatcher: Dispatcher;
   shutdown(): void;
   host(): import('@agent-spaghetti/sdk').Environment | null;
   /** How to run agent-spaghetti in an environment (clients start its MCP bridge with it). */
@@ -150,6 +151,12 @@ export const handlers: Handlers = {
     return { model, key, setup: m.speaks.openaiClient.setup.replaceAll('{url}', url).replaceAll('{key}', key) };
   },
   handback: (i, s) => { s.runner.report(num(i.run_id, 0), need(i.source, 'source'), String(i.result ?? ''), i.status === 'failed'); return { ok: true }; },
+  routing: (i, s) => {
+    const difficulty = i.difficulty ?? 'medium';
+    if (!DIFFICULTIES.includes(difficulty)) throw new Error(`difficulty must be one of ${DIFFICULTIES.join(', ')}`);
+    // edit kinds as they usually come: with the caller's folder
+    return { difficulty, kinds: HANDOFF_KINDS.map(kind => ({ kind, ranked: s.dispatcher.ranking({ kind, difficulty, edits: EDIT_KINDS.has(kind) }) })) };
+  },
   cancel: (i, s) => ({ cancelled: s.runner.cancel(num(i.id, 0)) }),
   verdict: (i, s) => {
     if (!['up', 'down', 'redo'].includes(i.value)) throw new Error('verdict must be up, down or redo');

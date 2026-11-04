@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { emptyLive, liveState, type ConsentRequest, type Snapshot } from '@agent-spaghetti/sdk';
+import { emptyLive, liveState, type ConsentRequest, type Snapshot, type Target } from '@agent-spaghetti/sdk';
 import { ApprovalCard, PopoverView } from '@agent-spaghetti/ui';
 
 const ask: ConsentRequest = { id: 'q1', ts: 1, subject: 'acme', action: 'read', resource: 'PATH:acme', why: 'look for acme', scopes: ['always'] };
@@ -45,8 +45,8 @@ test('popover frame: one tab per panel (current marked, others off while the dae
   const { PANELS } = await import('@agent-spaghetti/sdk');
   const up = { up: true, status: { snapshot: null, live: emptyLive(), consents: [ask] } };
   const a = html(h(PopoverView, { view: up, now: 0, onAnswer: noop, onScan: noop, scanning: false, panel: 'runs' }, h('p', null, 'RUNS-PANEL')));
-  assert.deepEqual([...a.matchAll(/<nav[^]*?<\/nav>/g)][0][0].match(/<button[^>]*>([A-Za-z]+)/g)!.map(b => b.replace(/<button[^>]*>/, '')), ['Home', 'Tools', 'Runs', 'Settings', 'Activity']);
-  assert.equal(PANELS.length, 5);
+  assert.deepEqual([...a.matchAll(/<nav[^]*?<\/nav>/g)][0][0].match(/<button[^>]*>([A-Za-z]+)/g)!.map(b => b.replace(/<button[^>]*>/, '')), ['Home', 'Tools', 'Runs', 'Routing', 'Settings', 'Activity']);
+  assert.equal(PANELS.length, 6);
   assert.match(a, /aria-current="page"[^>]*>Runs/);
   assert.match(a, /RUNS-PANEL/); assert.ok(!a.includes('Waiting for you'));
   assert.match(a, />Home<span class="count">1<\/span>/, 'questions counted on the Home tab');
@@ -122,11 +122,14 @@ test('runs panel: form fields → delegate input (auto, then, return); list line
   assert.equal([...one.matchAll(/class="detail"/g)].length, 1, 'other rows stay closed');
 });
 test('settings and activity panels: grouped fields, pick lists from the daemon\'s choices, saves confirmed; events with their facts, newest first', async () => {
-  const { SettingsView, ActivityView, settingText } = await import('@agent-spaghetti/ui');
+  const { SettingsView, ActivityView } = await import('@agent-spaghetti/ui');
+  const { settingText } = await import('@agent-spaghetti/sdk/web');
   const base = { busy: null, error: null, saved: null, report: null, onSave: noop, onReport: noop };
-  const s = html(h(SettingsView, { ...base, settings: { llmHosts: { value: ['192.0.2.1', '192.0.2.2'], help: 'hosts' }, 'scan.everyMin': { value: 10, help: 'minutes' } } }));
-  assert.match(s, /<h2>general<\/h2>.*name="llmHosts" value="192.0.2.1, 192.0.2.2"/s); assert.match(s, /<h2>scan<\/h2>.*type="number" name="scan.everyMin" value="10"/s);
-  assert.equal(settingText([]), ''); assert.match(s, /Show and save report/);
+  const s = html(h(SettingsView, { ...base, settings: { llmHosts: { value: ['192.0.2.1', '192.0.2.2'], help: 'hosts' }, 'scan.everyMin': { value: 10, help: 'minutes' },
+    'routing.learn': { value: true, help: 'in the Routing panel' }, 'x.on': { value: false, help: 'a switch' } } }));
+  assert.doesNotMatch(s, /routing\.learn/, 'routing settings live in the Routing panel'); assert.match(s, /<input type="checkbox" name="x.on"\/> off/, 'a switch is a checkbox');
+  assert.match(s, /<h2>general<\/h2>.*name="llmHosts" value="192.0.2.1,192.0.2.2"/s); assert.match(s, /<h2>scan<\/h2>.*type="number" name="scan.everyMin" value="10"/s);
+  assert.equal(settingText([]), ''); assert.equal(settingText(false), 'off'); assert.match(s, /Show and save report/);
   const d = html(h(SettingsView, { ...base, saved: 'dispatcher.model', report: '# Report', settings: {
     'dispatcher.model': { value: 'lms:gone', help: 'h', choices: [{ value: '', label: 'off' }, { value: 'lms:a', label: 'LMS: a' }] },
     'connect.auto': { value: ['cursor'], help: 'h', choices: [{ value: 'cursor', label: 'Cursor' }, { value: 'vscode', label: 'VS Code' }] } } }));
@@ -167,4 +170,20 @@ test('live pane: work events only by default, one run on request, streamed outpu
   assert.match(page, /<b class="tool hub">Agent Spaghetti<\/b> <span class="act decide">picks<\/span>/); assert.match(page, /<pre>Hello world<\/pre>/, 'an opened trace shows its full text');
   const one = html(h(LiveList, { rows: liveRows(events, { run: 6 }), all: false, run: 6, paused: true, open: new Set<number>(), onAll: noop, onRun: noop, onPause: noop, onClear: noop, onToggle: noop, onClose: noop }));
   assert.match(one, /class="chip"[^>]*>run 6 ×</); assert.match(one, /aria-pressed="true">Resume</);
+});
+test('routing panel: per kind the targets best first with why, First / Never per kind, the routing switches, the shipped word lists', async () => {
+  const { RoutingView, routePicks } = await import('@agent-spaghetti/ui');
+  const t = (id: string): Target => ({ id, name: id, kind: 'model', cost: 'free', envId: 'w', models: [], engine: 'openai', resumable: false });
+  const routing = { difficulty: 'light' as const, kinds: [{ kind: 'summarize' as const, ranked: [{ target: t('lms'), tier: 'light' as const, why: 'your pick for summarize, free, light tier', preferred: true as const },
+    { target: t('oll'), tier: 'light' as const, why: 'never for summarize (your choice)', skip: 'never for summarize (your choice)' }] }, { kind: 'tests' as const, ranked: [] }] };
+  const settings = { 'routing.never': { value: ['summarize=oll'], help: 'n' }, 'routing.learn': { value: true, help: 'use past runs' } };
+  const page = html(h(RoutingView, { routing, settings, difficulty: 'light', busy: null, error: null, onDifficulty: noop, onPick: noop, onSave: noop }));
+  assert.match(page, /<h2>summarize<\/h2>.*1\. <\/b>lms<span class="why">  your pick for summarize, free, light tier<\/span>.*aria-pressed="true"[^>]*>First<\/button>/s);
+  assert.match(page, /class="route skip"><div><b>– <\/b>oll.*aria-pressed="true"[^>]*>Never</s);
+  assert.match(page, /<h2>tests<\/h2><div class="card list"><div class="empty">Nothing to hand it to now./);
+  assert.match(page, /routing\.learn<\/div><div class="why">use past runs<\/div><label class="check"><input type="checkbox" name="routing.learn" checked=""\/> on/);
+  assert.match(page, /<summary>How the kind of a task is told<\/summary>.*<b>summarize<\/b>: summarize, summarise/s);
+  assert.deepEqual(routePicks(['summarize=a', 'docs=a'], ['summarize=b'], 'summarize', 'b', 'prefer'), { 'routing.prefer': ['docs=a', 'summarize=b'], 'routing.never': [] }, 'one pick per kind; not both');
+  assert.deepEqual(routePicks(['summarize=b'], [], 'summarize', 'b', 'prefer'), { 'routing.prefer': [], 'routing.never': [] }, 'pressed again: off');
+  assert.deepEqual(routePicks(['summarize=b'], [], 'summarize', 'b', 'never'), { 'routing.prefer': [], 'routing.never': ['summarize=b'] });
 });

@@ -1,9 +1,10 @@
 // The dispatcher (ADR 0010 §6): Agent Spaghetti's own fallback and observer. It picks a target for hops that name `auto` (or,
-// when it is on, one that is not available), and hands a run without progress for `dispatcher.stuckMin` to the next target,
-// once per chain. It thinks with `dispatcher.model` through the runner itself (its runs are recorded like any other);
-// without a model it is off and `auto` takes the best-ranked target (sdk rankTargets: free first, no tool preferred).
-import type { Disposable, LiveState, RunRequest, Target } from '@agent-spaghetti/sdk';
-import { AUTO, parseHop, rankTargets } from '@agent-spaghetti/sdk';
+// when it is on, one that is not available) from the ranking for the task (sdk route: the task's kind and difficulty, the
+// `routing.*` settings, past runs, queues; no tool preferred), hands a run without progress for `dispatcher.stuckMin` to the next
+// target, once per chain, and names the next target when a chosen one fails (runner escalation). With `dispatcher.model` set it
+// also asks that model to pick among the ranked targets, through the runner itself (its runs are recorded like any other).
+import type { Classification, Disposable, LiveState, Ranked, RunRequest, Target } from '@agent-spaghetti/sdk';
+import { AUTO, EDIT_KINDS, classifyRequest, mayEdit, parseHop, route, summarizeRuns } from '@agent-spaghetti/sdk';
 import type { Bus } from './bus.ts';
 import type { Ledger } from './ledger.ts';
 import type { Settings } from './settings.ts';
@@ -11,6 +12,7 @@ import type { Runner } from './runner.ts';
 
 export const SELF = 'agent-spaghetti';
 const WATCH_MS = 30_000;
+const STATS_RUNS = 2000;                                    // the latest runs the ranking learns from (older ones weigh little anyway)
 
 /** The question the dispatcher model answers: one target id for the task. */
 export const routePrompt = (task: string, options: Target[]) => ['Pick the one tool that should do the task below. Answer with its id only'
@@ -29,18 +31,21 @@ export class Dispatcher {
   private reported = new Set<number>();                     // runs reported stuck
   constructor(d: Dispatcher['d']) { this.d = d; }
   on(): boolean { return !!this.d.settings.get('dispatcher.model'); }
-  /** Available targets, best first; among equals the one with the shortest queue (two free model servers share the load). */
-  private ranked(skip: string[]): Target[] {
-    const q = this.d.live?.().queues ?? {};
-    return rankTargets(this.d.runner.targets().filter(t => !skip.includes(t.id)), { queued: id => (q[id]?.waiting ?? 0) + (q[id]?.running ?? 0) });
+  /** Every available target for a task, best first (skipped ones last, with why); `source` and `without` never take it. */
+  ranking(c: Pick<Classification, 'kind' | 'difficulty'> & { edits?: boolean }, source?: string, without: string[] = []): Ranked[] {
+    const s = this.d.settings, q = this.d.live?.().queues ?? {}, learn = s.get('routing.learn');
+    return route(c, this.d.runner.targets().filter(t => !without.includes(t.id)), { source, learn, stretch: s.get('routing.stretch'),
+      prefer: s.get('routing.prefer'), never: s.get('routing.never'), tiers: s.get('routing.tiers'),
+      stats: summarizeRuns(this.d.ledger.list({ since: 0, limit: STATS_RUNS })), queued: id => (q[id]?.waiting ?? 0) + (q[id]?.running ?? 0) });
   }
 
-  /** The request with a target chosen: the model's pick when on, else the ranking's first. Never the caller itself. */
-  async route(source: string, req: RunRequest): Promise<RunRequest> {
+  /** The request with a target chosen: the model's pick when on, else the ranking's first; never the caller nor `without`. */
+  async route(source: string, req: RunRequest, without: string[] = []): Promise<RunRequest> {
     if (req.target !== AUTO && !this.on()) return req;      // an unknown target stays an error when the dispatcher is off
-    const options = this.ranked([source]);
-    if (!options.length) throw new Error('no target is available for this task (see: targets)');
-    let pick: { target: string; model?: string } = { target: options[0].id }, why = 'best-ranked target';
+    const c = classifyRequest(req);
+    const ranked = this.ranking({ ...c, edits: mayEdit({ ...req, kind: c.kind }) }, source, without), options = ranked.filter(r => !r.skip).map(r => r.target);
+    if (!options.length) throw new Error(`no target can take this ${c.kind} task now${ranked.length ? ` (${ranked.map(r => `${r.target.id}: ${r.why}`).join('; ')})` : ''} (see: targets)`);
+    let pick: { target: string; model?: string } = { target: options[0].id }, why = ranked[0].why;
     if (this.on()) {
       const prompt = routePrompt(req.task, options);
       this.d.bus.trace(SELF, { stage: 'route-prompt', text: prompt });
@@ -49,8 +54,8 @@ export class Dispatcher {
       this.d.bus.trace(SELF, { stage: 'route-answer', text: p ? `picked ${p.model ? `${p.target}:${p.model}` : p.target}` : `no target in the answer: ${answer || '(empty)'}` });
       if (p) { pick = p; why = 'chosen by the dispatcher model'; } else if (answer) why = 'dispatcher answer not a target: best-ranked target';
     }
-    this.act('routed', { asked: req.target, to: pick.target, why });
-    return { ...req, ...pick };
+    this.act(without.length ? 'escalated' : 'routed', { asked: req.target, to: pick.target, why, kind: c.kind, difficulty: c.difficulty, ...(without.length ? { from: without.join(', '), id: req.chainId } : {}) });
+    return { ...req, ...pick, classification: c, chosen: true };
   }
   /** Every WATCH_MS: runs without progress for `dispatcher.stuckMin` go to the next-ranked target (once per chain), else are reported once. */
   watch(): Disposable {
@@ -63,7 +68,8 @@ export class Dispatcher {
     const limit = this.d.settings.get('dispatcher.stuckMin') * 60_000;
     for (const r of this.d.runner.active()) {
       if (r.source === SELF || now - r.at < limit) continue;  // never acts on its own runs
-      const next = this.ranked([r.target, r.source])[0];
+      const row = this.d.ledger.get(r.id);
+      const next = row && this.ranking({ kind: row.kind, difficulty: row.difficulty ?? 'medium', edits: EDIT_KINDS.has(row.kind) }, r.source, [r.target]).find(x => !x.skip)?.target;   // the folder is not recorded: an edit kind stays with agents
       if (this.handed.has(r.chainId) || !next) { if (!this.reported.has(r.id)) { this.reported.add(r.id); this.act('stuck', { id: r.id, target: r.target }); } continue; }   // the deadline ends it
       this.handed.add(r.chainId);
       if (this.d.runner.handOver(r.id, next.id)) this.act('handed-over', { id: r.id, from: r.target, to: next.id });

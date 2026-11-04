@@ -3,6 +3,7 @@ export * from './bridge.ts';
 export * from './hooks.ts';
 export * from './tools.ts';
 export * from './runs.ts';
+export * from './routing.ts';
 export * from './settings.ts';
 export * from './activity.ts';
 export * from './story.ts';

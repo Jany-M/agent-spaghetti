@@ -75,7 +75,7 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
   const host = () => entries.find(e => e.env)?.env ?? null;
   const runner: Runner = new Runner({ bus, consent, ledger, settings, resultsDir: join(dir, 'results'), host, snapshot: () => store.loadSnapshot<Snapshot>('scan'),
     integrations: () => loaded.integrations.filter(i => !settings.get('disabled').includes(i.manifest.id)),
-    route: (source, req): Promise<RunRequest> => dispatcher.route(source, req),
+    route: (source, req, without): Promise<RunRequest> => dispatcher.route(source, req, without),
     async *runOn(envId, id, req, ro) {
       const e = entries.find(x => x.status.id === envId);
       if (!e) throw new Error(`environment ${envId} is gone (rescan)`);
@@ -137,7 +137,7 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
     }
   }
   const services: Services = {
-    store, bus, settings, consent, ledger, runner, gateway, host, loaded: () => loaded, live: () => live,
+    store, bus, settings, consent, ledger, runner, gateway, dispatcher, host, loaded: () => loaded, live: () => live,
     cli: envId => {
       const e = entries.find(x => x.status.id === envId);
       const p = e?.distro ? prepared(e.distro) : null;

@@ -3,6 +3,7 @@ import { createElement as h, useEffect, useState, type ReactNode } from 'react';
 import { ACTION_LABEL, PANELS, SCOPE_LABEL, emptyLive, isTrace, renderStats, trayState, type ConsentRequest, type ConsentScope, type OpIO, type Panel } from '@agent-spaghetti/sdk/web';
 import { ToolsPanel } from './tools.ts';
 import { RunsPanel } from './runs.ts';
+import { RoutingPanel } from './routing.ts';
 import { SettingsPanel } from './settings.ts';
 import { ActivityPanel } from './activity.ts';
 import type { Bridge } from './bridge.ts';
@@ -35,7 +36,7 @@ function sessions(s: Status) {
 }
 const section = (title: string, ...children: ReactNode[]) => h('section', null, h('h2', null, title), ...children);
 
-const PANEL_LABEL: Record<Panel, string> = { home: 'Home', tools: 'Tools', runs: 'Runs', settings: 'Settings', activity: 'Activity' };
+const PANEL_LABEL: Record<Panel, string> = { home: 'Home', tools: 'Tools', runs: 'Runs', routing: 'Routing', settings: 'Settings', activity: 'Activity' };
 export interface PopoverProps { view: HubView; now: number; onAnswer: Answer; onScan(): void; scanning: boolean; panel?: Panel; onPanel?(p: Panel): void; onLive?(): void; children?: ReactNode }
 /** The popover frame: status header, one tab per panel, the panel (Home: questions + what runs), rescan footer. */
 export function PopoverView({ view, now, onAnswer, onScan, scanning, panel = 'home', onPanel, onLive, children }: PopoverProps) {
@@ -75,7 +76,7 @@ export function useHub(bridge: Bridge): HubView & { refresh(): Promise<void> } {
   return { ...view, refresh };
 }
 
-const PANEL_COMPONENT: Record<Exclude<Panel, 'home'>, (p: { bridge: Bridge }) => ReactNode> = { tools: ToolsPanel, runs: RunsPanel, settings: SettingsPanel, activity: ActivityPanel };
+const PANEL_COMPONENT: Record<Exclude<Panel, 'home'>, (p: { bridge: Bridge }) => ReactNode> = { tools: ToolsPanel, runs: RunsPanel, routing: RoutingPanel, settings: SettingsPanel, activity: ActivityPanel };
 export function Popover({ bridge }: { bridge: Bridge }) {
   const hub = useHub(bridge);
   const [now, setNow] = useState(Date.now());

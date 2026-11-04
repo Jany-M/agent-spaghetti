@@ -114,10 +114,10 @@ export const DIFFICULTIES = ['light', 'medium', 'heavy'] as const;
 export type Difficulty = (typeof DIFFICULTIES)[number];
 /** A task's kind and difficulty as JEV set them: `by` says who set the kind (the caller, or the default rules), `confidence` 0–1. */
 export interface Classification { kind: TaskKind; difficulty: Difficulty; by: 'caller' | 'rules'; confidence: number }
-/** One hand-off (ADR 0010 envelope). `then` = the next hops (`target[:model]`), each getting the previous result as `context`;
- *  the last result goes back to the caller (`returnTo`, default 'caller'), into `returnSession` when the caller knows its session. */
 /** The target that means "let Agent Spaghetti choose" (core/dispatcher.ts). */
 export const AUTO = 'auto';
+/** One hand-off (ADR 0010 envelope). `then` = the next hops (`target[:model]`), each getting the previous result as `context`;
+ *  the last result goes back to the caller (`returnTo`, default 'caller'), into `returnSession` when the caller knows its session. */
 export interface RunRequest {
   target: string; task: string; kind?: TaskKind; difficulty?: Difficulty; reason?: string; model?: string;
   cwd?: string; resultDir?: string; jobId?: string; parentRunId?: number; deadlineMs?: number;
@@ -126,6 +126,7 @@ export interface RunRequest {
   session?: string;                                         // a session of the target to continue (engines that can resume)
   chainId?: number;                                         // set by the runner for hops after the first
   classification?: Classification;                          // set by the runner on the first hop; the chain's later hops keep it
+  chosen?: boolean;                                         // Agent Spaghetti chose the target (routing): a failure may escalate to the next one
 }
 export type RunEvent =
   | { type: 'text'; text: string } | { type: 'tool'; name: string; summary: string }
@@ -170,7 +171,7 @@ export interface IntegrationModule {
   /** The tool's own settings (shown in Settings as `<id>.<key>`; its hooks get them as `options`). */
   settings?: Record<string, SettingDef>;
 }
-export interface SettingDef { default: string | number | string[]; help: string; choices?: SettingChoices }
+export interface SettingDef { default: string | number | boolean | string[]; help: string; choices?: SettingChoices }
 /** Where a setting's values come from, so the GUI offers a pick list: found tools, connectable clients, loaded models; `extra` first. */
 export interface SettingChoices { from: 'tools' | 'clients' | 'models'; extra?: readonly string[] }
 /** A loaded model of a local OpenAI-compatible server, as an agent's config needs it. */

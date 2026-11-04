@@ -101,6 +101,8 @@ export const runLine = (r: RunRow) => `${String(r.id).padStart(4)}  ${new Date(r
 /** How a target takes tasks (ADR 0010 §2), as people read it. */
 export const ENGINE_LABEL: Record<Target['engine'], string> = { openai: 'model API', acp: 'ACP', module: 'its CLI', chat: 'its chat' };
 /** Where a chain's result went (ADR 0010), as people read it. */
+/** A setting's value as text (CLI, Settings panel): lists comma separated, switches on/off. */
+export const settingText = (v: unknown) => (Array.isArray(v) ? v.join(',') : typeof v === 'boolean' ? (v ? 'on' : 'off') : String(v ?? ''));
 export const DELIVERY_LABEL: Record<Delivery, string> = { inline: 'returned', resumed: 'resumed in its session', injected: 'sent to its chat', unread: 'waiting to be read', read: 'read' };
 /** One event as a line (CLI `events`, the Activity panel). */
 export const eventLine = (e: StoredEvent) => `${new Date(e.ts).toTimeString().slice(0, 8)}  ${e.type}  ${e.source}  ${e.envId}${eventFacts(e.data)}`;
@@ -137,7 +139,8 @@ export function storyParts(e: StoredEvent): Part[] | null {
     case 'run.finished': return [...R, { tool: String(d.target) }, ' ', a(d.outcome === 'done' ? 'answer' : d.outcome === 'cancelled' ? 'note' : 'fail', String(d.outcome)),
       d.error && d.error !== d.outcome ? ` (${String(d.error).slice(0, 120)})` : ''];
     case 'run.delivered': return [...R, a(d.how === 'unread' ? 'note' : 'answer', `result ${DELIVERY_LABEL[d.how as Delivery] ?? d.how}`), ...(d.to ? [' (', { tool: String(d.to) }, ')'] : [])];
-    case 'dispatcher.action': return d.what === 'routed' ? [AS, ' ', a('decide', 'picks'), ' ', { tool: String(d.to) }, ` for ${d.asked} (${d.why})`]
+    case 'dispatcher.action': return d.what === 'routed' ? [AS, ' ', a('decide', 'picks'), ' ', { tool: String(d.to) }, ` for ${d.kind ? `${d.kind} · ${d.difficulty}` : d.asked} (${d.why})`]
+      : d.what === 'escalated' ? [...R, { tool: String(d.from) }, ' ', a('fail', 'failed'), ', ', AS, ' ', a('decide', 'escalates to'), ' ', { tool: String(d.to) }, ` (${d.why})`]
       : d.what === 'handed-over' ? [...R, a('fail', 'no progress'), ' on ', { tool: String(d.from) }, ', ', a('decide', 'handed to'), ' ', { tool: String(d.to) }]
       : d.what === 'stuck' ? [...R, a('fail', 'no progress'), ' on ', { tool: String(d.target) }] : null;
     case 'consent.requested': return [{ tool: e.source }, ' ', a('decide', `asks to ${d.action}`), ' ', d.action === 'run' ? { tool: String(d.resource) } : String(d.resource),

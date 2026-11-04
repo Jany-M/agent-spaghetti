@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ConsentScope, Delivery, Environment, Integration, RunEvent, RunOutcome, RunRequest, RunRow, Snapshot, Target } from '@agent-spaghetti/sdk';
-import { AUTO, classify, envPath, parseHop, programOf, runDecision, withGrants } from '@agent-spaghetti/sdk';
+import { AUTO, classifyRequest, envPath, parseHop, programOf, runDecision, withGrants } from '@agent-spaghetti/sdk';
 import type { Bus } from './bus.ts';
 import type { Consent } from './consent.ts';
 import type { Ledger } from './ledger.ts';
@@ -17,8 +17,8 @@ import { deliver } from './returns.ts';
 export interface RunnerDeps {
   bus: Bus; consent: Consent; ledger: Ledger; settings: Settings; resultsDir: string;
   host(): Environment | null; snapshot(): Snapshot | null; integrations(): Integration[];
-  /** A target for a hop that names `auto` or an unavailable one (core/dispatcher.ts); without it such hops are refused. */
-  route?(source: string, req: RunRequest): Promise<RunRequest>;
+  /** A target for a hop that names `auto` or an unavailable one, never one in `without` (core/dispatcher.ts); without it such hops are refused. */
+  route?(source: string, req: RunRequest, without?: string[]): Promise<RunRequest>;
   /** An agent's run in the environment where it was found (core/dispatch.ts runOnEnv). */
   runOn(envId: string, id: string, req: RunRequest, o: { signal: AbortSignal; runId: number }): AsyncIterable<RunEvent>;
 }
@@ -60,6 +60,7 @@ export class Runner {
   private d: RunnerDeps;
   private running = new Map<number, { ac: AbortController; done: Promise<RunRow>; target: string; source: string; chainId: number; at: number }>();
   private retries = new Map<number, string>();                                               // stuck hop → the target that takes it over
+  private escalated = new Set<number>();                                                     // chains that already escalated once
   private chains = new Map<number, Chain & { done: Promise<RunRow>; resolve(r: RunRow): void }>();
   private reports = new Map<number, (r: { result: string; failed: boolean }) => void>();   // chat runs waiting for `report`
   constructor(d: RunnerDeps) { this.d = d; }
@@ -74,7 +75,7 @@ export class Runner {
       throw new Error(`${t.name} has no ${t.kind === 'model' ? 'loaded model' : 'agent'} ${req.model} (${t.kind === 'model' ? 'loaded' : 'agents'}: ${t.models.join(', ')})`);
     for (const hop of req.then ?? []) if (parseHop(hop).target !== AUTO && !this.targets().some(x => x.id === parseHop(hop).target)) throw new Error(`unknown or unavailable target ${parseHop(hop).target} in then (see: targets)`);
     // JEV (finish-line plan, Part I): the caller's kind and difficulty when valid, else the default rules; a chain's later hops keep it.
-    const c = req.classification ?? classify([req.task, req.context].filter(Boolean).join('\n\n'), req.files?.length ?? 0, req);
+    const c = classifyRequest(req);
     const kind = c.kind;
     // An agent that delegates while it runs a delegated task works on that task (one such run: it is the parent).
     const busy = [...this.running].filter(([, r]) => r.target === source);
@@ -124,18 +125,25 @@ export class Runner {
     const over = this.retries.get(row.id);
     if (over) {
       this.retries.delete(row.id);
-      try { this.start(row.source, { ...req, target: over, model: undefined, session: undefined }); return; }
+      try { this.start(row.source, { ...req, target: over, model: undefined, session: undefined, chosen: true }); return; }
       catch (e) { this.d.ledger.update(row.id, { error: `${row.error}; not handed over: ${(e as Error).message}` }); }
+    }
+    // Escalation (routing.escalate): a target Agent Spaghetti chose failed or answered nothing → the next in the ranking, once per chain.
+    const empty = row.outcome === 'done' && !this.d.ledger.result(row)?.trim();
+    if (req.chosen && (row.outcome === 'error' || empty) && this.d.route && this.d.settings.get('routing.escalate') && !this.escalated.has(req.chainId!)) {
+      this.escalated.add(req.chainId!);
+      try { this.start(row.source, await this.d.route(row.source, { ...req, target: AUTO, model: undefined, session: undefined }, [row.target])); return; }
+      catch (e) { this.d.ledger.update(row.id, { error: `${row.error ?? 'no answer'}; not escalated: ${(e as Error).message}` }); }
     }
     const [hop, ...rest] = req.then ?? [];
     if (row.outcome === 'done' && hop) {
       try {
-        await this.begin(row.target, { ...req, ...parseHop(hop), session: undefined, context: this.d.ledger.result(row), then: rest, parentRunId: row.id }); return;
+        await this.begin(row.target, { ...req, ...parseHop(hop), session: undefined, chosen: undefined, context: this.d.ledger.result(row), then: rest, parentRunId: row.id }); return;
       } catch (e) { this.d.ledger.update(row.id, { error: `next hop not started: ${(e as Error).message}` }); }
     }
     const c = this.chains.get(req.chainId!);
     if (!c) return;
-    this.chains.delete(c.id);
+    this.chains.delete(c.id); this.escalated.delete(c.id);
     const last = this.d.ledger.get(row.id)!;
     c.resolve(last);
     if (c.returnTo === 'none') return;

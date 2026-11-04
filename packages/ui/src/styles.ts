@@ -35,7 +35,7 @@ button:disabled { opacity:.6; cursor:default; }
 .list div { padding:3px 0; border-bottom:1px solid var(--line); } .list div:last-child { border:0; }
 .empty { color:var(--muted); }
 .tabs { display:flex; gap:2px; padding:6px 8px 0; border-bottom:1px solid var(--line); }
-.tabs button { border:0; background:none; border-radius:6px 6px 0 0; padding:5px 9px; color:var(--muted); border-bottom:2px solid transparent; }
+.tabs button { border:0; background:none; border-radius:6px 6px 0 0; padding:5px 7px; color:var(--muted); border-bottom:2px solid transparent; }
 .tabs button[aria-current=page] { color:var(--fg); border-bottom-color:var(--accent); font-weight:600; }
 .count { margin-left:5px; font-size:10px; background:var(--approval); color:#1d1f23; border-radius:8px; padding:0 5px; }
 .panel { display:flex; flex-direction:column; gap:8px; }
@@ -55,6 +55,8 @@ details.group > .card { margin-top:6px; }
 .form .grid { display:grid; grid-template-columns:1fr 1fr; gap:6px 8px; margin:6px 0; }
 .form label { display:flex; flex-direction:column; gap:2px; font-size:12px; color:var(--muted); }
 .form .setting { padding:6px 0; border-bottom:1px solid var(--line); display:flex; flex-direction:column; gap:3px; } .form .setting:last-child { border:0; }
+.routing .route { padding:5px 0; border-bottom:1px solid var(--line); } .routing .route:last-child { border:0; } .routing .route .row { margin-top:3px; }
+.routing .route .row button { font-size:12px; padding:1px 8px; } .routing .skip { color:var(--muted); } .routing .why { color:var(--muted); font-size:12px; }
 .form .setting .name { font-weight:600; } .ok { color:var(--idle); font-weight:400; font-size:12px; }
 .checks { display:grid; grid-template-columns:1fr 1fr; gap:0 8px; } .checks input, .check input { width:auto; margin-right:4px; }
 .out { margin-top:6px; } .out.fail pre { border-left:3px solid var(--problem); } .out.pass pre { border-left:3px solid var(--idle); }
