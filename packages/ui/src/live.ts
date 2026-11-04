@@ -1,9 +1,10 @@
 // The live pane (?window=live): a small window that stays on top and stays open when you click elsewhere. One line per step of the
 // work as it happens: hand-offs and hops, Agent Spaghetti's choices, questions, the task as sent, answers as they stream, where results
-// went. Trace lines (never stored, ADR 0007) open to their full text. Lines and colors come from sdk storyLine / eventTone.
+// went. Trace lines (never stored, ADR 0007) open to their full text. Lines from sdk storyParts, tools and actions colored (story.ts).
 import { createElement as h, useEffect, useState } from 'react';
 import { eventTone, isTrace, storyLine, type StoredEvent } from '@agent-spaghetti/sdk/web';
 import type { Bridge } from './bridge.ts';
+import { Story } from './story.ts';
 import { useEvents } from './hooks.ts';
 
 const KEEP = 400;
@@ -13,7 +14,7 @@ export const runOf = (e: StoredEvent): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 const ABOUT_WORK = (e: StoredEvent) => e.type.startsWith('run.') || e.type.startsWith('consent.') || e.type === 'dispatcher.action' || e.type === 'trace.detail';
-export interface LiveRow { key: number; tone: string; line: string; run: number | null; text?: string }
+export interface LiveRow { key: number; tone: string; line: string; event: StoredEvent; run: number | null; text?: string }
 /** What the pane shows: work events only unless `all`, one run when `run` is set; streamed output of a run is one growing line. */
 export function liveRows(events: StoredEvent[], o: { all?: boolean; run?: number | null } = {}): LiveRow[] {
   const rows: LiveRow[] = [];
@@ -26,11 +27,11 @@ export function liveRows(events: StoredEvent[], o: { all?: boolean; run?: number
     if (e.type === 'trace.detail' && d.stage === 'output' && last && last.e.type === 'trace.detail' && (last.e.data as Record<string, unknown>).stage === 'output' && runOf(last.e) === run) {
       last.text += String(d.text ?? '');
       const merged = { ...last.e, data: { ...last.e.data, text: last.text } };
-      rows[rows.length - 1] = { key: last.e.id, tone: eventTone(merged), line: storyLine(merged), run, text: last.text };
+      rows[rows.length - 1] = { key: last.e.id, tone: eventTone(merged), line: storyLine(merged), event: merged, run, text: last.text };
       continue;
     }
     last = isTrace(e) ? { e, text: String(d.text ?? '') } : null;
-    rows.push({ key: e.id, tone: eventTone(e), line: storyLine(e), run, ...(isTrace(e) ? { text: String(d.text ?? '') } : {}) });
+    rows.push({ key: e.id, tone: eventTone(e), line: storyLine(e), event: e, run, ...(isTrace(e) ? { text: String(d.text ?? '') } : {}) });
   }
   return rows;
 }
@@ -51,7 +52,7 @@ export function LiveList(p: LiveProps) {
     p.rows.length ? h('div', { className: 'feed mono', role: 'log', 'aria-live': 'polite' }, ...p.rows.map(r => h('div', { key: r.key, className: `entry tone-${r.tone}` },
       h('div', { className: 'line' },
         r.run !== null && p.run === null ? h('button', { className: 'tag', title: `Only run ${r.run}`, onClick: () => p.onRun(r.run) }, `#${r.run}`) : null,
-        r.text !== undefined ? h('button', { className: 'text', 'aria-expanded': p.open.has(r.key), onClick: () => p.onToggle(r.key) }, r.line) : h('span', null, r.line)),
+        r.text !== undefined ? h('button', { className: 'text', title: 'Show the full text', 'aria-expanded': p.open.has(r.key), onClick: () => p.onToggle(r.key) }, h(Story, { e: r.event })) : h(Story, { e: r.event })),
       r.text !== undefined && p.open.has(r.key) ? h('pre', null, r.text) : null)))
       : h('div', { className: 'empty' }, p.paused ? 'Paused.' : 'Nothing yet: hand a task to a tool and its steps show here as they happen.'));
 }

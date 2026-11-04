@@ -5,4 +5,5 @@ export * from './tools.ts';
 export * from './runs.ts';
 export * from './settings.ts';
 export * from './activity.ts';
+export * from './story.ts';
 export { CSS } from './styles.ts';

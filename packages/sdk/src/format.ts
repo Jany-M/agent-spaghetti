@@ -116,31 +116,53 @@ export function eventTone(e: Pick<StoredEvent, 'type' | 'data'>): Tone {
   if (e.type === 'run.delivered') return d.how === 'unread' ? 'info' : 'ok';
   return 'info';
 }
-const TRACE_LABEL: Record<TraceStage, string> = { 'route-prompt': 'asks its dispatcher model', 'route-answer': 'dispatcher model', relay: 'sends the task to', output: 'answers' };
-/** One event as a sentence (Activity, the live pane): runs, hand-offs, routing and questions in words; anything else as eventLine. */
-export function storyLine(e: StoredEvent): string {
-  const d = e.data, at = new Date(e.ts).toTimeString().slice(0, 8), run = d.id ?? d.runId;
-  const s = (() => {
-    switch (e.type) {
-      case 'run.started': return `run ${d.id}: ${d.source} → ${d.target}${d.kind ? ` (${[d.kind, d.difficulty].filter(Boolean).join(' · ')}${d.classifiedBy === 'rules' ? `, ${Math.round(Number(d.confidence ?? 0) * 100)}% sure` : ''})` : ''}`
-        + `${d.parentRunId ? `, next step of run ${d.parentRunId}` : ''}${d.reason ? ` · ${d.reason}` : ''}`;
-      case 'run.event': return `run ${d.id}: ${e.source === 'runner' ? '' : `${e.source} `}uses ${d.tool}${d.summary ? `: ${String(d.summary).slice(0, 80)}` : ''}`;
-      case 'run.finished': return `run ${d.id}: ${d.target} ${d.outcome}${d.error && d.error !== d.outcome ? ` (${String(d.error).slice(0, 120)})` : ''}`;
-      case 'run.delivered': return `run ${d.id}: result ${DELIVERY_LABEL[d.how as Delivery] ?? d.how}${d.to ? ` (${d.to})` : ''}`;
-      case 'dispatcher.action': return d.what === 'routed' ? `Agent Spaghetti picks ${d.to} for ${d.asked} (${d.why})`
-        : d.what === 'handed-over' ? `run ${d.id}: no progress on ${d.from}, handed to ${d.to}` : d.what === 'stuck' ? `run ${d.id}: no progress on ${d.target}` : null;
-      case 'consent.requested': return `${e.source} asks to ${d.action} ${d.resource}${d.cost && d.cost !== 'free' ? ` (${d.cost === 'metered' ? 'paid' : d.cost})` : ''}: waiting for you`;
-      case 'consent.answered': return `${e.source}: ${d.answer}${d.scope ? ` (${d.scope})` : ''}`;
-      case 'consent.expired': return `${e.source}: question expired (denied)`;
-      case 'trace.detail': {
-        const stage = d.stage as TraceStage, who = d.target ? String(d.target) + (d.model ? `:${d.model}` : '') : '';
-        const text = String(d.text ?? '').replace(/\s+/g, ' ').trim();
-        return `${run ? `run ${run}: ` : ''}${stage === 'output' ? `${who} ${TRACE_LABEL.output}` : stage === 'relay' ? `${TRACE_LABEL.relay} ${who}` : `Agent Spaghetti ${TRACE_LABEL[stage] ?? stage}`}: ${text.slice(0, 160)}${text.length > 160 ? '…' : ''}`;
-      }
-      default: return null;
+/** What an event does, as one of a few colors (the live pane and Activity): sending work, an answer or result, a decision
+ *  (Agent Spaghetti's or yours), a failure, or a plain note. Tools get other colors (ui), never these. */
+export type Act = 'send' | 'answer' | 'decide' | 'fail' | 'note';
+/** One event as parts: plain text, a tool's id (colored per tool), an action (colored per Act). */
+export type Part = string | { tool: string } | { act: Act; text: string };
+const TRACE_MAX = 160;
+const cut = (t: unknown) => { const s = String(t ?? '').replace(/\s+/g, ' ').trim(); return s.length > TRACE_MAX ? `${s.slice(0, TRACE_MAX)}…` : s; };
+const who = (d: Record<string, unknown>) => ({ tool: `${d.target}${d.model ? `:${d.model}` : ''}` });
+const AS = { tool: 'agent-spaghetti' };
+/** One event in words, as parts (null: no sentence for it, use eventLine). Traces carry text cut short: the pane opens the full text. */
+export function storyParts(e: StoredEvent): Part[] | null {
+  const d = e.data, run = d.id ?? d.runId, R = run ? [`run ${run}: `] : [];
+  const a = (act: Act, text: string) => ({ act, text });
+  switch (e.type) {
+    case 'run.started': return [...R, { tool: String(d.source) }, a('send', ' → '), { tool: String(d.target) },
+      d.kind ? ` (${[d.kind, d.difficulty].filter(Boolean).join(' · ')}${d.classifiedBy === 'rules' ? `, ${Math.round(Number(d.confidence ?? 0) * 100)}% sure` : ''})` : '',
+      d.parentRunId ? `, next step of run ${d.parentRunId}` : '', d.reason ? ` · ${d.reason}` : ''];
+    case 'run.event': return [...R, ...(e.source === 'runner' ? [] : [{ tool: e.source }, ' ']), a('note', 'uses'), ` ${d.tool}${d.summary ? `: ${String(d.summary).slice(0, 80)}` : ''}`];
+    case 'run.finished': return [...R, { tool: String(d.target) }, ' ', a(d.outcome === 'done' ? 'answer' : d.outcome === 'cancelled' ? 'note' : 'fail', String(d.outcome)),
+      d.error && d.error !== d.outcome ? ` (${String(d.error).slice(0, 120)})` : ''];
+    case 'run.delivered': return [...R, a(d.how === 'unread' ? 'note' : 'answer', `result ${DELIVERY_LABEL[d.how as Delivery] ?? d.how}`), ...(d.to ? [' (', { tool: String(d.to) }, ')'] : [])];
+    case 'dispatcher.action': return d.what === 'routed' ? [AS, ' ', a('decide', 'picks'), ' ', { tool: String(d.to) }, ` for ${d.asked} (${d.why})`]
+      : d.what === 'handed-over' ? [...R, a('fail', 'no progress'), ' on ', { tool: String(d.from) }, ', ', a('decide', 'handed to'), ' ', { tool: String(d.to) }]
+      : d.what === 'stuck' ? [...R, a('fail', 'no progress'), ' on ', { tool: String(d.target) }] : null;
+    case 'consent.requested': return [{ tool: e.source }, ' ', a('decide', `asks to ${d.action}`), ' ', d.action === 'run' ? { tool: String(d.resource) } : String(d.resource),
+      d.cost && d.cost !== 'free' ? ` (${d.cost === 'metered' ? 'paid' : d.cost})` : '', ': waiting for you'];
+    case 'consent.answered': return [{ tool: e.source }, ': ', a(d.answer === 'granted' ? 'decide' : 'fail', String(d.answer)), d.scope ? ` (${d.scope})` : ''];
+    case 'consent.expired': return [{ tool: e.source }, ': ', a('fail', 'question expired (denied)')];
+    case 'trace.detail': {
+      const stage = d.stage as TraceStage, text = cut(d.text);
+      return stage === 'request' ? [...R, { tool: String(d.source) }, ' ', a('send', 'asks'), ' ', who(d), ': ', text]
+        : stage === 'relay' ? [...R, { tool: String(d.source) }, ' ', a('send', 'hands on to'), ' ', who(d), ': ', text]
+        : stage === 'output' ? [...R, who(d), ' ', a('answer', 'answers'), ': ', text]
+        : stage === 'return' ? [...R, a('answer', 'result back to'), ' ', { tool: String(d.target) }, ` (${DELIVERY_LABEL[d.how as Delivery] ?? d.how}): `, text]
+        : [...R, AS, ' ', a('decide', stage === 'route-prompt' ? 'asks its dispatcher model' : 'dispatcher model'), ': ', text];
     }
-  })();
-  return s ? `${at}  ${s}` : eventLine(e);
+    default: return null;
+  }
+}
+/** The parts as plain text. */
+export const partsText = (p: Part[]) => p.map(x => (typeof x === 'string' ? x : 'tool' in x ? toolLabel(x.tool) : x.text)).join('');
+/** A tool's id as shown in a line (Agent Spaghetti itself by name). */
+export const toolLabel = (id: string) => (id === 'agent-spaghetti' ? 'Agent Spaghetti' : id);
+/** One event as a sentence (CLI-style plain text): the time, then its parts, else eventLine. */
+export function storyLine(e: StoredEvent): string {
+  const p = storyParts(e);
+  return p ? `${new Date(e.ts).toTimeString().slice(0, 8)}  ${partsText(p)}` : eventLine(e);
 }
 /** An event's short facts (plain values only, each cut short): what makes a line in Activity readable. */
 const eventFacts = (d: Record<string, unknown>) => {

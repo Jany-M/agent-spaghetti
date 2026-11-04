@@ -147,6 +147,8 @@ export class Runner {
   setDelivered(c: Pick<Chain, 'id' | 'source'>, how: Delivery) {
     this.d.ledger.update(c.id, { delivered: how });
     this.d.bus.emit({ ts: Date.now(), type: 'run.delivered', envId: 'hub', source: 'runner', data: { id: c.id, how, to: c.source } });
+    const last = this.d.ledger.hops(c.id).at(-1);                 // the chain's result, as its caller gets it (the live pane)
+    if (last) this.d.bus.trace('runner', { stage: 'return', text: this.d.ledger.result(last) ?? last.error ?? '', target: c.source, how, runId: c.id, chainId: c.id });
   }
 
   private async run(id: number, source: string, t: Target, req: RunRequest, ac: AbortController, o: StartOpts): Promise<RunRow> {
@@ -177,7 +179,7 @@ export class Runner {
     const noteOutput = (text: string) => { pending += text; if (flushTimer) return; if (Date.now() - lastFlush >= OUTPUT_FLUSH_MS) flushOutput(); else { flushTimer = setTimeout(flushOutput, OUTPUT_FLUSH_MS); } };
     try {
       const resolved = o.engine ? req : await this.forTarget(t, req);
-      this.d.bus.trace('runner', { stage: 'relay', text: resolved.task, target: t.id, runId: id, chainId: req.chainId, model: req.model });
+      this.d.bus.trace('runner', { stage: id === req.chainId ? 'request' : 'relay', text: resolved.task, source, target: t.id, runId: id, chainId: req.chainId, model: req.model });
       for await (const e of o.engine ? o.engine(ac.signal) : this.engine(id, t, resolved, ac.signal, m => { model = m; })) {
         const r = this.running.get(id); if (r) r.at = Date.now();
         if (e.type === 'text') { result += e.text; noteOutput(e.text); }

@@ -50,26 +50,29 @@ export function RunsView(p: RunsProps) {
       h('input', { type: 'hidden', name: 'then', value: p.then.join(',') })) : null,
     h('textarea', { name: 'task', rows: 4, required: true, placeholder: 'The whole task: the target sees nothing else.' }),
     h('div', { className: 'row' }, h('button', { className: 'allow', type: 'submit', disabled: !!p.busy || !p.targets.length }, p.busy === 'send' ? 'Sending…' : 'Send')));
+  const tone = (r: RunRow) => `tone-${r.outcome === 'running' ? 'run' : r.outcome === 'done' ? 'ok' : r.outcome === 'cancelled' ? 'info' : 'fail'}`;
+  /** The open run, under its own row: its chain, kind, result, and what can be done (grade, cancel, dismiss) without scrolling. */
+  const detail = (s: RunRow) => h('div', { className: 'detail' },
+    p.chain!.length > 1 ? h('div', { className: 'list' }, ...p.chain!.map(r => h('div', { key: r.id, className: r.id === s.id ? 'me' : '' }, runLine(r)))) : null,
+    h('div', { className: 'why' }, classification(s)),
+    s.error ? h('div', { className: 'card error' }, s.error) : null,
+    p.result !== undefined ? h('pre', null, p.result) : null,
+    first?.delivered === 'unread' ? h('div', { className: 'why' }, `The result is waiting for ${first.source} to collect it (it asks with run_status). Dismiss it if nobody will.`) : null,
+    h('div', { className: 'row' },
+      ...(['up', 'down', 'redo'] as const).map(v => h('button', { key: v, 'aria-pressed': s.verdict === v, className: s.verdict === v ? 'allow' : '', disabled: !!p.busy,
+        title: v === 'up' ? 'It did the job' : v === 'down' ? 'It did not' : 'Do it again', onClick: () => p.onVerdict(s.id, v) }, v === 'up' ? 'Good' : v === 'down' ? 'Bad' : 'Redo')),
+      s.outcome === 'running' ? h('button', { disabled: !!p.busy, onClick: () => p.onCancel(s.id) }, 'Cancel') : null,
+      first?.delivered === 'unread' ? h('button', { disabled: !!p.busy, onClick: () => p.onDismiss?.(first.id) }, 'Dismiss') : null));
   return h('div', { className: 'panel' },
     p.error ? h('div', { className: 'card error', role: 'alert' }, p.error) : null,
-    sel ? h('div', { className: 'card' },
-      h('div', { className: 'row' }, h('button', { onClick: () => p.onSelect(null) }, '← All runs')),
-      h('h2', null, 'Hand-off chain'), h('div', { className: 'list' }, ...p.chain!.map(r => h('div', { key: r.id, className: r.id === sel.id ? 'me' : '' }, runLine(r)))),
-      h('div', { className: 'why' }, classification(sel)),
-      sel.error ? h('div', { className: 'card error' }, sel.error) : null,
-      p.result !== undefined ? h('pre', null, p.result) : null,
-      first?.delivered === 'unread' ? h('div', { className: 'why' }, `The result is waiting for ${first.source} to collect it (it asks with run_status). Dismiss it if nobody will.`) : null,
-      h('div', { className: 'row' },
-        first?.delivered === 'unread' ? h('button', { disabled: !!p.busy, onClick: () => p.onDismiss?.(first.id) }, 'Dismiss') : null,
-        sel.outcome === 'running' ? h('button', { disabled: !!p.busy, onClick: () => p.onCancel(sel.id) }, 'Cancel') : null,
-        ...(['up', 'down', 'redo'] as const).map(v => h('button', { key: v, disabled: !!p.busy || sel.verdict === v, onClick: () => p.onVerdict(sel.id, v) },
-          v === 'up' ? 'Good' : v === 'down' ? 'Bad' : 'Redo'))))
-      : form,
+    form,
     h('section', null, h('h2', null, 'Runs', unread || p.waitingOnly ? h('button', { className: 'badge', 'aria-pressed': !!p.waitingOnly,
         title: p.waitingOnly ? 'Show every run' : 'Results their caller has not collected yet: show only these', onClick: () => p.onWaitingOnly?.(!p.waitingOnly) },
         p.waitingOnly ? `${unread} waiting ×` : `${unread} waiting`) : null), shown.length
-      ? h('div', { className: 'card list runs' }, ...shown.map(r => h('button', { key: r.id, className: `line tone-${r.outcome === 'running' ? 'run' : r.outcome === 'done' ? 'ok' : r.outcome === 'cancelled' ? 'info' : 'fail'}`,
-        onClick: () => p.onSelect(r.id) }, runLine(r))))
+      ? h('div', { className: 'card list runs' }, ...shown.map(r => h('div', { key: r.id, className: r.id === p.selected ? 'open' : '' },
+        h('button', { className: `line ${tone(r)}`, 'aria-expanded': r.id === p.selected, title: r.id === p.selected ? 'Close' : 'Open: result, grade, cancel',
+          onClick: () => p.onSelect(r.id === p.selected ? null : r.id) }, runLine(r)),
+        r.id === p.selected && sel ? detail(sel) : null)))
       : h('div', { className: 'empty' }, p.waitingOnly ? 'No results waiting.' : 'No runs yet.')));
 }
 
