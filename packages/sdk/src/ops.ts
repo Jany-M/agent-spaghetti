@@ -37,7 +37,7 @@ export const OPS = {
       input: { type: 'object', additionalProperties: false, required: ['task'], properties: {
         target: { type: 'string', description: 'Target id from `targets`, or `auto`; omit to let the user pick (or auto)' }, task: { type: 'string', description: 'The full task, self-contained' },
         files: { type: 'array', items: { type: 'string' }, description: 'Files the user attached, referenced or named: absolute paths (relative ones only with cwd)' },
-        kind: { type: 'string', enum: HANDOFF_KINDS, description: 'What sort of work it is (omit: Agent Spaghetti decides)' },
+        kind: { type: 'string', enum: HANDOFF_KINDS, description: 'What sort of work it is: set it when you can tell, it picks the right tool (omit: Agent Spaghetti guesses from the task)' },
         difficulty: { type: 'string', enum: DIFFICULTIES, description: 'How demanding it is (omit: Agent Spaghetti decides)' }, reason: { type: 'string', description: 'One line: why this is handed off' },
         model: { type: 'string', description: 'A loaded model of a model target, or an agent of an agent target (see `targets`; default: the first model / the default agent)' },
         cwd: { type: 'string', description: 'The project folder: your open workspace (pass it; not every tool sends it)' },

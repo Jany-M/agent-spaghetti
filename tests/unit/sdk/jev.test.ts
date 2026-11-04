@@ -12,6 +12,11 @@ test('kind from the default word lists, English and Italian; nothing matched is 
     'Fix the bug in the login endpoint', 'Correggi la funzione di login', 'hello there'].map(kind),
   ['summarize', 'summarize', 'tests', 'tests', 'refactor', 'refactor', 'review', 'review', 'docs', 'docs', 'research', 'research', 'code-edit', 'code-edit', 'other']);
 });
+test('the action said first outweighs the topic (live run 29, 2026-11-04: a summary about unit tests is a summary)', () => {
+  assert.equal(classify('Summarize in two lines why unit tests matter.').kind, 'summarize');
+  assert.equal(classify('Write unit tests that check the summary function').kind, 'tests');
+  assert.equal(classify('Please can you review this: it adds a new endpoint').kind, 'review');
+});
 test('confidence: the lead of the top kind over the next one; a tie goes to the more specific kind', () => {
   assert.equal(classify('Summarize the changelog').confidence, 0, 'summarize and docs tie');
   assert.equal(classify('Summarize the changelog').kind, 'docs', 'docs is more specific than summarize');

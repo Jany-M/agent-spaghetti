@@ -17,16 +17,22 @@ export function rankTargets<T extends { id: string; cost: Cost }>(items: T[], in
     .sort((a, b) => a.k[0] - b.k[0] || a.k[1] - b.k[1] || a.i - b.i).map(x => x.t);
 }
 
-// JEV step 2, the shipped defaults (jev-defaults.json): the kind whose word list scores highest (a phrase scores its word count),
-// ties to the more specific kind; difficulty from what can be counted. The caller's own kind/difficulty, when valid, win.
+// JEV step 2, the shipped defaults (jev-defaults.json): the kind whose word list scores highest (a phrase scores its word count,
+// times `lead.weight` when it starts within the first `lead.words` words), ties to the more specific kind; difficulty from what can be counted. The caller's own kind/difficulty, when valid, win.
 const words = (t: string) => t.match(/[\p{L}\p{N}]+/gu)?.length ?? 0;
 const phrase = (p: string) => new RegExp(`(?<![\\p{L}\\p{N}])${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}])`, 'giu');
-const LISTS = Object.entries(JEV.kinds).map(([kind, list]) => ({ kind: kind as TaskKind, res: list.map(p => ({ re: phrase(p), w: words(p) })) }));
+const LISTS = Object.entries(JEV.kinds).map(([kind, list]) => ({ kind: kind as TaskKind,
+  res: list.map(p => ({ re: phrase(p), w: words(p) })).sort((a, b) => b.w - a.w) }));   // longest first: "unit tests" is not also "tests"
 const HEAVY = JEV.heavyWords.map(phrase);
 const longestCodeBlock = (t: string) => Math.max(0, ...[...t.matchAll(/```[^\n]*\n([\s\S]*?)```/g)].map(m => m[1].split('\n').length - 1));
 /** `text`: what the target will read (task plus the previous step's result); `files`: how many files go with it. */
 export function classify(text: string, files = 0, given: { kind?: string; difficulty?: string } = {}): Classification {
-  const score = LISTS.map(l => ({ kind: l.kind, n: l.res.reduce((n, r) => n + (text.match(r.re)?.length ?? 0) * r.w, 0) }))
+  const lead = (i: number) => words(text.slice(0, i)) < JEV.lead.words ? JEV.lead.weight : 1;   // the action is usually said first ("Summarize … why unit tests matter")
+  const score = LISTS.map(l => {
+    let rest = text, n = 0;                                   // each part of the text counts once per kind: matched parts are blanked
+    for (const r of l.res) for (const x of [...rest.matchAll(r.re)]) { n += r.w * lead(x.index); rest = rest.slice(0, x.index) + ' '.repeat(x[0].length) + rest.slice(x.index + x[0].length); }
+    return { kind: l.kind, n };
+  })
     .sort((a, b) => b.n - a.n || JEV.tieOrder.indexOf(a.kind) - JEV.tieOrder.indexOf(b.kind));
   const [top, second] = score, caller = (TASK_KINDS as readonly string[]).includes(given.kind ?? '');
   const kind = caller ? given.kind as TaskKind : top.n ? top.kind : 'other';

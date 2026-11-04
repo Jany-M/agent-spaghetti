@@ -9,6 +9,7 @@
     "research": ["research", "find out", "look up", "compare", "latest", "sources", "what is", "how does", "ricerca", "cerca", "trova", "confronta", "informazioni", "ultime"],
     "code-edit": ["implement", "add", "fix", "bug", "feature", "function", "endpoint", "change the code", "implementa", "aggiungi", "correggi", "modifica", "funzione"]
   },
+  "lead": { "words": 5, "weight": 3 },
   "tieOrder": ["tests", "refactor", "review", "docs", "summarize", "research", "code-edit", "other"],
   "heavyWords": ["architecture", "design", "migrate", "migration", "across the codebase", "debug why", "race condition", "security", "performance",
     "architettura", "migra", "migrazione", "in tutto il progetto", "sicurezza", "prestazioni"],
