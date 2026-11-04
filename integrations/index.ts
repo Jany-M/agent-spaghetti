@@ -5,6 +5,7 @@ import { openclawModule } from './openclaw/index.ts';
 import { claudeCliModule } from './claude-cli/index.ts';
 import { codexModule } from './codex/index.ts';
 import { hermesModule } from './hermes/index.ts';
+import { kiloModule } from './kilo/index.ts';
 import anthropicApiManifest from './anthropic-api/manifest.json' with { type: 'json' };
 import anythingllmManifest from './anythingllm/manifest.json' with { type: 'json' };
 import chatgptDesktopManifest from './chatgpt-desktop/manifest.json' with { type: 'json' };
@@ -29,7 +30,7 @@ import vscodeManifest from './vscode/manifest.json' with { type: 'json' };
 import windsurfManifest from './windsurf/manifest.json' with { type: 'json' };
 import zooCodeManifest from './zoo-code/manifest.json' with { type: 'json' };
 
-const MODULES: Record<string, Integration['module']> = { openclaw: openclawModule, 'claude-cli': claudeCliModule, codex: codexModule, hermes: hermesModule };
+const MODULES: Record<string, Integration['module']> = { openclaw: openclawModule, 'claude-cli': claudeCliModule, codex: codexModule, hermes: hermesModule, kilo: kiloModule };
 export const BUILTIN_MANIFESTS = [anthropicApiManifest, anythingllmManifest, chatgptDesktopManifest, claudeCliManifest, claudeDesktopManifest, clineManifest, codexManifest, continueManifest, cursorManifest, hermesManifest, kiloManifest, llamacppManifest, lmstudioManifest, mempalaceManifest, ollamaManifest, openaiApiManifest, openclawManifest, opencodeManifest, paperclipManifest, vllmManifest, vscodeManifest, windsurfManifest, zooCodeManifest] as unknown as Manifest[];
 export const BUILTINS: Integration[] = BUILTIN_MANIFESTS.map(manifest => ({ manifest, module: MODULES[manifest.id], source: 'builtin' }));
 export const BUILTIN_DIR = new URL('.', import.meta.url);

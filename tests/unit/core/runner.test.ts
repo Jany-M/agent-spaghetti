@@ -166,3 +166,16 @@ test('hermes: stream-json args and events', async () => {
   [{ type: 'text', text: 'pong' }, { type: 'session', id: 'local-1' }, { type: 'usage', inputTokens: 3, outputTokens: 4 }, { type: 'done', result: 'pong' }]);
   assert.deepEqual(hermesEvents('{"type":"result","exit_code":1,"error":"quota"}').at(-1), { type: 'error', message: 'quota' });
 });
+test('kilo: run --format json; model, session, --auto only for edits with a folder; JSON events → run events, one usage total', async () => {
+  const { kiloArgs, kiloModule } = await import('../../../integrations/kilo/index.ts');
+  assert.deepEqual(kiloArgs({ target: 'kilo', task: 'x' }), ['run', '--format', 'json']);
+  assert.deepEqual(kiloArgs({ target: 'kilo', task: 'x', model: 'kilo/kilo-auto/free', session: 's1', cwd: '/p', kind: 'code-edit' }).slice(3), ['-m', 'kilo/kilo-auto/free', '-s', 's1', '--auto']);
+  const ev = (type: string, part: object) => JSON.stringify({ type, sessionID: 'ses_1', part });
+  const env = fakeEnv({ lines: { 'C:/k/kilo.exe run --format json': ['noise', ev('step_start', {}), ev('tool_use', { tool: 'glob', state: { title: 'src' } }),
+    ev('step_finish', { tokens: { input: 5, output: 1 }, cost: 0 }), ev('text', { text: 'done it' }), ev('step_finish', { tokens: { input: 2, output: 3 }, cost: 0 })] } });
+  const det = { integration: 'kilo', name: 'Kilo', envId: 'windows', installs: [{ path: 'C:/k/kilo.exe', via: 'path' as const }], levels: [], cost: 'unknown' as const, connectable: 'yes' as const, why: '' };
+  const out = []; for await (const e of kiloModule.run!(env, det, { target: 'kilo', task: 'hi' }, { signal: new AbortController().signal } as never)) out.push(e);
+  assert.deepEqual(out, [{ type: 'session', id: 'ses_1' }, { type: 'tool', name: 'glob', summary: 'src' }, { type: 'text', text: 'done it' },
+    { type: 'usage', inputTokens: 7, outputTokens: 4, costUsd: 0 }, { type: 'done', result: 'done it' }]);
+  assert.equal(env.inputs['C:/k/kilo.exe run --format json'], 'hi', 'the task on stdin');
+});
