@@ -14,7 +14,7 @@ export class Store {
         CREATE TABLE IF NOT EXISTS runs(id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER, source TEXT, target TEXT, model TEXT,
           parent_run_id INTEGER, job_id TEXT, kind TEXT, reason TEXT, task_hash TEXT, duration_ms INTEGER, input_tokens INTEGER,
           output_tokens INTEGER, cost_usd REAL, outcome TEXT, error TEXT, result_path TEXT, result_sha256 TEXT, verdict TEXT);`);
-      this.addColumns('runs', { chain_id: 'INTEGER', session: 'TEXT', return_to: 'TEXT', delivered: 'TEXT' });
+      this.addColumns('runs', { chain_id: 'INTEGER', session: 'TEXT', return_to: 'TEXT', delivered: 'TEXT', difficulty: 'TEXT', classified_by: 'TEXT', confidence: 'REAL' });
     } catch (err) { throw new Error(`agent-spaghetti store cannot open "${path}": ${(err as Error).message}`); }
   }
   /** Columns added after a table was first created (older stores keep their data). */

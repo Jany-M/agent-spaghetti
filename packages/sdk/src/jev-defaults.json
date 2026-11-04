@@ -1,0 +1,17 @@
+{
+  "$comment": "JEV's shipped defaults (finish-line plan, Part I): word lists per hand-off kind (English and Italian; more languages are more entries), the order that breaks ties, the words that make a task heavy, and the difficulty thresholds. Data only: classify() in routing.ts reads it.",
+  "kinds": {
+    "tests": ["test", "tests", "unit test", "unit tests", "spec", "coverage", "pytest", "jest", "vitest", "failing test", "collaudo", "copertura", "test unitari"],
+    "refactor": ["refactor", "rename", "restructure", "clean up", "simplify", "extract", "deduplicate", "split into", "rifattorizza", "ristruttura", "semplifica", "rinomina", "pulisci"],
+    "review": ["review", "check", "audit", "critique", "look over", "feedback", "find bugs", "is this correct", "revisiona", "rivedi", "controlla", "verifica", "valuta", "trova errori"],
+    "docs": ["document", "docs", "write the readme", "update the readme", "docstring", "comments", "changelog", "jsdoc", "documenta", "documentazione", "commenti"],
+    "summarize": ["summarize", "summarise", "summary", "tl;dr", "condense", "key points", "recap", "shorten", "riassumi", "riassunto", "sintesi", "punti chiave", "accorcia"],
+    "research": ["research", "find out", "look up", "compare", "latest", "sources", "what is", "how does", "ricerca", "cerca", "trova", "confronta", "informazioni", "ultime"],
+    "code-edit": ["implement", "add", "fix", "bug", "feature", "function", "endpoint", "change the code", "implementa", "aggiungi", "correggi", "modifica", "funzione"]
+  },
+  "tieOrder": ["tests", "refactor", "review", "docs", "summarize", "research", "code-edit", "other"],
+  "heavyWords": ["architecture", "design", "migrate", "migration", "across the codebase", "debug why", "race condition", "security", "performance",
+    "architettura", "migra", "migrazione", "in tutto il progetto", "sicurezza", "prestazioni"],
+  "heavy": { "words": 2000, "files": 5, "editKinds": ["code-edit", "refactor"], "editFiles": 2 },
+  "light": { "words": 300, "files": 1, "codeLines": 50, "kinds": ["summarize", "docs", "research", "other"] }
+}

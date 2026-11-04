@@ -94,6 +94,10 @@ test('runs panel: form fields → delegate input (auto, then, return); list line
   const form = html(h(RunsView, { ...base, chain: null, selected: null }));
   assert.match(form, /<option value="oc"[^>]*>OpenClaw \(unknown\)<\/option>/); assert.match(form, /Agent<select name="model">/);
   assert.match(form, /<textarea name="task"[^>]*required=""/);
+  assert.match(form, /Kind<select name="kind"><option value="" selected="">Agent Spaghetti decides<\/option>/); assert.match(form, /Difficulty<select name="difficulty"><option value="" selected="">Agent Spaghetti decides<\/option><option value="light">/);
+  assert.deepEqual(delegateInput({ target: 'oc', task: 't', kind: '', difficulty: 'heavy' }), { target: 'oc', task: 't', difficulty: 'heavy', source: 'tray', waitMs: 0 }, 'an empty kind lets JEV decide');
+  const jev = html(h(RunsView, { ...base, chain: [r(4, { kind: 'summarize', difficulty: 'light', classifiedBy: 'rules', confidence: 0.8 })], selected: 4 }));
+  assert.match(jev, /<div class="why">summarize · light \(Agent Spaghetti&#x27;s rules, 80% sure\)<\/div>/);
   assert.equal([...form.matchAll(/class="line tone-ok"/g)].length, 2, 'run lines colored by outcome');
   assert.match(form, /<option value="auto">Let Agent Spaghetti choose<\/option>/); assert.match(form, /<select name="returnTo">/); assert.match(form, /name="cwd"/, 'agents get a folder field');
   assert.match(form, /<select aria-label="Add a next step"><option value="" selected="">nobody \(one step\)<\/option><option value="oc">OpenClaw \(unknown\)<\/option><option value="oc:main">OpenClaw: main<\/option>/);

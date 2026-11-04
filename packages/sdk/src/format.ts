@@ -92,7 +92,10 @@ export function renderStats(up: boolean, snap: Snapshot | null, live: LiveState,
 }
 
 /** One run as a line (CLI `runs`, the Runs panel). */
-export const runLine = (r: RunRow) => `${String(r.id).padStart(4)}  ${new Date(r.ts).toLocaleString()}  ${r.source} → ${r.target}${r.model ? ` (${r.model})` : ''}  ${r.kind}  ${r.outcome}`
+/** A run's kind and difficulty and who set them, as people read it: "summarize · light (rules, 80% sure)". */
+export const classification = (r: Pick<RunRow, 'kind' | 'difficulty' | 'classifiedBy' | 'confidence'>) => `${r.kind}${r.difficulty ? ` · ${r.difficulty}` : ''}`
+  + (r.classifiedBy === 'caller' ? ' (set by the caller)' : r.classifiedBy ? ` (Agent Spaghetti's ${r.classifiedBy}, ${Math.round((r.confidence ?? 0) * 100)}% sure)` : '');
+export const runLine = (r: RunRow) => `${String(r.id).padStart(4)}  ${new Date(r.ts).toLocaleString()}  ${r.source} → ${r.target}${r.model ? ` (${r.model})` : ''}  ${r.kind}${r.difficulty ? `·${r.difficulty}` : ''}  ${r.outcome}`
   + `${r.durationMs ? ` ${Math.round(r.durationMs / 1000)}s` : ''}${r.costUsd ? ` $${r.costUsd.toFixed(4)}` : ''}${r.verdict ? ` [${r.verdict}]` : ''}`
   + `${r.delivered ? `  ↩ ${DELIVERY_LABEL[r.delivered]}` : ''}${r.reason ? `  · ${r.reason}` : ''}`;
 /** How a target takes tasks (ADR 0010 §2), as people read it. */
@@ -119,7 +122,8 @@ export function storyLine(e: StoredEvent): string {
   const d = e.data, at = new Date(e.ts).toTimeString().slice(0, 8), run = d.id ?? d.runId;
   const s = (() => {
     switch (e.type) {
-      case 'run.started': return `run ${d.id}: ${d.source} → ${d.target}${d.kind && d.kind !== 'other' ? ` (${d.kind})` : ''}${d.parentRunId ? `, next step of run ${d.parentRunId}` : ''}${d.reason ? ` · ${d.reason}` : ''}`;
+      case 'run.started': return `run ${d.id}: ${d.source} → ${d.target}${d.kind ? ` (${[d.kind, d.difficulty].filter(Boolean).join(' · ')}${d.classifiedBy === 'rules' ? `, ${Math.round(Number(d.confidence ?? 0) * 100)}% sure` : ''})` : ''}`
+        + `${d.parentRunId ? `, next step of run ${d.parentRunId}` : ''}${d.reason ? ` · ${d.reason}` : ''}`;
       case 'run.event': return `run ${d.id}: ${e.source === 'runner' ? '' : `${e.source} `}uses ${d.tool}${d.summary ? `: ${String(d.summary).slice(0, 80)}` : ''}`;
       case 'run.finished': return `run ${d.id}: ${d.target} ${d.outcome}${d.error && d.error !== d.outcome ? ` (${String(d.error).slice(0, 120)})` : ''}`;
       case 'run.delivered': return `run ${d.id}: result ${DELIVERY_LABEL[d.how as Delivery] ?? d.how}${d.to ? ` (${d.to})` : ''}`;

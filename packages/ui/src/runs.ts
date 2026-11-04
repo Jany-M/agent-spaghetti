@@ -1,16 +1,16 @@
 // Runs panel: the run record (results waiting for their caller counted), one run's hand-off chain with where its result went,
 // its result (verdict, cancel), and "New task" (= delegate: a target or auto, further hops, whether the result comes back).
 import { createElement as h, useState } from 'react';
-import { AUTO, HANDOFF_KINDS, runLine, type OpIO, type RunRow, type Target } from '@agent-spaghetti/sdk/web';
+import { AUTO, DIFFICULTIES, HANDOFF_KINDS, classification, runLine, type OpIO, type RunRow, type Target } from '@agent-spaghetti/sdk/web';
 import type { Bridge } from './bridge.ts';
 import { useAct, useOp } from './hooks.ts';
 
 type DelegateIn = OpIO['delegate']['in'];
 /** The New task form → the delegate op's input (the same fields MCP clients send). Empty optionals are left out. */
 export function delegateInput(f: Record<string, string>): DelegateIn {
-  const opt = (k: 'kind' | 'reason' | 'model' | 'cwd') => (f[k]?.trim() ? { [k]: f[k].trim() } : {});
+  const opt = (k: 'kind' | 'difficulty' | 'reason' | 'model' | 'cwd') => (f[k]?.trim() ? { [k]: f[k].trim() } : {});
   const then = (f.then ?? '').split(',').map(x => x.trim()).filter(Boolean);
-  return { target: f.target ?? '', task: (f.task ?? '').trim(), ...opt('kind'), ...opt('reason'), ...opt('model'), ...opt('cwd'), ...(then.length ? { then } : {}),
+  return { target: f.target ?? '', task: (f.task ?? '').trim(), ...opt('kind'), ...opt('difficulty'), ...opt('reason'), ...opt('model'), ...opt('cwd'), ...(then.length ? { then } : {}),
     ...(f.returnTo === 'none' ? { returnTo: 'none' } : {}), source: 'tray', waitMs: 0 } as DelegateIn;
 }
 export interface RunsProps {
@@ -38,7 +38,8 @@ export function RunsView(p: RunsProps) {
       h('label', null, 'To', h('select', { name: 'target', value: t?.id ?? AUTO, onChange: (e: { target: { value: string } }) => p.onTarget(e.target.value) },
         ...p.targets.map(x => h('option', { key: x.id, value: x.id }, `${x.name} (${x.cost})`)), h('option', { key: AUTO, value: AUTO }, 'Let Agent Spaghetti choose'))),
       t?.models.length ? h('label', null, t.kind === 'model' ? 'Model' : 'Agent', h('select', { name: 'model', key: t.id }, ...t.models.map(m => h('option', { key: m, value: m }, m)))) : null,
-      h('label', null, 'Kind', h('select', { name: 'kind', defaultValue: 'other' }, ...HANDOFF_KINDS.map(k => h('option', { key: k, value: k }, k)))),
+      h('label', null, 'Kind', h('select', { name: 'kind', defaultValue: '' }, h('option', { value: '' }, 'Agent Spaghetti decides'), ...HANDOFF_KINDS.map(k => h('option', { key: k, value: k }, k)))),
+      h('label', null, 'Difficulty', h('select', { name: 'difficulty', defaultValue: '' }, h('option', { value: '' }, 'Agent Spaghetti decides'), ...DIFFICULTIES.map(k => h('option', { key: k, value: k }, k)))),
       h('label', null, 'Why', h('input', { name: 'reason', placeholder: 'one line, kept in the record' })),
       t?.kind === 'agent' ? h('label', null, 'Folder', h('input', { name: 'cwd', placeholder: 'project folder, for agents that edit files' })) : null,
       h('label', null, 'Then hand the result to', h('select', { 'aria-label': 'Add a next step', value: '', onChange: (e: { target: { value: string } }) => { if (e.target.value) p.onThen([...p.then, e.target.value]); } },
@@ -54,6 +55,7 @@ export function RunsView(p: RunsProps) {
     sel ? h('div', { className: 'card' },
       h('div', { className: 'row' }, h('button', { onClick: () => p.onSelect(null) }, '← All runs')),
       h('h2', null, 'Hand-off chain'), h('div', { className: 'list' }, ...p.chain!.map(r => h('div', { key: r.id, className: r.id === sel.id ? 'me' : '' }, runLine(r)))),
+      h('div', { className: 'why' }, classification(sel)),
       sel.error ? h('div', { className: 'card error' }, sel.error) : null,
       p.result !== undefined ? h('pre', null, p.result) : null,
       first?.delivered === 'unread' ? h('div', { className: 'why' }, `The result is waiting for ${first.source} to collect it (it asks with run_status). Dismiss it if nobody will.`) : null,

@@ -4,7 +4,7 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DaemonDown, ENGINE_LABEL, HubClient, dataDir, ensureDaemon, logsDir, readDiscovery, OPS, parseJson, SCOPE_LABEL, detectionRows, describeRun, eventLine, permissionRows, runLine, renderStats, renderTable, renderToolRows, renderTree, serveMcpStdio, switchRows, testLines,
-  type Action, type ConsentRequest, type ConsentScope, type OpId, type TaskKind } from '@agent-spaghetti/sdk';
+  type Action, type ConsentRequest, type ConsentScope, type Difficulty, type OpId, type TaskKind } from '@agent-spaghetti/sdk';
 import { planHook, under } from './hook.ts';
 
 export interface IO { out(s: string): void; err(s: string): void }
@@ -135,10 +135,10 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
       }
       case 'shutdown': { const r = await c.call('shutdown'); print(r, () => 'agent-spaghetti daemon is stopping'); break; }
       case 'delegate': {
-        const kind = flag(args, '--kind') as TaskKind | undefined, reason = flag(args, '--reason'), model = flag(args, '--model'), then = flag(args, '--then');
+        const kind = flag(args, '--kind') as TaskKind | undefined, difficulty = flag(args, '--difficulty') as Difficulty | undefined, reason = flag(args, '--reason'), model = flag(args, '--model'), then = flag(args, '--then');
         const [, target, ...task] = args;
         if (!target || !task.length) { io.err(`usage: agent-spaghetti ${OPS.delegate.usage}`); return 1; }
-        let v = await c.call('delegate', { target, task: task.join(' '), kind, reason, model, then: then?.split(',').filter(Boolean), source: 'cli', waitMs: 0 });
+        let v = await c.call('delegate', { target, task: task.join(' '), kind, difficulty, reason, model, then: then?.split(',').filter(Boolean), source: 'cli', waitMs: 0 });
         while (v.run.outcome === 'running') { await new Promise(r => setTimeout(r, 1000)); v = (await c.call('runs', { id: v.id, watch: true, source: 'cli' })).final!; }
         const d = describeRun(v);
         print(v, () => d.content[0].text);

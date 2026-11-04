@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ConsentScope, Delivery, Environment, Integration, RunEvent, RunOutcome, RunRequest, RunRow, Snapshot, Target } from '@agent-spaghetti/sdk';
-import { AUTO, TASK_KINDS, envPath, parseHop, programOf, runDecision, withGrants } from '@agent-spaghetti/sdk';
+import { AUTO, classify, envPath, parseHop, programOf, runDecision, withGrants } from '@agent-spaghetti/sdk';
 import type { Bus } from './bus.ts';
 import type { Consent } from './consent.ts';
 import type { Ledger } from './ledger.ts';
@@ -73,13 +73,15 @@ export class Runner {
     if (req.model && t.models.length && !t.models.includes(req.model))
       throw new Error(`${t.name} has no ${t.kind === 'model' ? 'loaded model' : 'agent'} ${req.model} (${t.kind === 'model' ? 'loaded' : 'agents'}: ${t.models.join(', ')})`);
     for (const hop of req.then ?? []) if (parseHop(hop).target !== AUTO && !this.targets().some(x => x.id === parseHop(hop).target)) throw new Error(`unknown or unavailable target ${parseHop(hop).target} in then (see: targets)`);
-    const kind = req.kind && (TASK_KINDS as readonly string[]).includes(req.kind) ? req.kind : 'other';
+    // JEV (finish-line plan, Part I): the caller's kind and difficulty when valid, else the default rules; a chain's later hops keep it.
+    const c = req.classification ?? classify([req.task, req.context].filter(Boolean).join('\n\n'), req.files?.length ?? 0, req);
+    const kind = c.kind;
     // An agent that delegates while it runs a delegated task works on that task (one such run: it is the parent).
     const busy = [...this.running].filter(([, r]) => r.target === source);
-    req = { ...req, kind, parentRunId: req.parentRunId ?? (busy.length === 1 && !o.engine ? busy[0][0] : undefined) };
+    req = { ...req, kind, difficulty: c.difficulty, classification: c, parentRunId: req.parentRunId ?? (busy.length === 1 && !o.engine ? busy[0][0] : undefined) };
     const max = this.d.settings.get('delegate.maxHops');
     if (!o.preapproved && this.d.ledger.depth(req.parentRunId) + 1 > max) throw new Error(`hop budget reached: ${max} hand-offs in one chain (setting delegate.maxHops)`);
-    const id = this.d.ledger.record({ ts: Date.now(), source, target: t.id, kind, reason: req.reason, parentRunId: req.parentRunId, jobId: req.jobId,
+    const id = this.d.ledger.record({ ts: Date.now(), source, target: t.id, kind, difficulty: c.difficulty, classifiedBy: c.by, confidence: c.confidence, reason: req.reason, parentRunId: req.parentRunId, jobId: req.jobId,
       taskHash: createHash('sha256').update(req.task).digest('hex'), outcome: 'running', chainId: req.chainId, returnTo: req.returnTo ?? 'caller' });
     const chainId = req.chainId ?? id;
     if (!req.chainId) {
@@ -89,7 +91,7 @@ export class Runner {
     }
     req = { ...req, chainId, jobId: req.jobId ?? `chain-${chainId}` };      // "Allow for this job" covers the whole chain
     const ac = new AbortController();
-    this.emit('run.started', id, { source, target: t.id, kind, reason: req.reason ?? null, parentRunId: req.parentRunId ?? null, chainId });
+    this.emit('run.started', id, { source, target: t.id, kind, difficulty: c.difficulty, classifiedBy: c.by, confidence: c.confidence, reason: req.reason ?? null, parentRunId: req.parentRunId ?? null, chainId });
     const hop = this.run(id, source, t, req, ac, o).finally(() => this.running.delete(id));
     this.running.set(id, { ac, done: hop, target: t.id, source, chainId, at: Date.now() });
     void hop.then(r => this.next(r, req));

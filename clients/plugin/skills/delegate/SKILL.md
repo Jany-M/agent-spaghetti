@@ -9,7 +9,7 @@ description: Hand a task to a local model or another agent on this machine throu
 2. Call `delegate` with:
    - `target`: a target id from `targets`; omit it to let the user pick (or `auto`);
    - `task`: the complete task, self-contained (the other model has none of this conversation);
-   - `kind`: one of code-edit, tests, review, research, summarize, refactor, docs, other;
+   - `kind` and `difficulty`: optional (code-edit, tests, review, research, summarize, refactor, docs, other; light, medium, heavy); omit them and Agent Spaghetti decides;
    - `reason`: one line saying why you hand it off;
    - `model`: optional, one of the target's models or agents listed by `targets`;
    - `cwd`: the project folder: your open workspace (pass it; not every tool sends it on its own); agents edit there only for editing kinds;

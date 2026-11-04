@@ -1,6 +1,8 @@
-// The one target ranking (ADR 0010): free before unknown before metered, then the least queued (targets are available already).
-// No tool is preferred by name: among equals the input order (the scan's) stays. Used by the dispatcher and by setup hooks.
-import type { Cost } from './types.ts';
+// Routing (ADR 0010): JEV's classification of a task, and the one target ranking (free before unknown before metered, then the
+// least queued; targets are available already). No tool is preferred by name: among equals the input order (the scan's) stays.
+import type { Classification, Cost, Difficulty, TaskKind } from './types.ts';
+import { DIFFICULTIES, TASK_KINDS } from './types.ts';
+import JEV from './jev-defaults.json' with { type: 'json' };
 
 /** `target[:model]` (target ids never contain ':'; models may): one hop of a hand-off. */
 export const parseHop = (hop: string): { target: string; model?: string } => {
@@ -13,4 +15,24 @@ export function rankTargets<T extends { id: string; cost: Cost }>(items: T[], in
   const key = (t: T) => [COST_RANK[t.cost], info.queued?.(t.id) ?? 0];
   return items.map((t, i) => ({ t, i, k: key(t) }))
     .sort((a, b) => a.k[0] - b.k[0] || a.k[1] - b.k[1] || a.i - b.i).map(x => x.t);
+}
+
+// JEV step 2, the shipped defaults (jev-defaults.json): the kind whose word list scores highest (a phrase scores its word count),
+// ties to the more specific kind; difficulty from what can be counted. The caller's own kind/difficulty, when valid, win.
+const words = (t: string) => t.match(/[\p{L}\p{N}]+/gu)?.length ?? 0;
+const phrase = (p: string) => new RegExp(`(?<![\\p{L}\\p{N}])${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}])`, 'giu');
+const LISTS = Object.entries(JEV.kinds).map(([kind, list]) => ({ kind: kind as TaskKind, res: list.map(p => ({ re: phrase(p), w: words(p) })) }));
+const HEAVY = JEV.heavyWords.map(phrase);
+const longestCodeBlock = (t: string) => Math.max(0, ...[...t.matchAll(/```[^\n]*\n([\s\S]*?)```/g)].map(m => m[1].split('\n').length - 1));
+/** `text`: what the target will read (task plus the previous step's result); `files`: how many files go with it. */
+export function classify(text: string, files = 0, given: { kind?: string; difficulty?: string } = {}): Classification {
+  const score = LISTS.map(l => ({ kind: l.kind, n: l.res.reduce((n, r) => n + (text.match(r.re)?.length ?? 0) * r.w, 0) }))
+    .sort((a, b) => b.n - a.n || JEV.tieOrder.indexOf(a.kind) - JEV.tieOrder.indexOf(b.kind));
+  const [top, second] = score, caller = (TASK_KINDS as readonly string[]).includes(given.kind ?? '');
+  const kind = caller ? given.kind as TaskKind : top.n ? top.kind : 'other';
+  const n = words(text), h = JEV.heavy, l = JEV.light;
+  const difficulty: Difficulty = (DIFFICULTIES as readonly string[]).includes(given.difficulty ?? '') ? given.difficulty as Difficulty
+    : n > h.words || files > h.files || HEAVY.some(re => re.test(text)) || (h.editKinds.includes(kind) && files > h.editFiles) ? 'heavy'
+    : n <= l.words && files <= l.files && longestCodeBlock(text) <= l.codeLines && l.kinds.includes(kind) ? 'light' : 'medium';
+  return { kind, difficulty, by: caller ? 'caller' : 'rules', confidence: caller ? 1 : top.n ? Math.round(((top.n - (second?.n ?? 0)) / top.n) * 100) / 100 : 0 };
 }

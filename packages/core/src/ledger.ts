@@ -8,7 +8,8 @@ import type { Store } from './store.ts';
 const COLS: Array<[Exclude<keyof RunRow, 'id'>, string]> = [['ts', 'ts'], ['source', 'source'], ['target', 'target'], ['model', 'model'], ['parentRunId', 'parent_run_id'],
   ['jobId', 'job_id'], ['kind', 'kind'], ['reason', 'reason'], ['taskHash', 'task_hash'], ['durationMs', 'duration_ms'], ['inputTokens', 'input_tokens'],
   ['outputTokens', 'output_tokens'], ['costUsd', 'cost_usd'], ['outcome', 'outcome'], ['error', 'error'], ['resultPath', 'result_path'],
-  ['resultSha256', 'result_sha256'], ['verdict', 'verdict'], ['chainId', 'chain_id'], ['session', 'session'], ['returnTo', 'return_to'], ['delivered', 'delivered']];
+  ['resultSha256', 'result_sha256'], ['verdict', 'verdict'], ['chainId', 'chain_id'], ['session', 'session'], ['returnTo', 'return_to'], ['delivered', 'delivered'],
+  ['difficulty', 'difficulty'], ['classifiedBy', 'classified_by'], ['confidence', 'confidence']];
 const toRow = (r: Record<string, unknown>): RunRow => Object.fromEntries([['id', r.id], ['chainId', r.id], ...COLS.filter(([, c]) => r[c] !== null && r[c] !== undefined).map(([k, c]) => [k, r[c]])]) as unknown as RunRow;   // rows from before chains are their own chain
 const SELECT = 'SELECT * FROM runs';
 

@@ -1,7 +1,7 @@
 // The one list of operations: REST routes, CLI usage text and the MCP tools (`mcp`) are all generated from it.
 import type { Snapshot, StoredEvent, RunRequest, RunRow, Switch, Target, TestResult } from './types.ts';
 import type { ToolRow } from './format.ts';
-import { HANDOFF_KINDS } from './types.ts';
+import { DIFFICULTIES, HANDOFF_KINDS } from './types.ts';
 import type { Action, ConsentRequest, ConsentScope, DeclaredAction, Grant, Mode } from './permissions.ts';
 import type { LiveState } from './state.ts';
 
@@ -30,14 +30,15 @@ export const OPS = {
   report:       { method: 'GET',  path: '/v1/report', gui: 'settings',       usage: 'report [--out <file>]',    summary: 'Machine configuration report (Markdown)' },
   consent:      { method: 'POST', path: '/v1/consent', gui: 'home',      usage: 'answer <id> allow|deny [once|job|always]', summary: 'Answer a question waiting for you (ids: status)' },
   shutdown:     { method: 'POST', path: '/v1/shutdown', gui: 'tray-menu',     usage: 'shutdown',                 summary: 'Stop the daemon' },
-  delegate:     { method: 'POST', path: '/v1/delegate', gui: 'runs',     usage: 'delegate <target> <task> [options]', summary: 'Hand a task to a local model or agent (--kind, --reason, --model, --then <target[:model]>,…)',
+  delegate:     { method: 'POST', path: '/v1/delegate', gui: 'runs',     usage: 'delegate <target> <task> [options]', summary: 'Hand a task to a local model or agent (--kind, --difficulty, --reason, --model, --then <target[:model]>,…)',
     mcp: { name: 'delegate', description: 'Hand a task to a local model or another agent on this machine (see `targets`). Free local models run at once; '
       + 'targets that may cost money ask the user first. `then` hands the result on to further targets in order; the last result comes back to you. '
       + 'Pass the files the user attached or means as `files`. Returns the result, or a run id to check with `run_status` if it takes long.',
       input: { type: 'object', additionalProperties: false, required: ['task'], properties: {
         target: { type: 'string', description: 'Target id from `targets`, or `auto`; omit to let the user pick (or auto)' }, task: { type: 'string', description: 'The full task, self-contained' },
         files: { type: 'array', items: { type: 'string' }, description: 'Files the user attached, referenced or named: absolute paths (relative ones only with cwd)' },
-        kind: { type: 'string', enum: HANDOFF_KINDS }, reason: { type: 'string', description: 'One line: why this is handed off' },
+        kind: { type: 'string', enum: HANDOFF_KINDS, description: 'What sort of work it is (omit: Agent Spaghetti decides)' },
+        difficulty: { type: 'string', enum: DIFFICULTIES, description: 'How demanding it is (omit: Agent Spaghetti decides)' }, reason: { type: 'string', description: 'One line: why this is handed off' },
         model: { type: 'string', description: 'A loaded model of a model target, or an agent of an agent target (see `targets`; default: the first model / the default agent)' },
         cwd: { type: 'string', description: 'The project folder: your open workspace (pass it; not every tool sends it)' },
         context: { type: 'string', description: 'Findings or instructions the target needs besides the task' },

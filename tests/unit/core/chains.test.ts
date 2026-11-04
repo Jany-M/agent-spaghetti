@@ -134,3 +134,15 @@ test('chat launch: inert prompt argument, the task on stdin; a failed launch say
   await chatLaunch(e2, 'code', ['chat'], 't', ['E:\\p\\a.ts', 'E:\\p\\a&b.ts']);
   assert.equal(e2.inputs[withFiles], 't', 'safe files attached with -a; one a .cmd shim could not pass is left out');
 });
+test('JEV at intake: a run without kind gets one from the rules, recorded with its difficulty and confidence; the caller\'s kind wins; a chain keeps its first hop\'s', async () => {
+  const s = setup();
+  const a = s.runner.start('cli', { target: 'coder', task: 'Summarize the meeting notes in key points', then: ['chatty'] });
+  await a.done;
+  assert.deepEqual(s.ledger.hops(a.id).map(h => [h.kind, h.difficulty, h.classifiedBy, h.confidence]), [['summarize', 'light', 'rules', 1], ['summarize', 'light', 'rules', 1]],
+    'the next hop reads the previous result too, but the chain is still that summary');
+  const b = s.runner.start('cli', { target: 'coder', task: 'Summarize the meeting notes', kind: 'review', difficulty: 'heavy' });
+  await b.done;
+  assert.deepEqual([s.ledger.get(b.id)!.kind, s.ledger.get(b.id)!.difficulty, s.ledger.get(b.id)!.classifiedBy], ['review', 'heavy', 'caller']);
+  const started = s.store.eventsSince(0).find(e => e.type === 'run.started' && e.data.id === a.id)!;
+  assert.deepEqual([started.data.kind, started.data.difficulty, started.data.classifiedBy], ['summarize', 'light', 'rules'], 'the live pane and Activity read it from run.started');
+});
