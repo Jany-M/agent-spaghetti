@@ -71,6 +71,7 @@ test('targets: loaded models the host reaches; agents with run() where their pro
     agents: [{ id: 'paid-agent:main', integration: 'paid-agent', name: 'Main', envId: 'wsl:T' }, { id: 'paid-agent:other', integration: 'paid-agent', name: 'O', envId: 'windows' }] };
   assert.deepEqual(t(wsl), [['lmstudio', 'model', 'free', 'windows', 'm'], ['paid-agent', 'agent', 'metered', 'wsl:T', 'main']], 'an app without its program cannot run tasks');
   assert.deepEqual(t({ ...wsl, envs: snap.envs }), [['lmstudio', 'model', 'free', 'windows', 'm']], 'stopped env: no target');
+  assert.deepEqual(t({ ...snap, detections: snap.detections.map(d => (d.integration === 'paid-agent' ? { ...d, unready: 'its model server is down' } : d)) }).map(x => x[0]), ['lmstudio'], 'not ready: no target');
 });
 test('runner: free model runs at once; result file + sha; the prompt never reaches the database', async () => {
   const s = setup();

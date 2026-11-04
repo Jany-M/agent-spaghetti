@@ -46,10 +46,14 @@ export function hermesEvents(line: string): RunEvent[] {
 }
 export const hermesModule: IntegrationModule = {
   resumes: true,
-  /** Free when Hermes runs a model on this machine (its model.base_url is local), else the manifest's cost (paid). */
+  /** Free when Hermes runs a model on this machine (its model.base_url is local), else the manifest's cost (paid); not ready while
+   *  that local server does not answer (each task would wait for Hermes' gateway deadline, then fail). */
   async inspect(env, base) {
     const url = modelBaseUrl(await env.readFile(CONFIG).catch(() => null));
-    return url && LOCAL.test(url) ? { ...base, detection: { ...base.detection, cost: 'free', why: `${base.detection.why}; its model runs locally (${url})` } } : base;
+    if (!url || !LOCAL.test(url)) return base;
+    const up = await env.http({ url: `${url.replace(/\/+$/, '')}/models`, timeoutMs: 2500 }).catch(() => null);
+    return { ...base, detection: { ...base.detection, cost: 'free', why: `${base.detection.why}; its model runs locally (${url})`,
+      ...(up ? {} : { unready: `its model server ${url} is not answering: start it, then rescan` }) } };
   },
   async *run(env, det, req, ctx) {
     const exe = programOf(det, 'hermes');

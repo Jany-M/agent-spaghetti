@@ -35,7 +35,7 @@ export function targets(d: Pick<RunnerDeps, 'host' | 'snapshot' | 'integrations'
   const out: Target[] = [];
   for (const det of [...snap.detections].sort((a, b) => Number(b.envId === hostId) - Number(a.envId === hostId))) {
     const i = byId.get(det.integration);
-    if (!i || out.some(t => t.id === det.integration)) continue;
+    if (!i || det.unready || out.some(t => t.id === det.integration)) continue;
     const models = snap.backends.filter(b => b.integration === det.integration && b.reachableFrom.includes(hostId)).map(b => b.model);
     const sp = i.manifest.speaks, engine = sp?.acp ? 'acp' : i.module?.run ? 'module' : sp?.chat ? 'chat' : null;   // a tool's best engine (ADR 0010 §2)
     if (sp?.openai && models.length) out.push({ id: det.integration, name: det.name, kind: 'model', cost: det.cost, envId: hostId, models, engine: 'openai', resumable: false });

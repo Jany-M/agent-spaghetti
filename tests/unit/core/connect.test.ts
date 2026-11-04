@@ -171,14 +171,17 @@ test('hermesModule.connect: dry-run, add when absent, replace foreign, already o
   assert.equal(bad.s.config, claude, 'the config is restored to the exact prior content');
 });
 
-test('hermesModule.inspect: free when its model server is on this machine (model.base_url), else the manifest\'s cost', async () => {
+test('hermesModule.inspect: free when its model server is on this machine (model.base_url), else the manifest\'s cost; not ready while that server is down', async () => {
   const { hermesModule, modelBaseUrl } = await import('../../../integrations/hermes/index.ts');
   const conf = '%LOCALAPPDATA%/hermes/config.yaml', det = { integration: 'hermes', name: 'Hermes Agent', envId: 'windows', installs: [], levels: [], cost: 'metered' as const, connectable: 'yes' as const, why: 'found' };
   const yaml = (url: string) => `model:\n  default: "q"\n  provider: "custom"\n  base_url: "${url}"\nauxiliary:\n  vision:\n    base_url: http://example.com/v1\n`;
   assert.equal(modelBaseUrl(yaml('http://127.0.0.1:18434/v1')), 'http://127.0.0.1:18434/v1');
   assert.equal(modelBaseUrl('auxiliary:\n  base_url: http://127.0.0.1:1/v1\n'), null, 'only the main model block');
-  const cost = async (url: string) => (await hermesModule.inspect!(fakeEnv({ files: { [conf]: yaml(url) } }), { detection: det, agents: [], backends: [] }, {} as never)).detection.cost;
-  assert.equal(await cost('http://127.0.0.1:18434/v1'), 'free'); assert.equal(await cost('https://openrouter.ai/api/v1'), 'metered');
+  const inspect = async (url: string, up = true) => (await hermesModule.inspect!(fakeEnv({ files: { [conf]: yaml(url) }, http: up ? { [`${url}/models`]: { status: 200, body: '{}' } } : {} }),
+    { detection: det, agents: [], backends: [] }, {} as never)).detection;
+  assert.deepEqual([(await inspect('http://127.0.0.1:18434/v1')).cost, (await inspect('http://127.0.0.1:18434/v1')).unready], ['free', undefined]);
+  assert.equal((await inspect('https://openrouter.ai/api/v1')).cost, 'metered');
+  assert.match((await inspect('http://127.0.0.1:18434/v1', false)).unready!, /model server http:\/\/127\.0\.0\.1:18434\/v1 is not answering/, 'down: not a target until it answers');
 });
 test('connectionPlan: never disconnects, always connects, unset asks once; tools that cannot connect are left alone', async () => {
   const { connectionPlan } = await import('../../../packages/core/src/connections.ts');

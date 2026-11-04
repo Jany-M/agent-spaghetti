@@ -75,6 +75,7 @@ export interface Detection {
   installs: Install[];
   levels: Level[]; cost: Cost; connectable: 'yes' | 'needs-setup' | 'no'; why: string;
   connected?: boolean;   // clients only: agent-spaghetti's MCP server is in the tool (undefined = cannot connect here)
+  unready?: string;      // agents: why it cannot take tasks now (e.g. the model server it uses is down); not a target until a scan finds it ready
 }
 export interface AgentInfo { id: string; integration: string; name: string; envId: string; provider?: string; model?: string; endpoint?: string; isDefault?: boolean }
 export interface BackendInfo { id: string; integration: string; model: string; envId: string; endpoint: string; contextLength?: number; reachableFrom: string[] }
