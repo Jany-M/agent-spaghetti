@@ -44,7 +44,10 @@ const toggle = (s: Services, id: string, off: boolean) => {
 export const handlers: Handlers = {
   status: (_i, s) => ({ snapshot: snapshot(s), live: s.live(), consents: s.consent.pending() }),
   scan: async (_i, s) => ({ snapshot: await s.scan() }),
-  events: (i, s) => s.store.eventsSince(num(i.since, 0), num(i.limit, 500)),
+  events: (i, s) => {
+    const stored = s.store.eventsSince(num(i.since, 0), num(i.limit, 500));
+    return i.traces ? [...stored, ...s.bus.recentTraces().filter(t => t.ts >= (stored[0]?.ts ?? 0))].sort((a, b) => a.ts - b.ts) : stored;
+  },
   integrations: (_i, s) => {
     const l = s.loaded(), off = s.settings.get('disabled');
     return { rows: toolRows({ snapshot: snapshot(s), live: s.live(), targets: handlers.targets({}, s) as Target[], consents: s.consent.pending(),

@@ -37,6 +37,8 @@ test('ephemeral events reach subscribers redacted but are not stored (negative i
   assert.ok(got[0].id < 0); // ephemeral negative id
   assert.equal(s.eventsSince(0).length, 1); // only the persisted run.started reaches the DB
   assert.equal(s.eventsSince(0)[0].type, 'run.started');
+  assert.deepEqual(b.recentTraces().map(e => e.data.text), ['hello'], 'the latest kept in memory for a pane opened later');
+  assert.ok(new Bus(s).recentTraces().length === 0 && got[0].id < -1e12, 'ids start from the clock: a restarted daemon never reuses one');
   off();
 });
 test('a corrupt db file fails loudly with a clear message', () => {

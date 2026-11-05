@@ -20,12 +20,13 @@ export function useOp<K extends BridgeOp>(bridge: Bridge, op: K, input?: OpIO[K]
   return { data, error, reload };
 }
 
-/** The latest stored events (`keep` of them), then new ones as they come; `live` adds the live-only trace events (never stored). */
+/** The latest stored events (`keep` of them), then new ones as they come; `live` adds the live-only trace events (never stored),
+ *  the recent ones too (the daemon keeps them in memory), so a pane opened later still shows each task and answer. */
 export function useEvents(bridge: Bridge, keep: number, live = false) {
   const [events, setEvents] = useState<StoredEvent[]>([]);
   useEffect(() => {
     let on = true;
-    void bridge.call('status').then(s => bridge.call('events', { since: Math.max(0, s.live.lastEventId - keep), limit: keep }))
+    void bridge.call('status').then(s => bridge.call('events', { since: Math.max(0, s.live.lastEventId - keep), limit: keep, traces: live }))
       .then(ev => { if (on) setEvents(l => [...ev, ...l.filter(x => !ev.some(y => y.id === x.id))].slice(-keep)); }).catch(() => {});
     const off = bridge.onEvent(e => { if ('id' in e && (live || !isTrace(e))) setEvents(l => [...l.filter(x => x.id !== e.id), e].slice(-keep)); });
     return () => { on = false; off(); };

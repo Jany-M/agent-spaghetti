@@ -19,8 +19,8 @@ const seen = new Set<string>();
 const connect = async () => { const c = HubClient.fromDiscovery(); await c.call('status'); return c; };
 const startDaemon = () => void spawnDaemon(process.env, join(ROOT, 'packages', 'cli', 'src', 'index.ts'));
 const to = (w: BrowserWindow | null, e: BridgeEvent) => { if (w && !w.isDestroyed()) w.webContents.send(CHANNEL.event, e); };
-/** Hub events to the windows: live-only traces (negative id) only to the live pane, while it shows. */
-const send = (e: BridgeEvent) => { if (!('id' in e) || !isTrace(e)) to(pop, e); if (liveWin?.isVisible()) to(liveWin, e); };
+/** Hub events to the windows: live-only traces (negative id) only to the live pane (hidden too, so it is current when shown). */
+const send = (e: BridgeEvent) => { if (!('id' in e) || !isTrace(e)) to(pop, e); to(liveWin, e); };
 
 async function refresh() {
   if (!tray) return;

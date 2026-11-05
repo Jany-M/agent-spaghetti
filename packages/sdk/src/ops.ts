@@ -73,7 +73,7 @@ export interface GrantIn { subject: string; mode: Mode; action?: Action; resourc
 export interface OpIO {
   status: { in: {}; out: { snapshot: Snapshot | null; live: LiveState; consents: ConsentRequest[] } };
   scan: { in: {}; out: { snapshot: Snapshot } };
-  events: { in: { since?: number; limit?: number }; out: StoredEvent[] };
+  events: { in: { since?: number; limit?: number; traces?: boolean }; out: StoredEvent[] };   // traces: also the latest live-only ones (memory only)
   integrations: { in: {}; out: { rows: ToolRow[]; rejected: Array<{ id: string; why: string }> } };
   switches: { in: {}; out: { switches: Switch[]; errors: Array<{ envId: string; error: string }> } };
   switch: { in: { id: string; on: boolean; envId?: string }; out: Switch };

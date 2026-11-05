@@ -180,3 +180,14 @@ test('kilo: run --format json; model, session, --auto only for edits with a fold
     { type: 'usage', inputTokens: 7, outputTokens: 4, costUsd: 0 }, { type: 'done', result: 'done it' }]);
   assert.equal(env.inputs['C:/k/kilo.exe run --format json'], 'hi', 'the task on stdin');
 });
+test('cline: JSON mode, plan mode unless edits with a folder, the task as the prompt argument; JSON lines → events', async () => {
+  const { clineArgs, clineEvents } = await import('../../../integrations/cline/index.ts');
+  assert.deepEqual(clineArgs({ target: 'cline', task: '-x task' }), ['--json', '--plan', '--', '-x task']);
+  assert.deepEqual(clineArgs({ target: 'cline', task: 't', cwd: '/p', kind: 'code-edit', model: 'm' }), ['--json', '--cwd', '/p', '--model', 'm', '--', 't']);
+  const ag = (event: object) => JSON.stringify({ type: 'agent_event', event });
+  assert.deepEqual(['noise', ag({ type: 'content_start', contentType: 'reasoning', text: 'hmm' }), ag({ type: 'content_start', contentType: 'text', text: 'Hi' }),
+    JSON.stringify({ type: 'run_result', finishReason: 'completed', text: 'Hi', usage: { inputTokens: 5, outputTokens: 1, totalCost: 0 } })].flatMap(clineEvents),
+  [{ type: 'text', text: 'Hi' }, { type: 'usage', inputTokens: 5, outputTokens: 1, costUsd: 0 }, { type: 'done', result: 'Hi' }]);
+  assert.deepEqual(clineEvents(JSON.stringify({ type: 'run_result', finishReason: 'max_retries', usage: {} })).at(-1), { type: 'error', message: 'Cline stopped: max_retries' });
+  assert.deepEqual(clineEvents('{"type":"error","message":"no key"}'), [{ type: 'error', message: 'no key' }]);
+});

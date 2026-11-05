@@ -1,7 +1,8 @@
 // The ONLY module that starts processes (PLAN §3.5). Argument arrays only, never a shell string.
 import { execFile, spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { closeSync, openSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 const CMD_SHIM = /\.(cmd|bat)$/i;
 const UNSAFE_FOR_CMD = /["%^&|<>!\r\n]/;
@@ -10,9 +11,18 @@ export const cmdSafe = (a: string) => !UNSAFE_FOR_CMD.test(a);
 export interface Spawned { code: number; stdout: Buffer; stderr: Buffer }   // code 127 = not found, 124 = timeout
 export interface SpawnOpts { timeoutMs?: number; signal?: AbortSignal; input?: string | Buffer; env?: NodeJS.ProcessEnv }
 
-/** Windows .cmd/.bat shims need cmd.exe; only inert arguments are allowed through it. */
+/** What an npm .cmd shim (cmd-shim) runs: an .exe, or node with a script; null for any other batch file. */
+export function npmShimTarget(text: string, dir: string, nodeExe = 'node'): { file: string; pre: string[] } | null {
+  const js = /"%_prog%"\s+"%~?dp0%\\([^"]+)"\s+%\*/.exec(text), exe = /^\s*"%~?dp0%\\([^"]+\.exe)"\s+%\*/m.exec(text);
+  if (js) return { file: existsSync(join(dir, 'node.exe')) ? join(dir, 'node.exe') : nodeExe, pre: [join(dir, js[1])] };
+  return exe ? { file: join(dir, exe[1]), pre: [] } : null;
+}
+/** Windows .cmd/.bat shims need cmd.exe; only inert arguments are allowed through it. An npm shim is run without cmd.exe (what it
+ *  starts, directly), so a task may be an argument (live 2026-11-04: Cline's CLI takes its prompt only as an argument). */
 function resolveCmd(cmd: string, args: string[]): { file: string; argv: string[]; verbatim: boolean } {
   if (process.platform !== 'win32' || !CMD_SHIM.test(cmd)) return { file: cmd, argv: args, verbatim: false };
+  const npm = (() => { try { return npmShimTarget(readFileSync(cmd, 'utf8'), dirname(cmd)); } catch { return null; } })();
+  if (npm) return { file: npm.file, argv: [...npm.pre, ...args], verbatim: false };
   for (const a of [cmd, ...args]) if (!cmdSafe(a)) throw new Error(`unsafe argument for .cmd: ${a}`);
   return { file: process.env.ComSpec ?? 'cmd.exe', argv: ['/d', '/s', '/c', `"${[cmd, ...args].map(a => `"${a}"`).join(' ')}"`], verbatim: true };
 }

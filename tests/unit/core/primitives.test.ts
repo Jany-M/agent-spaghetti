@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { spawnFile, spawnLines } from '../../../packages/core/src/proc.ts';
+import { npmShimTarget, spawnFile, spawnLines } from '../../../packages/core/src/proc.ts';
 import { withDeadline, mapLimit } from '../../../packages/core/src/async.ts';
 import { http } from '../../../packages/core/src/http.ts';
 
@@ -73,4 +73,11 @@ test('spawnLines exited settles when the child ends on its own while a detached 
     assert.equal(exit, 3, 'the child\'s own exit code, without waiting for the grandchild');
     p.stop();                                                   // stopping after the exit is harmless
   } finally { for (let i = 0; i < 50 && !pid; i++) await new Promise(r => setTimeout(r, 20)); try { process.kill(pid); } catch { /* gone */ } }
+});
+test('npm .cmd shims run what they start (node + script, or an .exe) without cmd.exe, so a task can be an argument', () => {
+  const js = '@ECHO off\r\nIF EXIST "%dp0%\\node.exe" (\r\n  SET "_prog=%dp0%\\node.exe"\r\n) ELSE (\r\n  SET "_prog=node"\r\n)\r\nendLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\\node_modules\\cline\\bin\\cline.js" %*\r\n';
+  const a = npmShimTarget(js, '/npm', 'node')!;
+  assert.equal(a.file, 'node'); assert.match(a.pre[0], /^\/npm[\\/]node_modules\\cline\\bin\\cline\.js$/);
+  assert.match(npmShimTarget('@ECHO off\r\n"%~dp0%\\node_modules\\x\\bin\\x.exe"   %*\r\n', '/npm')!.file, /x\.exe$/);
+  assert.equal(npmShimTarget('@echo off\r\necho hi\r\n', '/npm'), null, 'any other batch file: cmd.exe as before');
 });
