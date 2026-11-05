@@ -78,16 +78,17 @@ test('toolRows: group by first role in TOOL_GROUPS order; state, connection, pre
   const L = (id: string, roles: string[], disabled = false) => ({ id, name: id.toUpperCase(), source: 'builtin' as const, roles: roles as never, levels: [], disabled });
   const snapshot = { ts: 1, envs: [], agents: [], backends: [], rejected: [], detections: [
     det('oc', { connected: true, envId: 'wsl:T' }), det('oc', { envId: 'windows' }), det('lms'), det('ed', { connected: false, installs: [{ via: 'process', pid: 1 }] }),
-    det('srv', { connectable: 'needs-setup', why: 'installed, server not running' }), det('gone') ] };
+    det('srv', { connectable: 'needs-setup', why: 'installed, server not running' }), det('gone'), det('svc', { endpoint: 'http://127.0.0.1:3100', why: 'running' }) ] };
   const live = liveState([{ id: 1, ts: 1, type: 'tool.changed', envId: 'windows', source: 'gone', data: { integration: 'gone', running: false } }], emptyLive());
   const rows = toolRows({ snapshot, live, targets: [{ id: 'lms', name: 'LMS', kind: 'model', cost: 'free', envId: 'windows', models: ['m'], engine: 'openai', resumable: false }],
     prefs: { auto: ['oc'], never: [] }, consents: [{ subject: 'ed' }],
-    loaded: [L('oc', ['agent', 'client']), L('lms', ['backend']), L('ed', ['client']), L('srv', ['backend']), L('gone', ['tool']), L('nope', ['client']), L('off', ['client'], true)] });
+    loaded: [L('oc', ['agent', 'client']), L('lms', ['backend']), L('ed', ['client']), L('srv', ['backend']), L('gone', ['tool']), L('svc', ['tool']), L('nope', ['client']), L('off', ['client'], true)] });
   const by = Object.fromEntries(rows.map(r => [r.id, r]));
   assert.deepEqual([by.oc.group, by.oc.connection, by.oc.preference, by.oc.envs.join()], ['agents', 'connected', 'always', 'wsl:T,windows']);
   assert.deepEqual([by.lms.group, by.lms.state, by.lms.connection, by.lms.receives], ['models', 'ready', undefined, 'openai']);
   assert.deepEqual([by.ed.state, by.ed.connection, by.ed.preference, by.ed.asks], ['running', 'not connected', 'ask', 1]);
   assert.deepEqual([by.srv.state, by.gone.state, by.nope.state, by.off.state, by.off.why], ['stopped', 'stopped', 'not found', 'skipped', 'skipped in scans']);
+  assert.equal(by.svc.state, 'running', 'its server answered the scan (e.g. a tool that only serves)');
   const text = renderToolRows(rows);
   assert.ok(text.indexOf('Agents:') < text.indexOf('Model servers:') && text.indexOf('Model servers:') < text.indexOf('Editors & apps:'));
   assert.match(text, /oc\s+OC\s+installed\s+connected \(always\)\s+wsl:T,windows/);

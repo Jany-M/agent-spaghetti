@@ -203,7 +203,7 @@ export function toolRows(x: ToolInput): ToolRow[] {
     const client = dets.filter(d => d.connected !== undefined), target = x.targets.find(t => t.id === i.id);
     const state: ToolState = i.disabled ? 'skipped' : !dets.length ? 'not found' : target ? 'ready'
       : live.some(t => t.running) ? 'running' : live.length || dets.every(d => d.connectable === 'needs-setup') ? 'stopped'
-      : dets.some(d => d.installs.some(n => n.via === 'process')) ? 'running' : 'installed';
+      : dets.some(d => d.endpoint || d.installs.some(n => n.via === 'process')) ? 'running' : 'installed';   // its server answered, or its process runs
     return {
       id: i.id, name: i.name, ...(i.color ? { color: i.color } : {}), group: TOOL_GROUPS.find(g => i.roles.includes(g.role))?.id ?? 'tools', source: i.source, levels: i.levels,
       envs: [...new Set(dets.map(d => d.envId))], version: dets.find(d => d.version)?.version, state,
