@@ -28,9 +28,19 @@ export function modelBaseUrl(yaml: string | null): string | null {
   return null;
 }
 const LOCAL = /^https?:\/\/(127\.\d+\.\d+\.\d+|localhost|\[::1\])(:\d+)?(\/|$)/i;
+/** Hermes manages its own local llama.cpp server (`local_runtime.enabled: true`, its Local models). */
+export const managedRuntime = (yaml: string | null) => /^local_runtime:\s*\r?\n(?:[ \t]+.*\r?\n|\s*\r?\n)*?[ \t]+enabled:\s*true\b/m.test(yaml ?? '');
+/** Hermes' local model as Agent Spaghetti uses it: on this machine (free), and whether Hermes itself can start its server. */
+export function localModel(yaml: string | null): { url: string; managed: boolean } | null {
+  const url = modelBaseUrl(yaml);
+  return url && LOCAL.test(url) ? { url, managed: managedRuntime(yaml) } : null;
+}
 
-export function hermesArgs(req: RunRequest): string[] {
-  return ['chat', '--query-file', '-', '-Q', '--format', 'stream-json', ...(req.model ? ['--model', req.model] : []), ...(req.session ? ['--resume', req.session] : [])];
+/** `wake`: Hermes' managed local model (provider llamacpp: Hermes finds its server and starts it when it is not running, checked in
+ *  hermes_cli/local_runtime/endpoint.py and live 2026-11-05; a fixed base_url never starts it). The model loads on the first request. */
+export function hermesArgs(req: RunRequest, o: { wake?: boolean } = {}): string[] {
+  return ['chat', '--query-file', '-', '-Q', '--format', 'stream-json', ...(o.wake ? ['--provider', 'llamacpp'] : []), ...(req.model ? ['--model', req.model] : []),
+    ...(req.session ? ['--resume', req.session] : [])];
 }
 /** One stream-json line → run events. */
 export function hermesEvents(line: string): RunEvent[] {
@@ -46,21 +56,21 @@ export function hermesEvents(line: string): RunEvent[] {
 }
 export const hermesModule: IntegrationModule = {
   resumes: true,
-  /** Free when Hermes runs a model on this machine (its model.base_url is local), else the manifest's cost (paid); not ready while
-   *  that local server does not answer: its managed llama.cpp router (local_runtime) is booted by the Hermes app's backend, not by
-   *  `hermes chat`, so without it each task waits for Hermes' retries, then fails (live 2026-11-04). A running router whose model is
-   *  not loaded yet answers at once and loads the model on the first request (Hermes waits up to its request_timeout_seconds). */
+  /** Free when Hermes runs a model on this machine (its model.base_url is local), else the manifest's cost (paid). Its own managed
+   *  server is started by the run itself (`wake`; the first load may take minutes: Hermes waits up to its request_timeout_seconds).
+   *  Any other local server Hermes cannot start: not ready while it does not answer (each task would fail after Hermes' retries). */
   async inspect(env, base) {
-    const url = modelBaseUrl(await env.readFile(CONFIG).catch(() => null));
-    if (!url || !LOCAL.test(url)) return base;
-    const up = await env.http({ url: `${url.replace(/\/+$/, '')}/models`, timeoutMs: 2500 }).catch(() => null);
-    return { ...base, detection: { ...base.detection, cost: 'free', why: `${base.detection.why}; its model runs locally (${url})`,
-      ...(up ? {} : { unready: `its model server ${url} is not running (the Hermes app starts it): open Hermes, then rescan` }) } };
+    const local = localModel(await env.readFile(CONFIG).catch(() => null));
+    if (!local) return base;
+    const up = local.managed || await env.http({ url: `${local.url.replace(/\/+$/, '')}/models`, timeoutMs: 2500 }).catch(() => null);
+    return { ...base, detection: { ...base.detection, cost: 'free', why: `${base.detection.why}; its model runs locally (${local.managed ? 'Hermes starts it when needed' : local.url})`,
+      ...(up ? {} : { unready: `its model server ${local.url} is not running: start it, then rescan` }) } };
   },
   async *run(env, det, req, ctx) {
     const exe = programOf(det, 'hermes');
     if (!exe) throw new Error('Hermes Agent not found');
-    for await (const line of env.execLines(exe, hermesArgs(req), { input: req.task, cwd: req.cwd, signal: ctx.signal,
+    const wake = !req.model && !!localModel(await env.readFile(CONFIG).catch(() => null))?.managed;   // a named model: Hermes' own choice of provider
+    for await (const line of env.execLines(exe, hermesArgs(req, { wake }), { input: req.task, cwd: req.cwd, signal: ctx.signal,
       env: ctx.runId ? { AGENT_SPAGHETTI_PARENT_RUN: String(ctx.runId) } : undefined })) yield* hermesEvents(line);
   },
   async connect(env, det, cli, on, dryRun) {

@@ -181,7 +181,23 @@ test('hermesModule.inspect: free when its model server is on this machine (model
     { detection: det, agents: [], backends: [] }, {} as never)).detection;
   assert.deepEqual([(await inspect('http://127.0.0.1:18434/v1')).cost, (await inspect('http://127.0.0.1:18434/v1')).unready], ['free', undefined]);
   assert.equal((await inspect('https://openrouter.ai/api/v1')).cost, 'metered');
-  assert.match((await inspect('http://127.0.0.1:18434/v1', false)).unready!, /model server http:\/\/127\.0\.0\.1:18434\/v1 is not running/, 'down: not a target until it answers');
+  assert.match((await inspect('http://127.0.0.1:18434/v1', false)).unready!, /model server http:\/\/127\.0\.0\.1:18434\/v1 is not running/, 'a server Hermes cannot start: not a target until it answers');
+  const managed = (await hermesModule.inspect!(fakeEnv({ files: { [conf]: `${yaml('http://127.0.0.1:18434/v1')}local_runtime:\n  enabled: true\n` } }), { detection: det, agents: [], backends: [] }, {} as never)).detection;
+  assert.deepEqual([managed.cost, managed.unready], ['free', undefined], 'Hermes\' own managed server: the run starts it');
+});
+test('hermes run: its managed local model is woken through provider llamacpp (a fixed base_url never starts it); a named model is left to Hermes', async () => {
+  const { hermesModule, hermesArgs, managedRuntime } = await import('../../../integrations/hermes/index.ts');
+  assert.equal(managedRuntime('model:\n  x: 1\nlocal_runtime:\n  backend: auto\n  enabled: true\n'), true);
+  assert.equal(managedRuntime('local_runtime:\n  enabled: false\nother:\n  enabled: true\n'), false);
+  assert.deepEqual(hermesArgs({ target: 'hermes', task: 'x' }, { wake: true }).slice(6), ['--provider', 'llamacpp']);
+  const conf = '%LOCALAPPDATA%/hermes/config.yaml', exe = 'C:/h/hermes.exe', base = `${exe} chat --query-file - -Q --format stream-json`;
+  const det = { integration: 'hermes', name: 'Hermes Agent', envId: 'windows', installs: [{ path: exe, via: 'path' as const }], levels: [], cost: 'free' as const, connectable: 'yes' as const, why: '' };
+  const env = fakeEnv({ files: { [conf]: 'model:\n  base_url: http://127.0.0.1:18434/v1\nlocal_runtime:\n  enabled: true\n' },
+    lines: { [`${base} --provider llamacpp`]: ['{"type":"result","session_id":"s","exit_code":0,"text":"hi","tokens":{}}'], [`${base} --model m`]: [] } });
+  const run = async (req: object) => { const out = []; for await (const e of hermesModule.run!(env, det, { target: 'hermes', task: 't', ...req }, { signal: new AbortController().signal } as never)) out.push(e); return out; };
+  assert.deepEqual((await run({})).at(-1), { type: 'done', result: 'hi' });
+  await run({ model: 'm' });
+  assert.ok(env.calls.includes(`lines ${base} --model m`), 'a named model: no provider forced');
 });
 test('connectionPlan: never disconnects, always connects, unset asks once; tools that cannot connect are left alone', async () => {
   const { connectionPlan } = await import('../../../packages/core/src/connections.ts');
