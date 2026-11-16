@@ -63,7 +63,7 @@ test('patch auto: endpoint up → keep primary, only timeout + MCP parking', asy
 test('patch auto: endpoint down → re-detect, new provider gets api + default key, primary set', async () => {
   const env = fakeEnv({ kind: 'linux', exec: cfg({ 'models.providers': { lmstudio: {} }, 'models.providers.lmstudio': { baseUrl: 'http://192.0.2.99:1234/v1', models: [] },
     'agents.defaults.model': 'lmstudio/old' }) });
-  const p = await buildPatch({ env, exe: OC, model: 'auto', say, detect: async () => [{ ...LMS, integration: 'ollama' }, { ...LMS, integration: 'vllm' }] });
+  const p = await buildPatch({ env, exe: OC, model: 'auto', say, detect: async () => [{ ...LMS, integration: 'ollama' }, { ...LMS, integration: 'llamacpp' }] });
   assert.deepEqual(p.agents, { defaults: { model: { primary: 'local-ollama/test-model' } } });
   assert.equal(p.models.providers['local-ollama'].api, 'openai-completions');
   assert.equal(p.models.providers['local-ollama'].apiKey, 'local');

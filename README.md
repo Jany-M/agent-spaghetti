@@ -66,37 +66,34 @@ Status keeps itself current: running tools and model servers are re-checked ever
 
 ## Choose the LLM per tool (model gateway)
 
-Tools that accept a custom OpenAI-compatible endpoint (VS Code chat, OpenCode, Kilo, Cline, Zoo Code, Continue) can use Agent Spaghetti's model gateway, so you pick each tool's LLM in one place, local or online.
+Tools that accept a custom OpenAI-compatible endpoint (VS Code chat, OpenCode, Kilo, Cline) can use Agent Spaghetti's model gateway, so you pick each tool's LLM in one place, local or online.
 
 1. Settings → `gateway.port` (e.g. `4141`): the gateway listens on `127.0.0.1` only.
 2. Tools → the tool → **Use the gateway**: a key for that tool, shown once, with the exact steps for it. The tool asks for model `auto`.
 3. Tools → the tool → **Model**: `auto` (the best free model loaded) or a specific one. Change it here any time; the tool needs no change.
 
-Local models answer at once; a paid one (OpenAI or Anthropic API, found if `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` is set) asks you first, as hand-offs do. Every request is in **Runs** (no prompt text is stored). 
+Local models answer at once; a paid one (a hosted API added as your own integration) asks you first, as hand-offs do. Every request is in **Runs** (no prompt text is stored). 
 
 ## Works with
 
-- anthropic-api
-- anythingllm
-- chatgpt-desktop
-- claude-cli
-- claude-desktop
-- cline
-- codex
-- continue
-- cursor
-- kilo
-- llamacpp
-- lmstudio
-- mempalace
-- ollama
-- openai-api
-- openclaw
-- opencode
-- vllm
-- vscode
-- windsurf
-- zoo-code
+Only tools installed and tried on the development machine (Windows 11) are supported. "Takes tasks" = other tools can hand it work; "hands off" = it can send work through Agent Spaghetti.
+
+| Tool | Takes tasks | Hands off | Last tried |
+|---|---|---|---|
+| LM Studio | yes (loaded models) | - | 2026-11-05 |
+| Ollama, llama.cpp server | yes (loaded models) | - | found by the scan; no task run yet |
+| Claude Code (CLI) | yes | yes (MCP, `>>`, agent pick) | 2026-11-04 |
+| Codex | yes | yes (MCP) | 2026-11-04 (as a target) |
+| Kilo | yes | yes (MCP) | 2026-11-04 (as a target) |
+| Cline | yes | yes (MCP) | 2026-11-05 (as a target) |
+| OpenCode | yes | yes (MCP) | 2026-11-05 (as a target) |
+| Hermes Agent | yes | yes (MCP) | 2026-11-05: its local model is woken; no full answer yet |
+| VS Code (Copilot chat) | yes (in its chat) | yes (MCP, agent pick) | 2026-10-17 |
+| Cursor | - | yes (MCP, `>>`) | owner check pending |
+| Claude Desktop | - | yes (MCP) | owner check pending |
+| MemPalace, Paperclip | - | - | found by the scan only |
+
+OpenClaw is still in the code (its workflow pack) but is not installed on the development machine, so it is untested.
 
 ## Per-tool notes
 
