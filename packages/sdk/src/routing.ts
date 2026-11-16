@@ -101,8 +101,9 @@ const pct = (s: RunStats) => `${s.runs} ${s.runs === 1 ? 'run' : 'runs'}, ${Math
  *  Targets that may not take it (the caller, `never` for the kind, a model when the task edits files: permissions mayEdit, an agent that
  *  would load its own local model beside one already loaded) come last with `skip`. */
 export function route(c: { kind: TaskKind; difficulty: Difficulty; edits?: boolean }, targets: Target[], o: RouteOpts = {}): Ranked[] {
-  const need = level(c.difficulty), prefer = forKind(o.prefer, c.kind), never = forKind(o.never, c.kind);
-  const stretch = o.stretch && !R.frontierKinds.includes(c.kind), loaded = targets.find(t => t.kind === 'model');
+  const frontier = R.frontierKinds.includes(c.kind), difficulty = frontier ? 'heavy' : c.difficulty;   // a frontier kind asks for the strongest target whatever its size
+  const need = level(difficulty), prefer = forKind(o.prefer, c.kind), never = forKind(o.never, c.kind);
+  const stretch = o.stretch && !frontier, loaded = targets.find(t => t.kind === 'model');
   return targets.map((t, i) => {
     const tier = tierOf(t, o.tiers), s = o.stats?.[statKey(c.kind, t.id)], preferred = prefer.includes(t.id);
     const skip = t.id === o.source ? 'the caller itself' : never.includes(t.id) ? `never for ${c.kind} (your choice)`
@@ -111,7 +112,7 @@ export function route(c: { kind: TaskKind; difficulty: Difficulty; edits?: boole
     const fit = level(tier) >= need ? 0 : stretch && t.cost === 'free' && level(tier) === need - 1 ? 1 : 2;
     const offline = !!o.web && !t.web, paid = t.cost === 'metered';
     const history = o.learn && s && s.runs >= R.minRuns ? s.rate : 0.5;      // unknown sits between a good and a bad record
-    const why = skip ?? [preferred && `your pick for ${c.kind}`, t.cost, `${tier} tier${fit === 1 ? ` (stretch: tries a ${c.difficulty} task, escalates if it fails)` : fit === 2 ? ` (below ${c.difficulty})` : ''}`,
+    const why = skip ?? [preferred && `your pick for ${c.kind}`, t.cost, `${tier} tier${fit === 1 ? ` (stretch: tries a ${difficulty} task, escalates if it fails)` : fit === 2 ? ` (below ${difficulty})` : ''}`,
       offline && 'no web access (answers from what its model knows)', s && `${c.kind}: ${pct(s)}`].filter(Boolean).join(', ');
     return { r: { target: t, tier, why, ...(s ? { stats: s } : {}), ...(preferred ? { preferred: true as const } : {}), ...(skip ? { skip } : {}) },
       k: [skip ? 1 : 0, preferred ? 0 : 1, fit === 2 ? 1 : 0, fit === 2 ? -level(tier) : 0, o.web && paid ? 1 : 0, offline ? 1 : 0, COST_RANK[t.cost], fit, -history, o.queued?.(t.id) ?? 0, i] };

@@ -45,7 +45,7 @@ test('route: research needs the web (unpaid with web, then unpaid without, then 
   assert.match(route({ kind: 'research', difficulty: 'light' }, ts, { web: true })[1].why, /no web access/);
   assert.deepEqual(ids(route({ kind: 'research', difficulty: 'light' }, ts)), ['lms', 'browser', 'paid'], 'it brings its sources: cheapest first as usual');
   const mid = [T('mid', { models: ['m-14b'] }), T('paid', { cost: 'metered' })];
-  assert.deepEqual(ids(route({ kind: 'plan', difficulty: 'heavy' }, mid, { stretch: true })), ['paid', 'mid'], 'a frontier kind: the strongest first, no free try below it');
+  assert.deepEqual(ids(route({ kind: 'plan', difficulty: 'light' }, mid, { stretch: true })), ['paid', 'mid'], 'a frontier kind: the strongest first whatever its size, no free try below it');
   assert.deepEqual(ids(route({ kind: 'summarize', difficulty: 'heavy' }, mid, { stretch: true })), ['mid', 'paid']);
   const own = [T('lms', { name: 'LMS', models: ['m-4b'] }), T('self', { kind: 'agent', engine: 'module', loads: 'its own local model' })];
   assert.equal(route({ kind: 'summarize', difficulty: 'light' }, own)[1].skip, 'would load its own local model while LMS has a model loaded (name it as the target to do that)');
