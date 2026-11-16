@@ -4,7 +4,7 @@
 // question as a hand-off, the same server queue, the same record. Only `model` is rewritten; prompts are never stored.
 import { createHash, randomBytes } from 'node:crypto';
 import type { Target } from '@agent-spaghetti/sdk';
-import { AUTO, parseHop, rankTargets } from '@agent-spaghetti/sdk';
+import { AUTO, classify, parseHop, rankTargets } from '@agent-spaghetti/sdk';
 import { openaiForward } from './engine/openai.ts';
 import type { Runner } from './runner.ts';
 import { serveJson, WRITTEN, type CallCtx, type Server } from './serve.ts';
@@ -75,7 +75,8 @@ export class Gateway {
     return { object: 'list', data: [{ id: AUTO, object: 'model', owned_by: 'agent-spaghetti' }, ...models.flatMap(t => t.models.map(m => ({ id: `${t.id}:${m}`, object: 'model', owned_by: t.id })))] };
   }
   private async forward(path: string, body: Record<string, unknown>, c: CallCtx): Promise<typeof WRITTEN> {
-    const r = resolveRoute(this.d.settings.get('gateway.routes'), c.who, String(body.model ?? AUTO), this.d.runner.targets(), this.d.best?.(c.who, lastUserText(body)));
+    const said = lastUserText(body), what = classify(said);     // recorded under what the user asked for, not as "other"
+    const r = resolveRoute(this.d.settings.get('gateway.routes'), c.who, String(body.model ?? AUTO), this.d.runner.targets(), this.d.best?.(c.who, said));
     if ('error' in r) throw fail(404, r.error);
     const t = this.d.runner.targets().find(x => x.id === r.target)!;
     let started = false;
@@ -83,7 +84,7 @@ export class Gateway {
       if (!started) { c.res.writeHead(status, { 'content-type': type }); started = true; }
       if (chunk !== undefined) c.res.write(chunk);
     };
-    const { id, done } = this.d.runner.start(c.who, { target: r.target, model: r.model, kind: 'other', reason: `model gateway ${path.slice(4)}`, returnTo: 'none', jobId: this.session,
+    const { id, done } = this.d.runner.start(c.who, { target: r.target, model: r.model, kind: what.kind, difficulty: what.difficulty, classification: what, reason: `model gateway ${path.slice(4)}`, returnTo: 'none', jobId: this.session,
       task: JSON.stringify(body.messages ?? body.prompt ?? body.input ?? '') }, {
       engine: signal => { const s = this.d.runner.server(t, r.model); return openaiForward(s.target, path.slice(3), body, { signal: AbortSignal.any([signal, c.signal]), onQueue: s.onQueue, write }); } });
     c.signal.addEventListener('abort', () => this.d.runner.cancel(id), { once: true });   // the tool gave up: no question left waiting
