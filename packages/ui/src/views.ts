@@ -3,6 +3,7 @@ import { createElement as h, useEffect, useState, type ReactNode } from 'react';
 import { ACTION_LABEL, PANELS, SCOPE_LABEL, emptyLive, isTrace, renderStats, trayState, type ConsentRequest, type ConsentScope, type OpIO, type Panel } from '@agent-spaghetti/sdk/web';
 import { ToolsPanel } from './tools.ts';
 import { RunsPanel } from './runs.ts';
+import { FlowPanel } from './flow.ts';
 import { RoutingPanel } from './routing.ts';
 import { SettingsPanel } from './settings.ts';
 import { ActivityPanel } from './activity.ts';
@@ -37,9 +38,10 @@ function sessions(s: Status) {
 const section = (title: string, ...children: ReactNode[]) => h('section', null, h('h2', null, title), ...children);
 
 const PANEL_LABEL: Record<Panel, string> = { home: 'Home', tools: 'Tools', runs: 'Runs', routing: 'Routing', settings: 'Settings', activity: 'Activity' };
-export interface PopoverProps { view: HubView; now: number; onAnswer: Answer; onScan(): void; scanning: boolean; panel?: Panel; onPanel?(p: Panel): void; onLive?(): void; children?: ReactNode }
+export interface PopoverProps { view: HubView; now: number; onAnswer: Answer; onScan(): void; scanning: boolean; panel?: Panel; onPanel?(p: Panel): void; onLive?(): void; children?: ReactNode;
+  flow?: ReactNode; onFlow?(): void }   // flow: the diagram of what works for whom (Home only); onFlow: the same, bigger, in its own window
 /** The popover frame: status header, one tab per panel, the panel (Home: questions + what runs), rescan footer. */
-export function PopoverView({ view, now, onAnswer, onScan, scanning, panel = 'home', onPanel, onLive, children }: PopoverProps) {
+export function PopoverView({ view, now, onAnswer, onScan, scanning, panel = 'home', onPanel, onLive, children, flow, onFlow }: PopoverProps) {
   const s = view.status;
   const consents = s?.consents ?? [];
   const live = s?.live ?? emptyLive(), snap = s?.snapshot ?? null;
@@ -48,6 +50,7 @@ export function PopoverView({ view, now, onAnswer, onScan, scanning, panel = 'ho
   const running = s ? sessions(s) : [];
   const shown: Panel = view.up ? panel : 'home';
   const home = [
+    flow && view.up ? h('section', { key: 'flow' }, h('h2', null, 'Flow', onFlow ? h('button', { className: 'badge', title: 'The same diagram, bigger, in a window that stays open', onClick: onFlow }, 'Open bigger') : null), h('div', { className: 'card flow-card' }, flow)) : null,
     consents.length ? section('Waiting for you', ...consents.map(c => h(ApprovalCard, { key: c.id, req: c, names, now, onAnswer }))) : null,
     section('Running', running.length ? h('div', { className: 'card list' }, ...running.map((r, i) => h('div', { key: i }, r))) : h('div', { className: 'empty' }, view.up ? 'Nothing running.' : 'Start the daemon from the tray menu.'))];
   return h('div', { className: 'pop' },
@@ -85,6 +88,18 @@ export function Popover({ bridge }: { bridge: Bridge }) {
   useEffect(() => { const i = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(i); }, []);
   const onAnswer: Answer = (id, allow, scope) => void bridge.call('consent', { id, allow, scope }).catch(() => {}).finally(hub.refresh);
   const onScan = () => { setScanning(true); void bridge.call('scan').catch(() => {}).finally(() => { setScanning(false); void hub.refresh(); }); };
-  return h(PopoverView, { view: hub, now, onAnswer, onScan, scanning, panel, onPanel: setPanel, onLive: () => void window.open('popover.html?window=live') },   // the tray opens its live pane
+  const home = panel === 'home' && hub.up;                    // the diagram exists only while Home shows
+  return h(PopoverView, { view: hub, now, onAnswer, onScan, scanning, panel, onPanel: setPanel, onLive: () => void window.open('popover.html?window=live'),   // the tray opens its panes
+    onFlow: () => void window.open('popover.html?window=flow'), flow: home ? h(FlowPanel, { bridge, runs: Object.values(hub.status?.live.runs ?? {}), now }) : undefined },
     panel === 'home' ? null : h(PANEL_COMPONENT[panel], { bridge }));
+}
+/** The diagram in its own window (?window=flow): bigger, stays open; it is gone, with its work, when closed. */
+export function FlowWindow({ bridge }: { bridge: Bridge }) {
+  const hub = useHub(bridge);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const i = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(i); }, []);
+  return h('div', { className: 'flow-window' },
+    h('header', { className: 'bar' }, h('span', { className: 'label' }, 'Flow'), h('span', { className: 'grow' }),
+      h('button', { 'aria-label': 'Close', title: 'Close (Home → Open bigger opens it again)', onClick: () => window.close() }, '×')),
+    hub.up ? h(FlowPanel, { bridge, runs: Object.values(hub.status?.live.runs ?? {}), now }) : h('div', { className: 'empty' }, 'Agent Spaghetti is not running.'));
 }

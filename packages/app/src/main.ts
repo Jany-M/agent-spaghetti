@@ -10,17 +10,17 @@ import { ICON, newQuestions, placeNear, shortcutPaths, tooltip, trayMenu } from 
 const DIR = __dirname;                                     // dist/app (bundle) — assets and the popover live next to it
 const ROOT = join(DIR, '..', '..');
 const asset = (f: string) => join(DIR, f);
-const SIZE = { width: 420, height: 600 }, LIVE = { width: 420, height: 480 };
+const SIZE = { width: 420, height: 600 }, LIVE = { width: 420, height: 480 }, FLOW = { width: 760, height: 560 };
 const APP_ID = 'com.agent-spaghetti.tray';
 
-let tray: Tray | null = null, pop: BrowserWindow | null = null, liveWin: BrowserWindow | null = null, client: HubClient | null = null, up = false, quitting = false;
+let tray: Tray | null = null, pop: BrowserWindow | null = null, liveWin: BrowserWindow | null = null, flowWin: BrowserWindow | null = null, client: HubClient | null = null, up = false, quitting = false;
 const seen = new Set<string>();
 
 const connect = async () => { const c = HubClient.fromDiscovery(); await c.call('status'); return c; };
 const startDaemon = () => void spawnDaemon(process.env, join(ROOT, 'packages', 'cli', 'src', 'index.ts'));
 const to = (w: BrowserWindow | null, e: BridgeEvent) => { if (w && !w.isDestroyed()) w.webContents.send(CHANNEL.event, e); };
 /** Hub events to the windows: live-only traces (negative id) only to the live pane (hidden too, so it is current when shown). */
-const send = (e: BridgeEvent) => { if (!('id' in e) || !isTrace(e)) to(pop, e); to(liveWin, e); };
+const send = (e: BridgeEvent) => { if (!('id' in e) || !isTrace(e)) { to(pop, e); to(flowWin, e); } to(liveWin, e); };
 
 async function refresh() {
   if (!tray) return;
@@ -61,16 +61,29 @@ function showLive(toggle = false) {
     if (toggle && liveWin.isVisible()) liveWin.hide(); else liveWin.show();
     return;
   }
-  const area = screen.getPrimaryDisplay().workArea;
-  liveWin = new BrowserWindow({ ...LIVE, x: area.x + area.width - LIVE.width - 16, y: area.y + area.height - LIVE.height - 16, show: false, frame: false,
-    resizable: true, minWidth: 300, minHeight: 200, alwaysOnTop: true, skipTaskbar: true, icon: asset('icon.png'), title: 'Agent Spaghetti: live',
-    webPreferences: { preload: asset('preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
+  liveWin = pane('live', LIVE, 'bottom-right');
   liveWin.on('close', e => { if (!quitting) { e.preventDefault(); liveWin?.hide(); } });   // its × hides it: it lives as long as the tray
-  liveWin.on('show', () => { liveWin?.setAlwaysOnTop(true, 'floating'); setMenu(); });   // set again once shown (no moveTop: on Windows it clears "on top")
+  liveWin.on('show', setMenu);
   liveWin.on('hide', setMenu);
-  liveWin.webContents.on('will-navigate', e => e.preventDefault());
-  liveWin.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  void liveWin.loadFile(asset('popover.html'), { query: { window: 'live' } }).then(() => liveWin?.show());
+}
+/** The flow diagram, bigger: a window that stays open; closing it ends it (nothing left running for it). */
+function showFlow() {
+  if (flowWin && !flowWin.isDestroyed()) { flowWin.show(); return; }
+  flowWin = pane('flow', FLOW, 'center');
+  flowWin.on('closed', () => { flowWin = null; });
+}
+/** A floating window of the popover page (?window=<name>): frameless, on top, stays open when you click elsewhere. */
+function pane(name: string, size: { width: number; height: number }, where: 'bottom-right' | 'center'): BrowserWindow {
+  const area = screen.getPrimaryDisplay().workArea;
+  const at = where === 'center' ? { x: Math.round(area.x + (area.width - size.width) / 2), y: Math.round(area.y + (area.height - size.height) / 2) }
+    : { x: area.x + area.width - size.width - 16, y: area.y + area.height - size.height - 16 };
+  const w = new BrowserWindow({ ...size, ...at, show: false, frame: false, resizable: true, minWidth: 300, minHeight: 200, alwaysOnTop: true, skipTaskbar: true,
+    icon: asset('icon.png'), title: `Agent Spaghetti: ${name}`, webPreferences: { preload: asset('preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
+  w.on('show', () => w.setAlwaysOnTop(true, 'floating'));   // set again once shown (no moveTop: on Windows it clears "on top")
+  w.webContents.on('will-navigate', e => e.preventDefault());
+  w.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  void w.loadFile(asset('popover.html'), { query: { window: name } }).then(() => { if (!w.isDestroyed()) w.show(); });
+  return w;
 }
 function showPopover() {
   if (!pop || !tray) return;
@@ -120,7 +133,7 @@ else {
     });
     pop.on('close', e => { if (!quitting) { e.preventDefault(); pop?.hide(); } });   // Alt+F4 hides: the popover lives as long as the tray
     pop.webContents.on('will-navigate', e => e.preventDefault());
-    pop.webContents.setWindowOpenHandler(({ url }) => { if (new URL(url).searchParams.get('window') === 'live') showLive(); return { action: 'deny' }; });   // its Live button
+    pop.webContents.setWindowOpenHandler(({ url }) => { const w = new URL(url).searchParams.get('window'); if (w === 'live') showLive(); else if (w === 'flow') showFlow(); return { action: 'deny' }; });   // its Live and Open bigger buttons
     ipcMain.handle(CHANNEL.call, (_e, op: unknown, input: Record<string, unknown>) => {   // before the page loads: it calls at once
       if (!isBridgeOp(op)) throw new Error(`op not allowed: ${String(op)}`);
       if (!client) throw new Error('agent-spaghetti daemon is not running');

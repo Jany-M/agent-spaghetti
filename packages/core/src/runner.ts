@@ -95,7 +95,7 @@ export class Runner {
     }
     req = { ...req, chainId, jobId: req.jobId ?? `chain-${chainId}` };      // "Allow for this job" covers the whole chain
     const ac = new AbortController();
-    this.emit('run.started', id, { source, target: t.id, kind, difficulty: c.difficulty, classifiedBy: c.by, confidence: c.confidence, reason: req.reason ?? null, parentRunId: req.parentRunId ?? null, chainId });
+    this.emit('run.started', id, { source, target: t.id, kind, difficulty: c.difficulty, classifiedBy: c.by, confidence: c.confidence, reason: req.reason ?? null, parentRunId: req.parentRunId ?? null, chainId, next: req.then?.[0] ?? null });
     const hop = this.run(id, source, t, req, ac, o).finally(() => this.running.delete(id));
     this.running.set(id, { ac, done: hop, target: t.id, source, chainId, at: Date.now() });
     void hop.then(r => this.next(r, req));

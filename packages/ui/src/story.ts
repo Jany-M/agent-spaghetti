@@ -27,10 +27,13 @@ export function useToolColors(bridge: Bridge) {
   useEffect(() => { void bridge.call('integrations').then(r => { setToolColors(r.rows); set(n => n + 1); }).catch(() => {}); }, [bridge]);
 }
 const base = (id: string) => id.split(':')[0];                    // lmstudio:gemma → the tool's color
+/** A tool's color as element props: its own (manifest), else its palette slot. One owner for the live lines and the flow diagram. */
+export const toolColor = (id: string): { className?: string; style?: { color: string } } => (own[base(id)] ? { style: { color: own[base(id)] } } : { className: `tc${toolSlot(base(id))}` });
 function Tool({ id }: { id: string }) {
-  const b = base(id), label = toolLabel(id);
-  return b === 'agent-spaghetti' ? h('b', { className: 'tool hub' }, label)
-    : own[b] ? h('b', { className: 'tool', style: { color: own[b] } }, label) : h('b', { className: `tool tc${toolSlot(b)}` }, label);
+  const label = toolLabel(id);
+  if (base(id) === 'agent-spaghetti') return h('b', { className: 'tool hub' }, label);
+  const c = toolColor(id);
+  return h('b', { className: ['tool', c.className].filter(Boolean).join(' '), style: c.style }, label);
 }
 export function PartsView({ parts }: { parts: Part[] }) {
   return h('span', { className: 'story' }, ...parts.map((p, i) => typeof p === 'string' ? p

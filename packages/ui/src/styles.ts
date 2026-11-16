@@ -80,10 +80,26 @@ textarea { resize:vertical; }
 .tone-ok, .runs .line.tone-ok { border-left-color:var(--idle); } .tone-fail, .runs .line.tone-fail { border-left-color:var(--problem); }
 .tone-run, .runs .line.tone-run { border-left-color:var(--working); }
 button.badge { border:0; cursor:pointer; }
+/* the flow diagram: blocks in the tools' colors (currentColor), lit while they work; lines move the way the work goes. CSS animation only. */
+.flow { display:block; width:100%; height:auto; }
+.flow .spoke { stroke:var(--line); stroke-width:1; fill:none; }
+.flow .link { stroke:currentColor; stroke-width:2; fill:none; stroke-linecap:round; stroke-dasharray:3 7; animation:flow-move .7s linear infinite; filter:drop-shadow(0 0 3px currentColor); }
+.flow .node rect { fill:var(--card); stroke:currentColor; stroke-width:1; opacity:.55; transition:opacity .3s; }
+.flow .node.hub { color:var(--fg); } .flow .node.hub rect { stroke-width:1.5; opacity:.8; }
+.flow .node.on rect { opacity:1; stroke-width:1.6; filter:drop-shadow(0 0 5px currentColor); animation:flow-glow 1.6s ease-in-out infinite; }
+.flow text { text-anchor:middle; font-size:9px; fill:var(--fg); stroke:none; }
+.flow .name { font-weight:600; font-size:10px; fill:currentColor; } .flow .hub .name { fill:var(--fg); }
+.flow .what { font-size:7.5px; fill:var(--muted); } .flow .node.on .what { fill:var(--fg); } .flow .what.tag { font-size:6.5px; letter-spacing:1.5px; } .flow .what.next { font-size:7px; opacity:.8; }
+.flow.still .link, .flow.still .node.on rect { animation:none; }
+@keyframes flow-move { to { stroke-dashoffset:-10; } }
+@keyframes flow-glow { 50% { opacity:.7; } }
+@media (prefers-reduced-motion: reduce) { .flow .link, .flow .node.on rect { animation:none; } }
+.flow-card { padding:4px; }
+.flow-window { display:flex; flex-direction:column; height:100vh; } .flow-window .flow { flex:1; min-height:0; height:100%; }
 .live { display:flex; flex-direction:column; height:100vh; }
-.live .bar { display:flex; gap:6px; align-items:center; padding:6px 8px; border-bottom:1px solid var(--line); background:var(--card); -webkit-app-region:drag; user-select:none; }
-.live .bar .label { font-weight:600; } .live .bar .grow { flex:1; }
-.live .bar select, .live .bar button { -webkit-app-region:no-drag; width:auto; font-size:12px; padding:2px 8px; }
+.live .bar, .flow-window .bar { display:flex; gap:6px; align-items:center; padding:6px 8px; border-bottom:1px solid var(--line); background:var(--card); -webkit-app-region:drag; user-select:none; }
+.live .bar .label, .flow-window .bar .label { font-weight:600; } .live .bar .grow, .flow-window .bar .grow { flex:1; }
+.live .bar select, .live .bar button, .flow-window .bar button { -webkit-app-region:no-drag; width:auto; font-size:12px; padding:2px 8px; }
 .live .chip { border-radius:10px; }
 .live .feed { flex:1; overflow:auto; padding:4px 8px; }
 .live .entry { padding:2px 0 2px 6px; margin:2px 0; }
