@@ -40,7 +40,7 @@ export interface BridgeOpts { source: string; parentRunId?: number; waitMs?: num
 const text = (t: string, isError = false) => ({ content: [{ type: 'text', text: t }], ...(isError ? { isError: true } : {}) });
 export function describeRun(v: RunView): ReturnType<typeof text> {
   const r = v.run;
-  if (r.outcome === 'running') return text(`Run ${v.id} on ${r.target} is still running. Call run_status with id ${v.id} later.`);
+  if (r.outcome === 'running') return text(`Run ${v.id} on ${r.target} is still running (free and local tools can take minutes). Call run_status with id ${v.id}: it waits for the result, so call it again until the run ends rather than giving up or doing the task twice.`);
   if (r.outcome === 'done') return text(v.result ?? '(no output)');
   return text(`Run ${v.id} on ${r.target} ${r.outcome}${r.error ? `: ${r.error}` : ''}.${v.result ? `\n\n${v.result}` : ''}`, true);
 }
@@ -102,6 +102,10 @@ export function mcpHandler(client: HubClient, o: BridgeOpts, send: Send) {
       if (!a.cwd) delete a.cwd;
       runId = (await client.call('delegate', { ...a, target: a.target || AUTO, source: await source(), parentRunId: o.parentRunId, waitMs: 0 } as never)).id;
     }
+    return wait(runId, progressToken, x, state);
+  }
+  /** Waits for a run's chain to end (at most `waitMs`), reporting progress and asking a pending approval in the tool. */
+  async function wait(runId: number, progressToken: unknown, x: Io, state: () => unknown = () => ({ runId })): Promise<object> {
     let offered = false;
     const who = await source();
     const until = Date.now() + (o.waitMs ?? 100_000);
@@ -123,9 +127,10 @@ export function mcpHandler(client: HubClient, o: BridgeOpts, send: Send) {
       await new Promise(r => setTimeout(r, o.pollMs ?? 1500));
     }
   }
-  /** One run (its chain's final state), or every result waiting for this caller. */
-  async function status(id: number | undefined): Promise<object> {
-    if (id !== undefined) return describeRun((await client.call('runs', { id, watch: true, source: await source() })).final!);
+  /** One run: waits for it like `delegate` does (a caller that checks a slow run gets its result, not "still running" three times);
+   *  without an id, every result waiting for this caller. */
+  async function status(id: number | undefined, progressToken: unknown, x: Io): Promise<object> {
+    if (id !== undefined) return wait(id, progressToken, x);
     const waiting = (await client.call('runs', { unread: true, source: await source() })).unread ?? [];
     return text(waiting.length ? waiting.map(v => `## Run ${v.id} (${v.run.target}): ${v.run.outcome}\n\n${v.result ?? v.run.error ?? '(no output)'}`).join('\n\n') : 'No new results.');
   }
@@ -136,7 +141,7 @@ export function mcpHandler(client: HubClient, o: BridgeOpts, send: Send) {
     if (errors.length) return text(`invalid arguments: ${errors.join('; ')}`, true);
     try {
       if (tool.op === 'delegate') return await delegate(args, p._meta?.progressToken, x, p.requestState ? open(p.requestState) ?? {} : {});
-      if (tool.op === 'runs') return await status(args.id);
+      if (tool.op === 'runs') return await status(args.id, p._meta?.progressToken, x);
       return text(JSON.stringify(await client.call(tool.op, { ...args, source: await source() } as never), null, 2));   // the caller, for ops that check it (report)
     } catch (e) {
       if (e instanceof InputRequired) throw e;

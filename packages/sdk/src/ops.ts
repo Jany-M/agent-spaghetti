@@ -49,10 +49,11 @@ export const OPS = {
   targets:      { method: 'GET',  path: '/v1/targets', gui: 'runs',      usage: 'targets',                  summary: 'What tasks can be handed to right now',
     mcp: { name: 'targets', description: 'List the local models and agents `delegate` can use now, with their cost class (free / metered).', input: { type: 'object', additionalProperties: false, properties: {} } } },
   runs:         { method: 'GET',  path: '/v1/runs', gui: 'runs',         usage: 'runs [<id> | --unread [<caller>]]', summary: 'The run record; with an id: its hand-off chain and result',
-    mcp: { name: 'run_status', description: 'Status and result of a run you handed off; without an id: results of your hand-offs that finished after you stopped waiting (each given once).',
+    mcp: { name: 'run_status', description: 'The result of a run you handed off: with its id it waits until the run ends (call it again if it says still running); without an id: results of your hand-offs that finished after you stopped waiting (each given once).',
       input: { type: 'object', additionalProperties: false, properties: { id: { type: 'integer' } } } } },
   routing:      { method: 'GET',  path: '/v1/routing', gui: 'routing',   usage: 'routing [--difficulty light|medium|heavy]', summary: 'The targets each kind of task would go to, best first, and why' },
   cancel:       { method: 'POST', path: '/v1/cancel', gui: 'runs',       usage: 'cancel <id>',              summary: 'Stop a running delegation' },
+  label:        { method: 'POST', path: '/v1/label',   gui: 'runs',      usage: 'label <id> [<kind>] [light|medium|heavy]', summary: 'Correct what kind of task a run was, or how hard (the ranking counts it under the corrected kind)' },
   verdict:      { method: 'POST', path: '/v1/verdict', gui: 'runs',      usage: 'verdict <id> up|down|redo', summary: 'Rate a run (kept in the run record)' },
   dismiss:      { method: 'POST', path: '/v1/dismiss', gui: 'runs',      usage: 'dismiss <id>',             summary: 'Stop keeping a waiting result for its caller (it stays in the run record)' },
   connect:      { method: 'POST', path: '/v1/connect', gui: 'tools',      usage: 'connect|disconnect <integration> [--dry-run]', summary: 'Give a client the agent-spaghetti tools (MCP + plugin), or take them away' },
@@ -97,6 +98,7 @@ export interface OpIO {
     out: { runs: RunRow[]; result?: string; final?: RunView; unread?: RunView[] } };   // final: the chain's view (id = chain); unread: given once
   routing: { in: { difficulty?: Difficulty }; out: { difficulty: Difficulty; kinds: Array<{ kind: TaskKind; ranked: Ranked[] }> } };
   cancel: { in: { id: number }; out: { cancelled: boolean } };
+  label: { in: { id: number; kind?: TaskKind; difficulty?: Difficulty }; out: { ok: true } };
   verdict: { in: { id: number; value: 'up' | 'down' | 'redo' }; out: { ok: true } };
   dismiss: { in: { id: number }; out: { ok: true } };
   connect: { in: { integration: string; on?: boolean; envId?: string; dryRun?: boolean }; out: ConnectResult };

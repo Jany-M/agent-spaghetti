@@ -3,7 +3,7 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DaemonDown, ENGINE_LABEL, HubClient, dataDir, ensureDaemon, logsDir, readDiscovery, OPS, parseJson, SCOPE_LABEL, detectionRows, describeRun, eventLine, permissionRows, runLine, renderStats, renderTable, settingText, renderToolRows, renderTree, serveMcpStdio, switchRows, testLines,
+import { DIFFICULTIES, DaemonDown, ENGINE_LABEL, HubClient, dataDir, ensureDaemon, logsDir, readDiscovery, OPS, parseJson, SCOPE_LABEL, detectionRows, describeRun, eventLine, permissionRows, runLine, renderStats, renderTable, settingText, renderToolRows, renderTree, serveMcpStdio, switchRows, testLines,
   type Action, type ConsentRequest, type ConsentScope, type Difficulty, type OpId, type TaskKind } from '@agent-spaghetti/sdk';
 import { OFFLOAD_EVENTS, planHook, under } from './hook.ts';
 
@@ -182,6 +182,8 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
       }
       case 'cancel': { const r = await c.call('cancel', { id: Number(a1) }); print(r, () => (r.cancelled ? `run ${a1} cancelled` : `run ${a1} is not running`)); break; }
       case 'dismiss': { const r = await c.call('dismiss', { id: Number(a1) }); print(r, () => `run ${a1}: result no longer kept for its caller`); break; }
+      case 'label': { const d = [a2, a3].find(x => (DIFFICULTIES as readonly string[]).includes(x ?? '')), k = [a2, a3].find(x => x && x !== d);
+        const r = await c.call('label', { id: Number(a1), kind: k as TaskKind | undefined, difficulty: d as Difficulty | undefined }); print(r, () => `run ${a1}: ${[k, d].filter(Boolean).join(' · ')}`); break; }
       case 'verdict': { const r = await c.call('verdict', { id: Number(a1), value: a2 as 'up' }); print(r, () => `run ${a1}: ${a2}`); break; }
       case 'connect': {
         const r = await c.call('connect', { integration: a1, on: cmd !== 'disconnect', dryRun: args.includes('--dry-run') });

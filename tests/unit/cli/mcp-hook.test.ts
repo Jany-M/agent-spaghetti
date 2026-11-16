@@ -53,7 +53,10 @@ test('MCP delegate: progress while waiting for approval, result text, still-runn
   assert.ok(!f.calls.some(c => c[0] === 'consent'), 'no elicitation declared: the tray alone asks');
   const slow = mcpHandler(fakeClient([run('running')]).client, { source: 'cursor', waitMs: 0 }, () => {});
   const s: any = await slow({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'delegate', arguments: { target: 'x', task: 't' }, _meta: meta } });
-  assert.match(s.result.content[0].text, /still running\. Call run_status with id 7/);
+  assert.match(s.result.content[0].text, /still running .*Call run_status with id 7: it waits for the result/);
+  const later = fakeClient([run('running'), run('running'), run('done', 'the answer')]), waits = mcpHandler(later.client, { source: 'cursor', pollMs: 1 }, () => {});
+  const got: any = await waits({ jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name: 'run_status', arguments: { id: 7 }, _meta: meta } });
+  assert.deepEqual(got.result.content, [{ type: 'text', text: 'the answer' }], 'run_status waits for a slow run like delegate does');
   const denied: any = await mcpHandler(fakeClient([{ ...run('denied'), run: { ...run('denied').run, error: 'denied by the user' } }]).client, { source: 'cursor' }, () => {})(
     { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'delegate', arguments: { target: 'x', task: 't' }, _meta: meta } });
   assert.deepEqual([denied.result.isError, denied.result.content[0].text], [true, 'Run 7 on claude-cli denied: denied by the user.']);

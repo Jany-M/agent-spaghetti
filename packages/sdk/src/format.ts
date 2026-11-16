@@ -98,7 +98,7 @@ export function renderStats(up: boolean, snap: Snapshot | null, live: LiveState,
 /** One run as a line (CLI `runs`, the Runs panel). */
 /** A run's kind and difficulty and who set them, as people read it: "summarize · light (rules, 80% sure)". */
 export const classification = (r: Pick<RunRow, 'kind' | 'difficulty' | 'classifiedBy' | 'confidence'>) => `${r.kind}${r.difficulty ? ` · ${r.difficulty}` : ''}`
-  + (r.classifiedBy === 'caller' ? ' (set by the caller)' : r.classifiedBy ? ` (Agent Spaghetti's ${r.classifiedBy}, ${Math.round((r.confidence ?? 0) * 100)}% sure)` : '');
+  + (r.classifiedBy === 'user' ? ' (set by you)' : r.classifiedBy === 'caller' ? ' (set by the caller)' : r.classifiedBy ? ` (Agent Spaghetti's ${r.classifiedBy}, ${Math.round((r.confidence ?? 0) * 100)}% sure)` : '');
 export const runLine = (r: RunRow) => `${String(r.id).padStart(4)}  ${new Date(r.ts).toLocaleString()}  ${r.source} → ${r.target}${r.model ? ` (${r.model})` : ''}  ${r.kind}${r.difficulty ? `·${r.difficulty}` : ''}  ${r.outcome}`
   + `${r.durationMs ? ` ${Math.round(r.durationMs / 1000)}s` : ''}${r.costUsd ? ` $${r.costUsd.toFixed(4)}` : ''}${r.verdict ? ` [${r.verdict}]` : ''}`
   + `${r.delivered ? `  ↩ ${DELIVERY_LABEL[r.delivered]}` : ''}${r.reason ? `  · ${r.reason}` : ''}`;

@@ -1,7 +1,7 @@
 // Runs panel: the run record (results waiting for their caller counted), one run's hand-off chain with where its result went,
 // its result (verdict, cancel), and "New task" (= delegate: a target or auto, further hops, whether the result comes back).
 import { createElement as h, useState } from 'react';
-import { AUTO, DIFFICULTIES, HANDOFF_KINDS, classification, runLine, type OpIO, type RunRow, type Target } from '@agent-spaghetti/sdk/web';
+import { AUTO, DIFFICULTIES, HANDOFF_KINDS, classification, runLine, type Difficulty, type OpIO, type RunRow, type Target, type TaskKind } from '@agent-spaghetti/sdk/web';
 import type { Bridge } from './bridge.ts';
 import { useAct, useOp } from './hooks.ts';
 
@@ -17,7 +17,7 @@ export interface RunsProps {
   runs: RunRow[]; chain: RunRow[] | null; result?: string; selected: number | null; targets: Target[]; target: string;
   then: string[]; onThen(steps: string[]): void;                 // next steps picked so far (target, target:model or auto)
   busy: string | null; error: string | null; waitingOnly?: boolean; onWaitingOnly?(on: boolean): void;
-  onSelect(id: number | null): void; onVerdict(id: number, v: 'up' | 'down' | 'redo'): void; onCancel(id: number): void; onDismiss?(id: number): void;
+  onSelect(id: number | null): void; onVerdict(id: number, v: 'up' | 'down' | 'redo'): void; onLabel(id: number, l: { kind?: TaskKind; difficulty?: Difficulty }): void; onCancel(id: number): void; onDismiss?(id: number): void;
   onTarget(id: string): void; onSend(f: Record<string, string>): void;
 }
 
@@ -54,7 +54,11 @@ export function RunsView(p: RunsProps) {
   /** The open run, under its own row: its chain, kind, result, and what can be done (grade, cancel, dismiss) without scrolling. */
   const detail = (s: RunRow) => h('div', { className: 'detail' },
     p.chain!.length > 1 ? h('div', { className: 'list' }, ...p.chain!.map(r => h('div', { key: r.id, className: r.id === s.id ? 'me' : '' }, runLine(r)))) : null,
-    h('div', { className: 'why' }, classification(s)),
+    h('div', { className: 'row why' }, classification(s), ' · wrong? ',
+      h('select', { 'aria-label': 'What kind of task it was', value: s.kind, disabled: !!p.busy, onChange: (e: { target: { value: string } }) => p.onLabel(s.id, { kind: e.target.value as TaskKind }) },
+        ...[...new Set([...HANDOFF_KINDS, s.kind])].map(k => h('option', { key: k, value: k }, k))),
+      h('select', { 'aria-label': 'How hard it was', value: s.difficulty ?? '', disabled: !!p.busy, onChange: (e: { target: { value: string } }) => p.onLabel(s.id, { difficulty: e.target.value as Difficulty }) },
+        ...(s.difficulty ? [] : [h('option', { key: '', value: '' }, 'difficulty')]), ...DIFFICULTIES.map(d => h('option', { key: d, value: d }, d)))),
     s.error ? h('div', { className: 'card error' }, s.error) : null,
     p.result !== undefined ? h('pre', null, p.result) : null,
     first?.delivered === 'unread' ? h('div', { className: 'why' }, `The result is waiting for ${first.source} to collect it (it asks with run_status). Dismiss it if nobody will.`) : null,
@@ -91,6 +95,7 @@ export function RunsPanel({ bridge }: { bridge: Bridge }) {
     onDismiss: id => act('dismiss', () => bridge.call('dismiss', { id }).then(one.reload)),
     onSelect: setSelected, onTarget: setTarget,
     onVerdict: (id, v) => act('verdict', () => bridge.call('verdict', { id, value: v }).then(one.reload)),
+    onLabel: (id, l) => act('label', () => bridge.call('label', { id, ...l }).then(one.reload)),
     onCancel: id => act('cancel', () => bridge.call('cancel', { id })),
     onSend: f => act('send', async () => { const v = await bridge.call('delegate', delegateInput(f)); setThen([]); setSelected(v.id); }),
   });

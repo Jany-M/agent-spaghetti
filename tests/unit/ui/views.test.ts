@@ -93,7 +93,7 @@ test('runs panel: form fields → delegate input (auto, then, return); list line
   assert.deepEqual(delegateInput({ target: 'oc', task: ' do it ', kind: 'docs', reason: '', model: 'worker', then: '', returnTo: 'caller' }), { target: 'oc', task: 'do it', kind: 'docs', model: 'worker', source: 'tray', waitMs: 0 });
   assert.deepEqual(delegateInput({ target: 'auto', task: 't', then: 'cc,lms:m1', returnTo: 'none', cwd: ' /w ' }), { target: 'auto', task: 't', cwd: '/w', then: ['cc', 'lms:m1'], returnTo: 'none', source: 'tray', waitMs: 0 });
   const r = (id: number, o: Record<string, unknown> = {}) => ({ id, ts: 0, source: 'tray', target: 'oc', kind: 'other', taskHash: 'h', outcome: 'done', ...o }) as never;
-  const base = { busy: null, error: null, onSelect: noop, onVerdict: noop, onCancel: noop, onTarget: noop, onSend: noop, then: [] as string[], onThen: noop, runs: [r(2), r(1, { delivered: 'unread' })],
+  const base = { busy: null, error: null, onSelect: noop, onVerdict: noop, onLabel: noop, onCancel: noop, onTarget: noop, onSend: noop, then: [] as string[], onThen: noop, runs: [r(2), r(1, { delivered: 'unread' })],
     targets: [{ id: 'oc', name: 'OpenClaw', kind: 'agent', cost: 'unknown', envId: 'wsl:T', models: ['main', 'worker'] }] as never, target: 'oc' };
   const form = html(h(RunsView, { ...base, chain: null, selected: null }));
   assert.match(form, /<option value="oc"[^>]*>OpenClaw \(unknown\)<\/option>/); assert.match(form, /Agent<select name="model">/);
@@ -102,7 +102,7 @@ test('runs panel: form fields → delegate input (auto, then, return); list line
   assert.deepEqual(delegateInput({ target: 'oc', task: 't', kind: '', difficulty: 'heavy' }), { target: 'oc', task: 't', difficulty: 'heavy', source: 'tray', waitMs: 0 }, 'an empty kind lets JEV decide');
   const r4 = r(4, { kind: 'summarize', difficulty: 'light', classifiedBy: 'rules', confidence: 0.8 });
   const jev = html(h(RunsView, { ...base, runs: [r4], chain: [r4], selected: 4 }));
-  assert.match(jev, /<div class="why">summarize · light \(Agent Spaghetti&#x27;s rules, 80% sure\)<\/div>/);
+  assert.match(jev, /<div class="row why">summarize · light \(Agent Spaghetti&#x27;s rules, 80% sure\) · wrong\? <select aria-label="What kind of task it was">.*?<option value="summarize" selected="">/);
   assert.equal([...form.matchAll(/class="line tone-ok"/g)].length, 2, 'run lines colored by outcome');
   assert.match(form, /<option value="auto">Let Agent Spaghetti choose<\/option>/); assert.match(form, /<select name="returnTo">/); assert.match(form, /name="cwd"/, 'agents get a folder field');
   assert.match(form, /<select aria-label="Add a next step"><option value="" selected="">nobody \(one step\)<\/option><option value="oc">OpenClaw \(unknown\)<\/option><option value="oc:main">OpenClaw: main<\/option>/);

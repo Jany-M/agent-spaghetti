@@ -166,6 +166,12 @@ export const handlers: Handlers = {
     return { difficulty, kinds: HANDOFF_KINDS.map(kind => ({ kind, ranked: s.dispatcher.ranking({ kind, difficulty, edits: EDIT_KINDS.has(kind) }) })) };
   },
   cancel: (i, s) => ({ cancelled: s.runner.cancel(num(i.id, 0)) }),
+  label: (i, s) => {
+    if (i.kind !== undefined && !HANDOFF_KINDS.includes(i.kind as never)) throw new Error(`kind must be one of ${HANDOFF_KINDS.join(', ')}`);
+    if (i.difficulty !== undefined && !DIFFICULTIES.includes(i.difficulty)) throw new Error(`difficulty must be one of ${DIFFICULTIES.join(', ')}`);
+    if (!s.ledger.get(num(i.id, 0))) throw new Error(`no run ${i.id}`);
+    s.ledger.update(num(i.id, 0), { ...(i.kind ? { kind: i.kind } : {}), ...(i.difficulty ? { difficulty: i.difficulty } : {}), classifiedBy: 'user', confidence: 1 }); return { ok: true };
+  },
   verdict: (i, s) => {
     if (!['up', 'down', 'redo'].includes(i.value)) throw new Error('verdict must be up, down or redo');
     if (!s.ledger.get(num(i.id, 0))) throw new Error(`no run ${i.id}`);

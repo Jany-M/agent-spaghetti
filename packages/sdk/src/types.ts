@@ -115,8 +115,8 @@ export const HANDOFF_KINDS = TASK_KINDS.filter(k => k !== 'report');
 /** How much a task asks of its target (JEV, finish-line plan Part I): routing matches it against what a target can handle. */
 export const DIFFICULTIES = ['light', 'medium', 'heavy'] as const;
 export type Difficulty = (typeof DIFFICULTIES)[number];
-/** A task's kind and difficulty as JEV set them: `by` says who set the kind (the caller, or the default rules), `confidence` 0–1. */
-export interface Classification { kind: TaskKind; difficulty: Difficulty; by: 'caller' | 'rules'; confidence: number }
+/** A task's kind and difficulty as JEV set them: `by` says who set the kind (the caller, the default rules, or you afterwards), `confidence` 0–1. */
+export interface Classification { kind: TaskKind; difficulty: Difficulty; by: 'caller' | 'rules' | 'user'; confidence: number }   // user: corrected in Runs (`label`)
 /** The target that means "let Agent Spaghetti choose" (core/dispatcher.ts). */
 export const AUTO = 'auto';
 /** One hand-off (ADR 0010 envelope). `then` = the next hops (`target[:model]`), each getting the previous result as `context`;

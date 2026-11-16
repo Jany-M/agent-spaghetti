@@ -242,6 +242,8 @@ test('CLI 3: targets, delegate to a free local model (result printed), runs, run
     r = await cli('runs', '1'); assert.match(r.out, /\n\nHi$/);
     r = await cli('verdict', '1', 'redo'); assert.equal(r.code, 0); assert.match((await cli('runs')).out, /\[redo\]/);
     r = await cli('verdict', '1', 'meh'); assert.equal(r.code, 1);
+    r = await cli('label', '1', 'review', 'heavy'); assert.equal(r.code, 0); assert.match((await cli('runs')).out, /review·heavy/);
+    r = await cli('label', '1', 'nonsense'); assert.equal(r.code, 1); assert.match(r.err, /kind must be one of/);
     r = await cli('cancel', '1'); assert.match(r.out, /run 1 is not running/);
     r = await cli('delegate', 'nope', 'x'); assert.equal(r.code, 1); assert.match(r.err, /unknown or unavailable target nope/);
     b.services.store.saveSnapshot('scan', { ...SNAP, detections: [...SNAP.detections, { ...SNAP.detections[0], integration: 'acme', name: 'Acme', connected: false }] });
