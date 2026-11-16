@@ -78,7 +78,7 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
     switch (op) {
       case 'status': {
         const r = await c.call('status');
-        print(r, () => args.includes('--short') ? renderStats(true, r.snapshot, r.live, r.consents).join('\n')
+        print(r, () => args.includes('--short') ? renderStats(true, r.snapshot, r.live, r.consents, r.saved).join('\n')
           : [r.snapshot ? renderTree(r.snapshot, r.live) : 'No scan yet. Run: agent-spaghetti scan', ...r.consents.map(consentLine)].join('\n'));
         break;
       }

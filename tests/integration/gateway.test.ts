@@ -13,7 +13,7 @@ import { Consent } from '../../packages/core/src/consent.ts';
 import { Settings } from '../../packages/core/src/settings.ts';
 import { Ledger } from '../../packages/core/src/ledger.ts';
 import { Runner } from '../../packages/core/src/runner.ts';
-import { Gateway, KEY_PREFIX, resolveRoute } from '../../packages/core/src/gateway.ts';
+import { Gateway, KEY_PREFIX, lastUserText, resolveRoute } from '../../packages/core/src/gateway.ts';
 
 const T = (id: string, cost: Target['cost'], models: string[]): Target => ({ id, name: id, kind: 'model', cost, envId: 'w', models, engine: 'openai', resumable: false });
 test('resolveRoute: target:model, a loaded model id, the tool\'s route, auto = best-ranked; clear errors', () => {
@@ -25,6 +25,9 @@ test('resolveRoute: target:model, a loaded model id, the tool\'s route, auto = b
   assert.deepEqual(resolveRoute(['cline=paid'], 'vscode', 'x', ts), { target: 'lms', model: 'g:4b' }, 'another tool\'s route does not apply; agents are no models');
   assert.match((resolveRoute(['vscode=paid:gone'], 'vscode', 'auto', ts) as { error: string }).error, /vscode's model paid:gone is not available now/);
   assert.match((resolveRoute([], 'vscode', 'auto', []) as { error: string }).error, /no model is loaded/);
+  assert.deepEqual(resolveRoute([], 'vscode', 'auto', ts, ts[0]), { target: 'paid', model: 'big' }, 'auto: the model routing picked for the request');
+  assert.equal(lastUserText({ messages: [{ role: 'user', content: 'old' }, { role: 'assistant', content: 'a' }, { role: 'user', content: [{ type: 'text', text: 'Summarize this' }] }] }), 'Summarize this');
+  assert.equal(lastUserText({ prompt: 'p' }), 'p');
 });
 
 /** An upstream that streams two words, then usage only because it was asked; or answers JSON. */

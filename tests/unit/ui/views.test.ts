@@ -25,25 +25,26 @@ test('approval card: what, where, why; Deny first, one button per offered scope;
   assert.match(r, /expires in 60 s/);
   assert.deepEqual([...r.matchAll(/<button[^>]*>([^<]+)</g)].map(m => m[1]), ['Deny', 'Allow once', 'Allow for this job', 'Always allow']);
 });
+const none = { week: { tasks: 0, tokens: 0 }, all: { tasks: 0, tokens: 0 } }, saved = { week: { tasks: 2, tokens: 3100 }, all: { tasks: 9, tokens: 0 } };
 test('popover: daemon down; running sessions with agent names; questions first; rescan disabled while scanning', () => {
   const down = html(h(PopoverView, { view: { up: false, status: null }, now: 0, onAnswer: noop, onScan: noop, scanning: false }));
   assert.match(down, /dot problem/); assert.match(down, /agent-spaghetti is not running/); assert.match(down, /Start the daemon from the tray menu/);
   const snapshot: Snapshot = { ts: 1, envs: [], backends: [], rejected: [], detections: [{ integration: 'acme', name: 'Acme', envId: 'windows', installs: [], levels: [], cost: 'free', connectable: 'yes', why: '' }],
     agents: [{ id: 'openclaw:main', integration: 'openclaw', name: 'Main', envId: 'wsl:T' }] };
   const live = liveState([{ id: 1, ts: 1, type: 'session.started', envId: 'wsl:T', source: 'openclaw', data: { key: 'k', agentId: 'main', kind: 'chat', status: 'running' } }]);
-  const busy = html(h(PopoverView, { view: { up: true, status: { snapshot, live, consents: [ask] } }, now: 0, onAnswer: noop, onScan: noop, scanning: true }));
-  assert.match(busy, /dot approval/);
+  const busy = html(h(PopoverView, { view: { up: true, status: { snapshot, live, consents: [ask], saved } }, now: 0, onAnswer: noop, onScan: noop, scanning: true }));
+  assert.match(busy, /dot approval/); assert.match(busy, /free tools did 2 tasks \(3k tokens\) this week, 9 tasks in all/);
   assert.ok(busy.indexOf('Waiting for you') < busy.indexOf('Running'));
   assert.match(busy, /Acme wants to read/);
   assert.match(busy, /Main · chat running/);
   assert.match(busy, /<button disabled="">Scanning…<\/button>/);
-  const idle = html(h(PopoverView, { view: { up: true, status: { snapshot, live: emptyLive(), consents: [] } }, now: 0, onAnswer: noop, onScan: noop, scanning: false }));
+  const idle = html(h(PopoverView, { view: { up: true, status: { snapshot, live: emptyLive(), consents: [], saved: none } }, now: 0, onAnswer: noop, onScan: noop, scanning: false }));
   assert.match(idle, /dot idle/); assert.match(idle, /Nothing running\./); assert.ok(!idle.includes('Waiting for you'));
 });
 
 test('popover frame: one tab per panel (current marked, others off while the daemon is down); a panel replaces Home', async () => {
   const { PANELS } = await import('@agent-spaghetti/sdk');
-  const up = { up: true, status: { snapshot: null, live: emptyLive(), consents: [ask] } };
+  const up = { up: true, status: { snapshot: null, live: emptyLive(), consents: [ask], saved: none } };
   const a = html(h(PopoverView, { view: up, now: 0, onAnswer: noop, onScan: noop, scanning: false, panel: 'runs' }, h('p', null, 'RUNS-PANEL')));
   assert.deepEqual([...a.matchAll(/<nav[^]*?<\/nav>/g)][0][0].match(/<button[^>]*>([A-Za-z]+)/g)!.map(b => b.replace(/<button[^>]*>/, '')), ['Home', 'Tools', 'Runs', 'Routing', 'Settings', 'Activity']);
   assert.equal(PANELS.length, 6);

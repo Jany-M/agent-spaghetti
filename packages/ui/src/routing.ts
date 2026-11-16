@@ -10,7 +10,7 @@ type Out = OpIO['routing']['out'];
 type All = OpIO['settings']['out'];
 export type Pick = 'prefer' | 'never';
 /** The routing settings this panel shows as fields (`routing.prefer` and `routing.never` are the First / Never buttons). */
-export const ROUTING_FIELDS = ['routing.learn', 'routing.stretch', 'routing.escalate', 'routing.tiers'] as const;
+export const ROUTING_FIELDS = ['routing.offload', 'routing.learn', 'routing.stretch', 'routing.escalate', 'routing.tiers'] as const;
 const list = (s: All | null, p: Pick) => (s?.[`routing.${p}`]?.value as string[] | undefined) ?? [];
 /** Both lists after toggling `p` for a target on a kind: one pick per kind, and a target is never both first and never. */
 export function routePicks(prefer: string[], never: string[], kind: string, id: string, p: Pick): Record<`routing.${Pick}`, string[]> {

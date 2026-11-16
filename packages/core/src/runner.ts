@@ -37,10 +37,11 @@ export function targets(d: Pick<RunnerDeps, 'host' | 'snapshot' | 'integrations'
     const i = byId.get(det.integration);
     if (!i || det.unready || out.some(t => t.id === det.integration)) continue;
     const models = snap.backends.filter(b => b.integration === det.integration && b.reachableFrom.includes(hostId)).map(b => b.model);
+    const extra = { ...(i.manifest.abilities?.includes('web') ? { web: true as const } : {}), ...(det.loads ? { loads: det.loads } : {}) };
     const sp = i.manifest.speaks, engine = sp?.acp ? 'acp' : i.module?.run ? 'module' : sp?.chat ? 'chat' : null;   // a tool's best engine (ADR 0010 §2)
     if (sp?.openai && models.length) out.push({ id: det.integration, name: det.name, kind: 'model', cost: det.cost, envId: hostId, models, engine: 'openai', resumable: false });
     else if (engine && running.has(det.envId) && programOf(det, (sp?.acp ?? (engine === 'chat' ? sp?.chat : undefined))?.command[0] ?? i.manifest.detect?.bin?.[0]))
-      out.push({ id: det.integration, name: det.name, kind: 'agent', cost: det.cost, envId: det.envId, engine, resumable: engine === 'acp' || (engine === 'module' && !!i.module?.resumes),
+      out.push({ id: det.integration, name: det.name, kind: 'agent', cost: det.cost, envId: det.envId, engine, resumable: engine === 'acp' || (engine === 'module' && !!i.module?.resumes), ...extra,
         models: snap.agents.filter(a => a.integration === det.integration && a.envId === det.envId).map(a => a.id.slice(det.integration.length + 1)) });
   }
   return out;

@@ -3,6 +3,7 @@
   "manifest": 1,
   "id": "kilo",
   "name": "Kilo",
+  "abilities": ["web"],
   "roles": [
     "agent",
     "client"

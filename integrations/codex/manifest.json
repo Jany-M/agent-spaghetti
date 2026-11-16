@@ -3,6 +3,7 @@
   "manifest": 1,
   "id": "codex",
   "name": "Codex",
+  "abilities": ["web"],
   "roles": [
     "agent",
     "client"

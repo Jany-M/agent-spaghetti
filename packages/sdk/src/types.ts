@@ -44,6 +44,7 @@ export interface Environment {
 export interface Manifest {
   $schema?: string;
   manifest: 1; id: string; name: string; color?: string; roles: Role[]; cost?: Cost; platforms?: Platform[];
+  abilities?: Array<'web'>;                              // what its agent can do beyond answering (routing: research goes to `web` first)
   detect?: {
     installed?: string[];
     process?: string[]; processNotIn?: string[];   // path fragments of copies bundled in other tools
@@ -76,6 +77,7 @@ export interface Detection {
   levels: Level[]; cost: Cost; connectable: 'yes' | 'needs-setup' | 'no'; why: string;
   connected?: boolean;   // clients only: agent-spaghetti's MCP server is in the tool (undefined = cannot connect here)
   unready?: string;      // agents: why it cannot take tasks now (e.g. the model server it uses is down); not a target until a scan finds it ready
+  loads?: string;        // agents: a task would load this local model of its own, not loaded now (routing: never beside another loaded model)
 }
 export interface AgentInfo { id: string; integration: string; name: string; envId: string; provider?: string; model?: string; endpoint?: string; isDefault?: boolean }
 export interface BackendInfo { id: string; integration: string; model: string; envId: string; endpoint: string; contextLength?: number; reachableFrom: string[] }
@@ -106,7 +108,7 @@ export type Emit = (e: Pick<HubEvent, 'type' | 'data'> & Partial<HubEvent>) => v
 export interface Disposable { dispose(): void }
 
 /** Delegation (ADR 0007): the one list of task kinds, and the run record. */
-export const TASK_KINDS = ['code-edit', 'tests', 'review', 'research', 'summarize', 'refactor', 'docs', 'other', 'report'] as const;   // report: a result handed back, no reply expected
+export const TASK_KINDS = ['code-edit', 'tests', 'review', 'research', 'summarize', 'refactor', 'docs', 'plan', 'other', 'report'] as const;   // report: a result handed back, no reply expected
 export type TaskKind = (typeof TASK_KINDS)[number];
 /** The kinds a caller picks (report is the runner's own). */
 export const HANDOFF_KINDS = TASK_KINDS.filter(k => k !== 'report');
@@ -146,7 +148,9 @@ export interface RunRow {
 export type Delivery = 'inline' | 'resumed' | 'injected' | 'unread' | 'read';
 /** Something `delegate` can hand a task to: a local model server (OpenAI API) or an agent with a run hook.
  *  `engine`: how its runs are made; `resumable`: a run can continue one of its sessions (results can go back into it). */
-export interface Target { id: string; name: string; kind: 'model' | 'agent'; cost: Cost; envId: string; models: string[]; engine: 'openai' | 'acp' | 'module' | 'chat'; resumable: boolean }
+export interface Target { id: string; name: string; kind: 'model' | 'agent'; cost: Cost; envId: string; models: string[]; engine: 'openai' | 'acp' | 'module' | 'chat'; resumable: boolean;
+  web?: true;            // it can look things up online (manifest `abilities`)
+  loads?: string }       // Detection.loads
 export interface Ctx { signal: AbortSignal; inventory: Inventory; pollMs?: number; runId?: number }   // runId: set for run(), so nested delegations link to it
 export interface Switch { id: string; label: string; on: boolean; envId: string; integration: string }
 export interface TestStep { name: string; ok: boolean; detail: string; ms: number }
@@ -173,8 +177,8 @@ export interface IntegrationModule {
   settings?: Record<string, SettingDef>;
 }
 export interface SettingDef { default: string | number | boolean | string[]; help: string; choices?: SettingChoices }
-/** Where a setting's values come from, so the GUI offers a pick list: found tools, connectable clients, loaded models; `extra` first. */
-export interface SettingChoices { from: 'tools' | 'clients' | 'models'; extra?: readonly string[] }
+/** Where a setting's values come from, so the GUI offers a pick list: found tools, connectable clients, loaded models, task kinds; `extra` first. */
+export interface SettingChoices { from: 'tools' | 'clients' | 'models' | 'kinds'; extra?: readonly string[] }
 /** A loaded model of a local OpenAI-compatible server, as an agent's config needs it. */
 export interface LocalModel { integration: string; base: string; model: string; contextLength?: number }
 export interface SetupOpts {

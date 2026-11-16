@@ -36,6 +36,9 @@ export function localModel(yaml: string | null): { url: string; managed: boolean
   return url && LOCAL.test(url) ? { url, managed: managedRuntime(yaml) } : null;
 }
 
+/** A llama.cpp server's /models answer: a model is in memory (its router marks each model's status; a single-model server has it loaded). */
+export const modelLoaded = (body: string | undefined) => !!body && (!/"status"/.test(body) || /"value"\s*:\s*"loaded"/.test(body));
+
 /** `wake`: Hermes' managed local model (provider llamacpp: Hermes finds its server and starts it when it is not running, checked in
  *  hermes_cli/local_runtime/endpoint.py and live 2026-11-05; a fixed base_url never starts it). The model loads on the first request. */
 export function hermesArgs(req: RunRequest, o: { wake?: boolean } = {}): string[] {
@@ -58,13 +61,16 @@ export const hermesModule: IntegrationModule = {
   resumes: true,
   /** Free when Hermes runs a model on this machine (its model.base_url is local), else the manifest's cost (paid). Its own managed
    *  server is started by the run itself (`wake`; the first load may take minutes: Hermes waits up to its request_timeout_seconds).
-   *  Any other local server Hermes cannot start: not ready while it does not answer (each task would fail after Hermes' retries). */
+   *  Any other local server Hermes cannot start: not ready while it does not answer (each task would fail after Hermes' retries).
+   *  `loads`: its managed model is not in memory now, so a task loads it (routing keeps that away from another loaded model: two
+   *  local models at once ran the test machine out of memory, 2026-11-05). */
   async inspect(env, base) {
     const local = localModel(await env.readFile(CONFIG).catch(() => null));
     if (!local) return base;
-    const up = local.managed || await env.http({ url: `${local.url.replace(/\/+$/, '')}/models`, timeoutMs: 2500 }).catch(() => null);
+    const models = await env.http({ url: `${local.url.replace(/\/+$/, '')}/models`, timeoutMs: 2500 }).catch(() => null);
     return { ...base, detection: { ...base.detection, cost: 'free', why: `${base.detection.why}; its model runs locally (${local.managed ? 'Hermes starts it when needed' : local.url})`,
-      ...(up ? {} : { unready: `its model server ${local.url} is not running: start it, then rescan` }) } };
+      ...(models || local.managed ? {} : { unready: `its model server ${local.url} is not running: start it, then rescan` }),
+      ...(local.managed && !modelLoaded(models?.body) ? { loads: 'its own local model' } : {}) } };
   },
   async *run(env, det, req, ctx) {
     const exe = programOf(det, 'hermes');

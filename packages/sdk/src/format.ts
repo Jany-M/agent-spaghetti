@@ -2,6 +2,7 @@
 import type { AgentInfo, BackendInfo, Delivery, Level, Role, RunRow, Snapshot, StoredEvent, Switch, Target, TestResult, TraceStage } from './types.ts';
 import { AUTO } from './types.ts';
 import type { LiveState } from './state.ts';
+import type { Saved } from './routing.ts';
 import type { ConsentRequest, DeclaredAction, Grant } from './permissions.ts';
 
 const portOf = (url?: string) => { try { return url ? new URL(url).port : ''; } catch { return ''; } };
@@ -69,7 +70,9 @@ export function trayState(up: boolean, snap: Snapshot | null, live: LiveState, p
 }
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 /** Short status lines: tray tooltip, popover header and `agent-spaghetti status --short`. */
-export function renderStats(up: boolean, snap: Snapshot | null, live: LiveState, pending: ConsentRequest[]): string[] {
+/** "14 tasks (52k tokens)": tokens only where the tools reported them. */
+const savedText = (s: Saved) => `${plural(s.tasks, 'task')}${s.tokens ? ` (${s.tokens >= 1000 ? `${Math.round(s.tokens / 1000)}k` : s.tokens} tokens)` : ''}`;
+export function renderStats(up: boolean, snap: Snapshot | null, live: LiveState, pending: ConsentRequest[], saved?: { week: Saved; all: Saved }): string[] {
   if (!up) return ['agent-spaghetti is not running'];
   const name = new Map(snap?.detections.map(d => [d.integration, d.name]) ?? []);
   const lines = [`agent-spaghetti running · ${snap ? plural(new Set(snap.detections.map(d => d.integration)).size, 'tool') : 'no scan yet'}`];
@@ -88,6 +91,7 @@ export function renderStats(up: boolean, snap: Snapshot | null, live: LiveState,
   const runs = Object.keys(live.runs).length;
   if (runs) lines.push(`${plural(runs, 'delegated task')} running`);
   if (pending.length) lines.push(`${plural(pending.length, 'approval')} waiting`);
+  if (saved?.all.tasks) lines.push(`free tools did ${savedText(saved.week)} this week, ${savedText(saved.all)} in all`);
   return lines;
 }
 

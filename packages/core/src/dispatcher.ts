@@ -4,7 +4,7 @@
 // target, once per chain, and names the next target when a chosen one fails (runner escalation). With `dispatcher.model` set it
 // also asks that model to pick among the ranked targets, through the runner itself (its runs are recorded like any other).
 import type { Classification, Disposable, LiveState, Ranked, RunRequest, Target } from '@agent-spaghetti/sdk';
-import { AUTO, EDIT_KINDS, classifyRequest, mayEdit, parseHop, route, summarizeRuns } from '@agent-spaghetti/sdk';
+import { AUTO, EDIT_KINDS, JEV_DEFAULTS, classify, classifyRequest, mayEdit, parseHop, route, summarizeRuns } from '@agent-spaghetti/sdk';
 import type { Bus } from './bus.ts';
 import type { Ledger } from './ledger.ts';
 import type { Settings } from './settings.ts';
@@ -12,6 +12,7 @@ import type { Runner } from './runner.ts';
 
 export const SELF = 'agent-spaghetti';
 const WATCH_MS = 30_000;
+const WEB_KINDS: readonly string[] = JEV_DEFAULTS.route.webKinds;
 const STATS_RUNS = 2000;                                    // the latest runs the ranking learns from (older ones weigh little anyway)
 
 /** The question the dispatcher model answers: one target id for the task. */
@@ -31,19 +32,25 @@ export class Dispatcher {
   private reported = new Set<number>();                     // runs reported stuck
   constructor(d: Dispatcher['d']) { this.d = d; }
   on(): boolean { return !!this.d.settings.get('dispatcher.model'); }
-  /** Every available target for a task, best first (skipped ones last, with why); `source` and `without` never take it. */
-  ranking(c: Pick<Classification, 'kind' | 'difficulty'> & { edits?: boolean }, source?: string, without: string[] = []): Ranked[] {
+  /** Every available target for a task, best first (skipped ones last, with why); `source` and `without` never take it; `among` narrows them. */
+  ranking(c: Pick<Classification, 'kind' | 'difficulty'> & { edits?: boolean; sources?: boolean }, source?: string, without: string[] = [], among: (t: Target) => boolean = () => true): Ranked[] {
     const s = this.d.settings, q = this.d.live?.().queues ?? {}, learn = s.get('routing.learn');
-    return route(c, this.d.runner.targets().filter(t => !without.includes(t.id)), { source, learn, stretch: s.get('routing.stretch'),
+    return route(c, this.d.runner.targets().filter(t => !without.includes(t.id) && among(t)), { source, learn, stretch: s.get('routing.stretch'),
+      web: WEB_KINDS.includes(c.kind) && !c.sources,          // a task that brings its files or a previous result needs no lookup
       prefer: s.get('routing.prefer'), never: s.get('routing.never'), tiers: s.get('routing.tiers'),
       stats: summarizeRuns(this.d.ledger.list({ since: 0, limit: STATS_RUNS })), queued: id => (q[id]?.waiting ?? 0) + (q[id]?.running ?? 0) });
+  }
+
+  /** The loaded model routing picks for what a tool's user said (the model gateway's `auto`). */
+  model(source: string, text: string): Target | undefined {
+    return this.ranking(classify(text), source, [], t => t.kind === 'model' && t.models.length > 0).find(r => !r.skip)?.target;
   }
 
   /** The request with a target chosen: the model's pick when on, else the ranking's first; never the caller nor `without`. */
   async route(source: string, req: RunRequest, without: string[] = []): Promise<RunRequest> {
     if (req.target !== AUTO && !this.on()) return req;      // an unknown target stays an error when the dispatcher is off
     const c = classifyRequest(req);
-    const ranked = this.ranking({ ...c, edits: mayEdit({ ...req, kind: c.kind }) }, source, without), options = ranked.filter(r => !r.skip).map(r => r.target);
+    const ranked = this.ranking({ ...c, edits: mayEdit({ ...req, kind: c.kind }), sources: !!(req.files?.length || req.context) }, source, without), options = ranked.filter(r => !r.skip).map(r => r.target);
     if (!options.length) throw new Error(`no target can take this ${c.kind} task now${ranked.length ? ` (${ranked.map(r => `${r.target.id}: ${r.why}`).join('; ')})` : ''} (see: targets)`);
     let pick: { target: string; model?: string } = { target: options[0].id }, why = ranked[0].why;
     if (this.on()) {

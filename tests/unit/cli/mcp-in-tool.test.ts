@@ -2,16 +2,17 @@
 // the workspace (roots) as the default folder, and questions in the tool (elicitation) in both protocol eras.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { INSTRUCTIONS, MCP_VERSION, mcpHandler, type HubClient } from '@agent-spaghetti/sdk';
+import { INSTRUCTIONS, MCP_VERSION, mcpHandler, offloadText, type HubClient } from '@agent-spaghetti/sdk';
 
 const T = (id: string, cost: string, models: string[] = []) => ({ id, name: id.toUpperCase(), kind: 'agent', cost, envId: 'w', models, engine: 'acp', resumable: false });
 /** A daemon double: targets, a delegate that runs, an optional pending question, answers recorded. */
-function daemon(o: { asking?: boolean } = {}) {
+function daemon(o: { asking?: boolean; offload?: string[] } = {}) {
   const calls: Array<[string, any]> = [];
   let asking = !!o.asking, polls = 0;
   const client = { call: async (op: string, input: any) => {
     calls.push([op, input]);
     if (op === 'whoami') return { id: input.name === 'Visual Studio Code' ? 'vscode' : input.as };
+    if (op === 'settings' && o.offload) return { 'routing.offload': { value: o.offload, help: '' } };
     if (op === 'targets') return [T('paid', 'metered'), T('lms', 'free', ['m1'])];
     if (op === 'delegate') return { id: 7 };
     if (op === 'status') return { consents: asking ? [{ id: 'q1', subject: 'vscode', action: 'run', resource: 'paid', why: 'paid run', scopes: ['once', 'always'] }] : [] };
@@ -89,4 +90,14 @@ test('older eras: our questions go out as requests and their answers come back o
   await h2({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {} } });
   await h2({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'delegate', arguments: { task: 't' } } });
   assert.deepEqual([out.filter(m => m.id).length, plain.calls.find(c => c[0] === 'delegate')![1].target], [0, 'auto'], 'no capabilities: no questions, no folder, auto');
+});
+test('offload: the kinds to hand off unasked ride on the instructions and on delegate\'s description (every client shows that to its model)', async () => {
+  const h = mcpHandler(daemon({ offload: ['summarize', 'docs'] }).client, { source: 'ide' }, () => {});
+  const init: any = await h({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {} } });
+  assert.equal(init.result.instructions, `${INSTRUCTIONS} ${offloadText(['summarize', 'docs'])}`);
+  const list: any = await h({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
+  const by = Object.fromEntries(list.result.tools.map((t: any) => [t.name, t.description]));
+  assert.ok(by.delegate.endsWith(offloadText(['summarize', 'docs'])) && !by.targets.includes('Without being asked'));
+  const off: any = await mcpHandler(daemon({ offload: [] }).client, { source: 'ide' }, () => {})({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {} } });
+  assert.equal(off.result.instructions, INSTRUCTIONS, 'no kinds: only when the user asks');
 });

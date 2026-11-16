@@ -43,7 +43,7 @@ export function PopoverView({ view, now, onAnswer, onScan, scanning, panel = 'ho
   const s = view.status;
   const consents = s?.consents ?? [];
   const live = s?.live ?? emptyLive(), snap = s?.snapshot ?? null;
-  const state = trayState(view.up, snap, live, consents), lines = renderStats(view.up, snap, live, consents);
+  const state = trayState(view.up, snap, live, consents), lines = renderStats(view.up, snap, live, consents, s?.saved);
   const names = new Map(s?.snapshot?.detections.map(d => [d.integration, d.name]) ?? []);
   const running = s ? sessions(s) : [];
   const shown: Panel = view.up ? panel : 'home';

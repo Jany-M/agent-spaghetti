@@ -207,3 +207,12 @@ test('connectionPlan: never disconnects, always connects, unset asks once; tools
     [{ id: 'b', do: 'connect' }, { id: 'f', do: 'disconnect' }], 'c is connected somewhere; e was asked already; a connected by hand stays');
   assert.deepEqual(connectionPlan(dets, { auto: [], never: [] }, new Set()).map(s => s.id + ':' + s.do), ['b:ask', 'e:ask']);
 });
+test('hermes inspect: a managed model not in memory is marked `loads` (routing keeps it from loading beside another model)', async () => {
+  const { hermesModule, modelLoaded } = await import('../../../integrations/hermes/index.ts');
+  assert.deepEqual(['{"data":[{"id":"m","status":{"value":"unloaded"}}]}', '{"data":[{"id":"m","status":{"value":"loaded"}}]}', '{"data":[{"id":"m"}]}', undefined].map(modelLoaded), [false, true, true, false]);
+  const conf = '%LOCALAPPDATA%/hermes/config.yaml', url = 'http://127.0.0.1:18434/v1', yaml = `model:\n  base_url: ${url}\nlocal_runtime:\n  enabled: true\n`;
+  const det = { integration: 'hermes', name: 'Hermes Agent', envId: 'windows', installs: [], levels: [], cost: 'metered' as const, connectable: 'yes' as const, why: 'found' };
+  const loads = async (http: Record<string, { status: number; body: string }>) => (await hermesModule.inspect!(fakeEnv({ files: { [conf]: yaml }, http }), { detection: det, agents: [], backends: [] }, {} as never)).detection.loads;
+  assert.equal(await loads({}), 'its own local model', 'server down: the run starts it and loads the model');
+  assert.equal(await loads({ [`${url}/models`]: { status: 200, body: '{"data":[{"id":"m","status":{"value":"loaded"}}]}' } }), undefined);
+});

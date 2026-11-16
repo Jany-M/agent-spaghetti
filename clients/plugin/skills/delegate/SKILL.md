@@ -5,11 +5,12 @@ description: Hand a task to a local model or another agent on this machine throu
 
 # Delegating with agent-spaghetti
 
+0. Hand off on your own only the kinds of task the agent-spaghetti server's instructions name (target `auto`); anything else when the user asks.
 1. Call `targets` to see what is available now. Each target has a cost class: `free` (local model, runs at once) `metered` (uses a paid plan) or `unknown` (the user is asked first for both).
 2. Call `delegate` with:
    - `target`: a target id from `targets`; omit it to let the user pick (or `auto`);
    - `task`: the complete task, self-contained (the other model has none of this conversation);
-   - `kind` and `difficulty`: optional (code-edit, tests, review, research, summarize, refactor, docs, other; light, medium, heavy); omit them and Agent Spaghetti decides;
+   - `kind` and `difficulty`: optional (code-edit, tests, review, research, summarize, refactor, docs, plan, other; light, medium, heavy); omit them and Agent Spaghetti decides;
    - `reason`: one line saying why you hand it off;
    - `model`: optional, one of the target's models or agents listed by `targets`;
    - `cwd`: the project folder: your open workspace (pass it; not every tool sends it on its own); agents edit there only for editing kinds;

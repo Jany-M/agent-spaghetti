@@ -3,6 +3,7 @@
   "manifest": 1,
   "id": "hermes",
   "name": "Hermes Agent",
+  "abilities": ["web"],
   "roles": [
     "agent",
     "client"

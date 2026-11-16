@@ -2,7 +2,7 @@
 // ranking for one task (fit, cost, stretch, history, queue; skips with why).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { modelSize, route, summarizeRuns, tierOf, type RunRow, type Target } from '@agent-spaghetti/sdk';
+import { modelSize, offloadText, route, savings, summarizeRuns, tierOf, type RunRow, type Target } from '@agent-spaghetti/sdk';
 
 const T = (id: string, o: Partial<Target> = {}): Target => ({ id, name: id, kind: 'model', cost: 'free', envId: 'w', models: [], engine: 'openai', resumable: false, ...o });
 test('tiers: model size from its name (active size when stated), paid → heavy, agents → medium, the owner\'s entry wins', () => {
@@ -37,4 +37,26 @@ test('route: fit before cost, stretch lets a free smaller target try first, hist
   assert.equal(edit.find(x => x.target.id === 'agent')!.skip, 'the caller itself');
   assert.match(route({ kind: 'summarize', difficulty: 'medium' }, ts, { stretch: true, stats: { 'summarize small': { runs: 2, rate: 1, bad: 0 } } }).find(x => x.target.id === 'small')!.why,
     /^free, light tier \(stretch: tries a medium task, escalates if it fails\), summarize: 2 runs, 100% ok \(too few to count yet\)$/);
+});
+test('route: research needs the web (unpaid with web, then unpaid without, then paid); plan never stretches; a second local model is never loaded', () => {
+  const ts = [T('lms', { models: ['m-4b'] }), T('browser', { kind: 'agent', engine: 'module', cost: 'unknown', web: true }), T('paid', { kind: 'agent', engine: 'module', cost: 'metered', web: true })];
+  const ids = (r: ReturnType<typeof route>) => r.map(x => x.target.id);
+  assert.deepEqual(ids(route({ kind: 'research', difficulty: 'light' }, ts, { web: true })), ['browser', 'lms', 'paid']);
+  assert.match(route({ kind: 'research', difficulty: 'light' }, ts, { web: true })[1].why, /no web access/);
+  assert.deepEqual(ids(route({ kind: 'research', difficulty: 'light' }, ts)), ['lms', 'browser', 'paid'], 'it brings its sources: cheapest first as usual');
+  const mid = [T('mid', { models: ['m-14b'] }), T('paid', { cost: 'metered' })];
+  assert.deepEqual(ids(route({ kind: 'plan', difficulty: 'heavy' }, mid, { stretch: true })), ['paid', 'mid'], 'a frontier kind: the strongest first, no free try below it');
+  assert.deepEqual(ids(route({ kind: 'summarize', difficulty: 'heavy' }, mid, { stretch: true })), ['mid', 'paid']);
+  const own = [T('lms', { name: 'LMS', models: ['m-4b'] }), T('self', { kind: 'agent', engine: 'module', loads: 'its own local model' })];
+  assert.equal(route({ kind: 'summarize', difficulty: 'light' }, own)[1].skip, 'would load its own local model while LMS has a model loaded (name it as the target to do that)');
+  assert.equal(route({ kind: 'summarize', difficulty: 'light' }, [own[1]])[0].skip, undefined, 'nothing else loaded: it may load its own');
+  assert.equal(route({ kind: 'summarize', difficulty: 'light' }, own, { prefer: ['summarize=self'] })[0].skip, undefined, 'your pick for the kind is your say-so');
+});
+test('offloadText and savings: the kinds a tool hands off unasked; what free targets did', () => {
+  assert.match(offloadText(['summarize', 'research']), /^Without being asked, hand these kinds of task to `delegate` with target `auto` instead of doing them yourself: summarize, research\./);
+  assert.equal(offloadText([]), '');
+  const r = (o: Partial<RunRow>): RunRow => ({ id: 1, chainId: 1, ts: 100, source: 'ide', target: 'lms', kind: 'summarize', taskHash: 'h', outcome: 'done', ...o });
+  const rows = [r({ inputTokens: 50, outputTokens: 20 }), r({ ts: 5 }), r({ outcome: 'error' }), r({ target: 'paid' }), r({ source: 'agent-spaghetti' })];
+  assert.deepEqual(savings(rows, t => t === 'lms'), { tasks: 2, tokens: 70 });
+  assert.deepEqual(savings(rows, t => t === 'lms', 50), { tasks: 1, tokens: 70 });
 });

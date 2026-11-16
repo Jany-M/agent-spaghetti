@@ -1,6 +1,6 @@
 // The one list of operations: REST routes, CLI usage text and the MCP tools (`mcp`) are all generated from it.
 import type { Difficulty, Snapshot, StoredEvent, RunRequest, RunRow, Switch, Target, TaskKind, TestResult } from './types.ts';
-import type { Ranked } from './routing.ts';
+import type { Ranked, Saved } from './routing.ts';
 import type { ToolRow } from './format.ts';
 import { DIFFICULTIES, HANDOFF_KINDS } from './types.ts';
 import type { Action, ConsentRequest, ConsentScope, DeclaredAction, Grant, Mode } from './permissions.ts';
@@ -71,7 +71,7 @@ export type OpId = keyof typeof OPS;
 export interface EnvResult<T> { envId: string; result?: T; error?: string }
 export interface GrantIn { subject: string; mode: Mode; action?: Action; resource?: string }
 export interface OpIO {
-  status: { in: {}; out: { snapshot: Snapshot | null; live: LiveState; consents: ConsentRequest[] } };
+  status: { in: {}; out: { snapshot: Snapshot | null; live: LiveState; consents: ConsentRequest[]; saved: { week: Saved; all: Saved } } };   // saved: tasks free targets did (routing savings)
   scan: { in: {}; out: { snapshot: Snapshot } };
   events: { in: { since?: number; limit?: number; traces?: boolean }; out: StoredEvent[] };   // traces: also the latest live-only ones (memory only)
   integrations: { in: {}; out: { rows: ToolRow[]; rejected: Array<{ id: string; why: string }> } };

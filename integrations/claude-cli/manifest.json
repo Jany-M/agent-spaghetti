@@ -4,6 +4,7 @@
   "id": "claude-cli",
   "name": "Claude Code CLI",
   "color": "#ea580c",
+  "abilities": ["web"],
   "roles": [
     "agent",
     "client"

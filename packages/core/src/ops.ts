@@ -1,6 +1,6 @@
 // Handlers for the operations declared once in sdk/ops.ts. Per-environment work goes through Services.onEnvs (core/dispatch).
 import type { EnvResult, Grant, LiveState, OpId, OpIO, RunView, SettingsOut, Snapshot, Target } from '@agent-spaghetti/sdk';
-import { AUTO, DIFFICULTIES, EDIT_KINDS, HANDOFF_KINDS, OPS, declaredActions, rankTargets, levelsOf, renderConfigReport, toolRows, withGrants, withoutGrants } from '@agent-spaghetti/sdk';
+import { AUTO, DIFFICULTIES, EDIT_KINDS, HANDOFF_KINDS, OPS, declaredActions, rankTargets, savings, levelsOf, renderConfigReport, toolRows, withGrants, withoutGrants } from '@agent-spaghetti/sdk';
 import type { Store } from './store.ts';
 import type { Bus } from './bus.ts';
 import type { Loaded } from './registry.ts';
@@ -41,8 +41,13 @@ const toggle = (s: Services, id: string, off: boolean) => {
   return { disabled: s.settings.get('disabled') };
 };
 
+const SAVED_RUNS = 5000;                                    // the latest runs the savings count looks at
 export const handlers: Handlers = {
-  status: (_i, s) => ({ snapshot: snapshot(s), live: s.live(), consents: s.consent.pending() }),
+  status: (_i, s) => {
+    const snap = snapshot(s), rows = s.ledger.list({ since: 0, limit: SAVED_RUNS });
+    const free = (id: string) => !!snap?.detections.some(d => d.integration === id && d.cost === 'free');
+    return { snapshot: snap, live: s.live(), consents: s.consent.pending(), saved: { week: savings(rows, free, Date.now() - 7 * 864e5), all: savings(rows, free) } };
+  },
   scan: async (_i, s) => ({ snapshot: await s.scan() }),
   events: (i, s) => {
     const stored = s.store.eventsSince(num(i.since, 0), num(i.limit, 500));
@@ -230,6 +235,7 @@ function settingsView(s: Services): SettingsOut {
   const from = {
     tools: () => tools,
     clients: () => tools.filter(t => snapshot(s)?.detections.some(d => d.integration === t.value && d.connected !== undefined)),   // found and connectable here
+    kinds: () => HANDOFF_KINDS.map(k => ({ value: k, label: k })),
     models: () => rankTargets(s.runner.targets().filter(t => t.kind === 'model')).flatMap(t => t.models.map(m => ({ value: `${t.id}:${m}`, label: `${t.name}: ${m}` }))),
   };
   return Object.fromEntries(Object.entries(s.settings.all()).map(([k, { choices, ...v }]) => [k, choices

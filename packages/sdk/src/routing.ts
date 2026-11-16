@@ -40,7 +40,7 @@ export function classify(text: string, files = 0, given: { kind?: string; diffic
   const kind = caller ? given.kind as TaskKind : top.n ? top.kind : 'other';
   const n = words(text), h = JEV.heavy, l = JEV.light;
   const difficulty: Difficulty = (DIFFICULTIES as readonly string[]).includes(given.difficulty ?? '') ? given.difficulty as Difficulty
-    : n > h.words || files > h.files || HEAVY.some(re => re.test(text)) || (h.editKinds.includes(kind) && files > h.editFiles) ? 'heavy'
+    : JEV.route.frontierKinds.includes(kind) || n > h.words || files > h.files || HEAVY.some(re => re.test(text)) || (h.editKinds.includes(kind) && files > h.editFiles) ? 'heavy'
     : n <= l.words && files <= l.files && longestCodeBlock(text) <= l.codeLines && l.kinds.includes(kind) ? 'light' : 'medium';
   return { kind, difficulty, by: caller ? 'caller' : 'rules', confidence: caller ? 1 : top.n ? Math.round(((top.n - (second?.n ?? 0)) / top.n) * 100) / 100 : 0 };
 }
@@ -88,26 +88,46 @@ export function summarizeRuns(rows: RunRow[], now = Date.now()): Record<string, 
     ...(c.ms.length ? { medianMs: c.ms.sort((a, b) => a - b)[Math.floor(c.ms.length / 2)] } : {}) }]));
 }
 /** How to rank (settings `routing.*`, the run record, live queues). `source`: the caller, never its own target. */
-export interface RouteOpts { source?: string; stats?: Record<string, RunStats>; learn?: boolean; stretch?: boolean; prefer?: string[]; never?: string[]; tiers?: string[]; queued?(id: string): number }
+export interface RouteOpts { source?: string; web?: boolean;   // web: the task needs to look things up online (a webKind without its own sources)
+  stats?: Record<string, RunStats>; learn?: boolean; stretch?: boolean; prefer?: string[]; never?: string[]; tiers?: string[]; queued?(id: string): number }
 /** One target for one task: its tier, why it sits where it does, its history; `skip` when it may not take the task. */
 export interface Ranked { target: Target; tier: Difficulty; why: string; stats?: RunStats; preferred?: true; skip?: string }
 const forKind = (list: string[] | undefined, kind: string) => (list ?? []).filter(x => x.startsWith(`${kind}=`)).map(x => x.slice(kind.length + 1));
 const pct = (s: RunStats) => `${s.runs} ${s.runs === 1 ? 'run' : 'runs'}, ${Math.round(s.rate * 100)}% ok${s.runs < R.minRuns ? ' (too few to count yet)' : ''}`;
 /** The ranking for a task (no tool preferred by name, ADR 0010): the owner's pick for the kind first; then targets whose tier fits
- *  the difficulty, a free one a tier below when `stretch` (escalation covers a failure), the rest last (biggest first); within those cheapest first,
+ *  the difficulty, a free one a tier below when `stretch` (escalation covers a failure; never for a frontier kind such as plan), the rest last
+ *  (biggest first); a task that needs the web goes to unpaid targets that have it, then unpaid ones without, then paid ones; within those cheapest first,
  *  then better history for this kind (with `learn`, from `route.minRuns` runs), then the shortest queue, then the scan's order.
- *  Targets that may not take it (the caller, `never` for the kind, a model when the task edits files: permissions mayEdit) come last with `skip`. */
+ *  Targets that may not take it (the caller, `never` for the kind, a model when the task edits files: permissions mayEdit, an agent that
+ *  would load its own local model beside one already loaded) come last with `skip`. */
 export function route(c: { kind: TaskKind; difficulty: Difficulty; edits?: boolean }, targets: Target[], o: RouteOpts = {}): Ranked[] {
   const need = level(c.difficulty), prefer = forKind(o.prefer, c.kind), never = forKind(o.never, c.kind);
+  const stretch = o.stretch && !R.frontierKinds.includes(c.kind), loaded = targets.find(t => t.kind === 'model');
   return targets.map((t, i) => {
     const tier = tierOf(t, o.tiers), s = o.stats?.[statKey(c.kind, t.id)], preferred = prefer.includes(t.id);
     const skip = t.id === o.source ? 'the caller itself' : never.includes(t.id) ? `never for ${c.kind} (your choice)`
-      : c.edits && t.kind !== 'agent' ? 'edits files: needs an agent' : undefined;
-    const fit = level(tier) >= need ? 0 : o.stretch && t.cost === 'free' && level(tier) === need - 1 ? 1 : 2;
+      : c.edits && t.kind !== 'agent' ? 'edits files: needs an agent'
+      : t.loads && loaded && !preferred ? `would load ${t.loads} while ${loaded.name} has a model loaded (name it as the target to do that)` : undefined;
+    const fit = level(tier) >= need ? 0 : stretch && t.cost === 'free' && level(tier) === need - 1 ? 1 : 2;
+    const offline = !!o.web && !t.web, paid = t.cost === 'metered';
     const history = o.learn && s && s.runs >= R.minRuns ? s.rate : 0.5;      // unknown sits between a good and a bad record
     const why = skip ?? [preferred && `your pick for ${c.kind}`, t.cost, `${tier} tier${fit === 1 ? ` (stretch: tries a ${c.difficulty} task, escalates if it fails)` : fit === 2 ? ` (below ${c.difficulty})` : ''}`,
-      s && `${c.kind}: ${pct(s)}`].filter(Boolean).join(', ');
+      offline && 'no web access (answers from what its model knows)', s && `${c.kind}: ${pct(s)}`].filter(Boolean).join(', ');
     return { r: { target: t, tier, why, ...(s ? { stats: s } : {}), ...(preferred ? { preferred: true as const } : {}), ...(skip ? { skip } : {}) },
-      k: [skip ? 1 : 0, preferred ? 0 : 1, fit === 2 ? 1 : 0, fit === 2 ? -level(tier) : 0, COST_RANK[t.cost], fit, -history, o.queued?.(t.id) ?? 0, i] };
+      k: [skip ? 1 : 0, preferred ? 0 : 1, fit === 2 ? 1 : 0, fit === 2 ? -level(tier) : 0, o.web && paid ? 1 : 0, offline ? 1 : 0, COST_RANK[t.cost], fit, -history, o.queued?.(t.id) ?? 0, i] };
   }).sort((a, b) => { for (let j = 0; j < a.k.length; j++) if (a.k[j] !== b.k[j]) return a.k[j] - b.k[j]; return 0; }).map(x => x.r);
+}
+
+// I3: what connected tools are told to hand off on their own, and what that saved.
+/** The standing instruction for a connected tool (MCP server instructions and the delegate tool's description): the kinds of the
+ *  setting `routing.offload`; none = only when the user asks. */
+export const offloadText = (kinds: string[]): string => (kinds.length ? `Without being asked, hand these kinds of task to \`delegate\` with target \`auto\` `
+  + `instead of doing them yourself: ${kinds.join(', ')}. Agent Spaghetti runs them on a free tool or model and returns the result, which saves the user's paid usage. `
+  + 'Do it when the work is bigger than the hand-off (several files to read, a long answer, searching): a small task costs more to hand off than to do. '
+  + 'Keep planning, decisions and anything that needs this conversation. Set `kind`, write the task so it stands alone, and if the result is missing or poor, do the task yourself.' : '');
+/** What free targets did for other tools: finished runs there, and the tokens they reported. */
+export interface Saved { tasks: number; tokens: number }
+export function savings(rows: RunRow[], free: (target: string) => boolean, since = 0): Saved {
+  const done = rows.filter(r => r.outcome === 'done' && r.ts >= since && r.source !== 'agent-spaghetti' && free(r.target));
+  return { tasks: done.length, tokens: done.reduce((n, r) => n + (r.inputTokens ?? 0) + (r.outputTokens ?? 0), 0) };
 }

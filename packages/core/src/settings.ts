@@ -1,6 +1,7 @@
 // The one list of core settings keys (typed), stored in the store's kv table, plus each integration's own settings
 // (module `settings`, keys prefixed with its id). Grants live here too.
 import type { Grant, Integration, SettingChoices, SettingDef } from '@agent-spaghetti/sdk';
+import { JEV_DEFAULTS } from '@agent-spaghetti/sdk';
 import type { Store } from './store.ts';
 
 export const SETTINGS = {
@@ -23,6 +24,7 @@ export const SETTINGS = {
   'routing.learn': { default: true, help: 'Order targets for each kind of task by how their past runs went (finished, failed, your grades); off: cost, tier and queue only' },
   'routing.stretch': { default: true, help: 'A free target one tier below the task may try it first (a failure escalates)' },
   'routing.escalate': { default: true, help: 'When a target Agent Spaghetti chose fails or answers nothing, the next one in the ranking tries (once per chain; paid ones ask first)' },
+  'routing.offload': { default: JEV_DEFAULTS.offload as string[], help: 'Kinds of task connected tools are told to hand off on their own, to a free target (none = only when you ask); read by a tool when it starts', choices: { from: 'kinds' } },
   'routing.prefer': { default: [] as string[], help: 'Your pick per kind of task, tried first: <kind>=<target> (Routing panel)' },
   'routing.never': { default: [] as string[], help: 'Targets never used for a kind of task: <kind>=<target> (Routing panel)' },
   'routing.tiers': { default: [] as string[], help: 'The hardest task a target takes, when its size does not say: <target>[:model]=light|medium|heavy' },

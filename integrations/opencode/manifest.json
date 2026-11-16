@@ -3,6 +3,7 @@
   "manifest": 1,
   "id": "opencode",
   "name": "OpenCode",
+  "abilities": ["web"],
   "roles": [
     "agent",
     "client"

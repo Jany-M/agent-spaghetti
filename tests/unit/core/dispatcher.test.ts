@@ -116,3 +116,7 @@ test('delegate.models: an agent target without a model in the task uses the owne
   assert.equal((await r.done).model, 'fast');
   assert.equal((await s.runner.start('cli', { target: 'coder', task: 'summarize y', model: 'other' }).done).model, 'other', 'the task\'s own model wins');
 });
+test('model(): the loaded model routing picks for a gateway request; agents are no models', () => {
+  const s = setup();
+  assert.equal(s.dispatcher.model('ide', 'Summarize this'), undefined, 'only agents here');
+});

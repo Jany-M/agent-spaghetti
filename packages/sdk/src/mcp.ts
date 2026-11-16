@@ -11,7 +11,7 @@ import type { HubClient } from './client.ts';
 import { parseJson } from './json.ts';
 import { uriPath } from './match.ts';
 import { OPS, type OpId, type RunView } from './ops.ts';
-import { rankTargets } from './routing.ts';
+import { offloadText, rankTargets } from './routing.ts';
 import { validate } from './schema.ts';
 import { AUTO, HANDOFF_KINDS, VERSION, type Target } from './types.ts';
 import { SCOPE_LABEL, type ConsentScope } from './permissions.ts';
@@ -26,6 +26,8 @@ export const INSTRUCTIONS = [
   'To hand off: call `delegate` with the task, the target (an id from `targets`, `auto`, or leave it out to let the user pick), the files the user',
   'attached or means as `files`, and the open workspace as `cwd`. The result comes back to this chat unless `returnTo` is `none`.',
   'Users can also type the `delegate` prompt, or mention a target resource (target://<id>).'].join(' ');
+/** The instructions with what to hand off unasked (the setting `routing.offload`, read once per connection). */
+export const instructions = (offload: string) => [INSTRUCTIONS, offload].filter(Boolean).join(' ');
 const PROMPT = { name: 'delegate', title: 'Hand off to another tool (Agent Spaghetti)',
   description: 'Hand a task to another AI tool or model on this machine; the result comes back here.',
   arguments: [{ name: 'target', description: 'Who does it (a target, or auto)', required: true }, { name: 'task', description: 'What to do', required: true },
@@ -151,6 +153,10 @@ export function mcpHandler(client: HubClient, o: BridgeOpts, send: Send) {
     a.then ? `, then \`${a.then}\`` : '', a.kind ? `, kind \`${a.kind}\`` : '', '. Pass my open workspace as `cwd` and the files I attached or mention as `files`.',
     ' Show me the result when it comes back.', `\n\nTask: ${a.task ?? ''}`].join('');
 
+  let offloadOnce: Promise<string> | undefined;               // the daemon's routing.offload as text; '' when it cannot be read
+  const offload = () => offloadOnce ??= Promise.resolve().then(() => client.call('settings'))
+    .then(s => offloadText((s?.['routing.offload']?.value as string[] | undefined) ?? []), () => '');
+
   return async function handle(m: Msg): Promise<object | null> {
     if (!m.method) { if (m.id !== undefined) { waiting.get(String(m.id))?.(m.error ? null : m.result); waiting.delete(String(m.id)); } return null; }   // answers to our questions
     if (m.id === undefined) return null;                                        // notifications
@@ -158,7 +164,7 @@ export function mcpHandler(client: HubClient, o: BridgeOpts, send: Send) {
     identify(m.method === 'initialize' ? p.clientInfo?.name : p._meta?.['io.modelcontextprotocol/clientInfo']?.name);
     if (m.method === 'initialize') {
       legacy = true; legacyCaps = p.capabilities ?? {};
-      return reply(m.id, { protocolVersion: LEGACY.includes(p.protocolVersion) ? p.protocolVersion : LEGACY[0], capabilities: CAPABILITIES, serverInfo: SERVER_INFO, instructions: INSTRUCTIONS }, false);
+      return reply(m.id, { protocolVersion: LEGACY.includes(p.protocolVersion) ? p.protocolVersion : LEGACY[0], capabilities: CAPABILITIES, serverInfo: SERVER_INFO, instructions: instructions(await offload()) }, false);
     }
     if (version !== undefined && version !== MCP_VERSION && !LEGACY.includes(version)) return fail(m.id, -32022, 'Unsupported protocol version', { supported: [MCP_VERSION, ...LEGACY], requested: version });
     const modern = version === MCP_VERSION;
@@ -166,9 +172,12 @@ export function mcpHandler(client: HubClient, o: BridgeOpts, send: Send) {
     const withInfo = (r: object) => (modern ? { ...r, _meta: { 'io.modelcontextprotocol/serverInfo': SERVER_INFO } } : r);
     try {
       switch (m.method) {
-        case 'server/discover': return reply(m.id, withInfo({ supportedVersions: [MCP_VERSION, ...LEGACY], capabilities: CAPABILITIES, instructions: INSTRUCTIONS }), true);
+        case 'server/discover': return reply(m.id, withInfo({ supportedVersions: [MCP_VERSION, ...LEGACY], capabilities: CAPABILITIES, instructions: instructions(await offload()) }), true);
         case 'ping': return reply(m.id, {}, modern);
-        case 'tools/list': return reply(m.id, withInfo({ tools: TOOLS.map(t => ({ name: t.name, description: t.description, inputSchema: t.input })) }), modern);
+        case 'tools/list': {                                                    // every client shows tool descriptions to its model: the offload rule rides on delegate's
+          const rule = await offload();
+          return reply(m.id, withInfo({ tools: TOOLS.map(t => ({ name: t.name, description: t.op === 'delegate' && rule ? `${t.description} ${rule}` : t.description, inputSchema: t.input })) }), modern);
+        }
         case 'tools/call': return reply(m.id, withInfo(await call(String(p.name), p.arguments ?? {}, p, io(p, modern))), modern);
         case 'prompts/list': return reply(m.id, withInfo({ prompts: [PROMPT] }), modern);
         case 'prompts/get':

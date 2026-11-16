@@ -1,5 +1,5 @@
 {
-  "$comment": "JEV's shipped defaults (finish-line plan, Part I): word lists per hand-off kind (English and Italian; more languages are more entries), the order that breaks ties, the words that make a task heavy, and the difficulty thresholds; then how routing (route() in routing.ts) matches a task to a target: model sizes per tier (billions of parameters, from the model name) and how past runs count (half-life in days, runs needed before they move a target). Data only.",
+  "$comment": "JEV's shipped defaults (finish-line plan, Part I): word lists per hand-off kind (English and Italian; more languages are more entries), the order that breaks ties, the words that make a task heavy, and the difficulty thresholds; then how routing (route() in routing.ts) matches a task to a target: model sizes per tier (billions of parameters, from the model name) how past runs count (half-life in days, runs needed before they move a target), the kinds that go to the strongest target whatever their size (frontierKinds) and the kinds that need the web unless the task brings its sources (webKinds); last, the kinds connected tools are told to hand off on their own (the default of the setting routing.offload). Data only.",
   "kinds": {
     "tests": ["test", "tests", "unit test", "unit tests", "spec", "coverage", "pytest", "jest", "vitest", "failing test", "collaudo", "copertura", "test unitari"],
     "refactor": ["refactor", "rename", "restructure", "clean up", "simplify", "extract", "deduplicate", "split into", "rifattorizza", "ristruttura", "semplifica", "rinomina", "pulisci"],
@@ -7,13 +7,15 @@
     "docs": ["document", "docs", "write the readme", "update the readme", "docstring", "comments", "changelog", "jsdoc", "documenta", "documentazione", "commenti"],
     "summarize": ["summarize", "summarise", "summary", "tl;dr", "condense", "key points", "recap", "shorten", "riassumi", "riassunto", "sintesi", "punti chiave", "accorcia"],
     "research": ["research", "find out", "look up", "compare", "latest", "sources", "what is", "how does", "explain", "describe", "ricerca", "cerca", "trova", "confronta", "informazioni", "ultime", "spiega", "descrivi"],
+    "plan": ["plan", "planning", "design", "architect", "roadmap", "strategy", "break down", "pianifica", "pianificazione", "progetta", "strategia"],
     "code-edit": ["implement", "add", "fix", "bug", "feature", "function", "endpoint", "change the code", "implementa", "aggiungi", "correggi", "modifica", "funzione"]
   },
   "lead": { "words": 5, "weight": 3 },
-  "tieOrder": ["tests", "refactor", "review", "docs", "summarize", "research", "code-edit", "other"],
+  "tieOrder": ["tests", "refactor", "review", "docs", "summarize", "research", "plan", "code-edit", "other"],
   "heavyWords": ["architecture", "design", "migrate", "migration", "across the codebase", "debug why", "race condition", "security", "performance",
     "architettura", "migra", "migrazione", "in tutto il progetto", "sicurezza", "prestazioni"],
   "heavy": { "words": 2000, "files": 5, "editKinds": ["code-edit", "refactor"], "editFiles": 2 },
   "light": { "words": 300, "files": 1, "codeLines": 50, "kinds": ["summarize", "docs", "research", "other"] },
-  "route": { "lightMaxB": 8, "mediumMaxB": 32, "halfLifeDays": 30, "minRuns": 5 }
+  "route": { "lightMaxB": 8, "mediumMaxB": 32, "halfLifeDays": 30, "minRuns": 5, "frontierKinds": ["plan"], "webKinds": ["research"] },
+  "offload": ["summarize", "research", "docs", "tests", "review"]
 }

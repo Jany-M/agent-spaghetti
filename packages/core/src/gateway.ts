@@ -1,6 +1,6 @@
 // The model gateway (Phase 3c): an OpenAI-compatible endpoint on 127.0.0.1 for tools that take a custom one, so each tool's
 // LLM is chosen here. A gateway key names the tool (the run's source); the model it asks for picks the target (`target:model`,
-// a loaded model's id, else its route in `gateway.routes`, else `auto`). Every request is a run: the same permission check and
+// a loaded model's id, else its route in `gateway.routes`, else `auto`: the loaded model routing picks for what the user last said). Every request is a run: the same permission check and
 // question as a hand-off, the same server queue, the same record. Only `model` is rewritten; prompts are never stored.
 import { createHash, randomBytes } from 'node:crypto';
 import type { Target } from '@agent-spaghetti/sdk';
@@ -19,22 +19,30 @@ const hash = (k: string) => createHash('sha256').update(k).digest('hex');
 const fail = (status: number, message: string) => Object.assign(new Error(message), { status });
 const ERROR_TYPE: Record<number, string> = { 401: 'invalid_api_key', 403: 'permission_denied', 404: 'model_not_found' };
 
-/** Which target serves a request: an explicit `target:model`, a loaded model's id, else the tool's route, else the best-ranked model. */
-export function resolveRoute(routes: string[], source: string, requested: string, targets: Target[]): { target: string; model: string } | { error: string } {
+/** Which target serves a request: an explicit `target:model`, a loaded model's id, else the tool's route, else `best` (the model
+ *  routing picks for this request; without one, the best-ranked model). */
+export function resolveRoute(routes: string[], source: string, requested: string, targets: Target[], best?: Target): { target: string; model: string } | { error: string } {
   const models = rankTargets(targets.filter(t => t.kind === 'model' && t.models.length));
   const p = parseHop(requested), named = models.find(t => t.id === p.target);
   if (named && p.model && named.models.includes(p.model)) return { target: named.id, model: p.model };
   const owner = models.find(t => t.models.includes(requested));
   if (owner) return { target: owner.id, model: requested };
   const use = routes.find(r => r.startsWith(`${source}=`))?.slice(source.length + 1).trim() || AUTO;
-  if (use === AUTO) return models[0] ? { target: models[0].id, model: models[0].models[0] } : { error: 'no model is loaded: start a model server or load a model' };
+  const auto = best ?? models[0];
+  if (use === AUTO) return auto ? { target: auto.id, model: auto.models[0] } : { error: 'no model is loaded: start a model server or load a model' };
   const u = parseHop(use), t = models.find(x => x.id === u.target);
   if (!t || (u.model && !t.models.includes(u.model))) return { error: `${source}'s model ${use} is not available now (Tools → ${source} → Model)` };
   return { target: t.id, model: u.model ?? t.models[0] };
 }
 
+/** What the user last said in a request (chat messages, else the prompt): what routing classifies. */
+export function lastUserText(body: Record<string, unknown>): string {
+  const last = Array.isArray(body.messages) ? (body.messages as Array<{ role?: string; content?: unknown }>).findLast(m => m.role === 'user')?.content : body.prompt ?? body.input;
+  return typeof last === 'string' ? last : Array.isArray(last) ? last.map(p => (typeof p === 'string' ? p : (p as { text?: string })?.text ?? '')).join('\n') : '';
+}
+
 export class Gateway {
-  private d: { settings: Settings; store: Store; runner: Runner };
+  private d: { settings: Settings; store: Store; runner: Runner; best?(source: string, text: string): Target | undefined };   // best: routing's model for a request (core/dispatcher.ts)
   private server: Server | null = null;
   private port = 0;
   private readonly session = `gateway-${Date.now()}`;      // "Allow for this job" = until the daemon restarts
@@ -67,7 +75,7 @@ export class Gateway {
     return { object: 'list', data: [{ id: AUTO, object: 'model', owned_by: 'agent-spaghetti' }, ...models.flatMap(t => t.models.map(m => ({ id: `${t.id}:${m}`, object: 'model', owned_by: t.id })))] };
   }
   private async forward(path: string, body: Record<string, unknown>, c: CallCtx): Promise<typeof WRITTEN> {
-    const r = resolveRoute(this.d.settings.get('gateway.routes'), c.who, String(body.model ?? AUTO), this.d.runner.targets());
+    const r = resolveRoute(this.d.settings.get('gateway.routes'), c.who, String(body.model ?? AUTO), this.d.runner.targets(), this.d.best?.(c.who, lastUserText(body)));
     if ('error' in r) throw fail(404, r.error);
     const t = this.d.runner.targets().find(x => x.id === r.target)!;
     let started = false;

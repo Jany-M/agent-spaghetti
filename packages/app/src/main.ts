@@ -28,7 +28,7 @@ async function refresh() {
   const consents = s?.consents ?? [];
   const live = s?.live ?? emptyLive();
   tray.setImage(asset(ICON[trayState(!!s, s?.snapshot ?? null, live, consents)]));
-  tray.setToolTip(tooltip(renderStats(!!s, s?.snapshot ?? null, live, consents)));
+  tray.setToolTip(tooltip(renderStats(!!s, s?.snapshot ?? null, live, consents, s?.saved)));
   const names = new Map(s?.snapshot?.detections.map(d => [d.integration, d.name]) ?? []);
   for (const id of newQuestions(seen, consents.map(c => c.id))) {
     seen.add(id);

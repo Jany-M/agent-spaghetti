@@ -3,6 +3,7 @@
   "manifest": 1,
   "id": "vscode",
   "name": "VS Code",
+  "abilities": ["web"],
   "roles": [
     "client"
   ],
