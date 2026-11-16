@@ -1,11 +1,14 @@
 // Tools panel (ADR 0009): every found tool, grouped by type in collapsible blocks; connect/disconnect, preference,
 // test, skip in scans, its model through the gateway and its key; "More" shows its switches and, for third-party tools, what it may do.
 import { createElement as h, useState, type ReactNode } from 'react';
-import { ACTION_LABEL, AUTO, ENGINE_LABEL, TOOL_GROUPS, testLines, type DeclaredAction, type Grant, type Mode, type Switch, type TestResult, type ToolRow } from '@agent-spaghetti/sdk/web';
+import { ACTION_LABEL, AUTO, ENGINE_LABEL, TOOL_GROUPS, testLines, type DeclaredAction, type Grant, type Mode, type Cost, type Switch, type TestResult, type ToolRow } from '@agent-spaghetti/sdk/web';
 import type { Bridge } from './bridge.ts';
 import { useAct, useOp } from './hooks.ts';
 
 export type Preference = NonNullable<ToolRow['preference']>;
+const COST_LABEL: Record<Cost, string> = { free: 'free', metered: 'paid', unknown: 'unknown' };
+/** The setting tools.cost with one tool's cost set, or cleared (''). */
+export const costList = (list: string[], id: string, cost: Cost | '') => [...list.filter(x => !x.startsWith(`${id}=`)), ...(cost ? [`${id}=${cost}`] : [])];
 const PREF_LABEL: Record<Preference, string> = { ask: 'Ask at start', always: 'Always connect', never: "Don't connect" };
 export interface Output { ok: boolean | null; lines: string[] }
 /** Per-environment results (test, setup) as one output block. */
@@ -20,7 +23,7 @@ export interface ToolsProps {
   onConnect(id: string, on: boolean): void; onPreference(id: string, p: Preference): void; onTest(id: string): void; onSkip(id: string, skip: boolean): void;
   onSetup(id: string, o: { check?: boolean; dryRun?: boolean }): void;
   onSwitch(s: Switch, on: boolean): void; onGrant(id: string, a: DeclaredAction, mode: Mode | null): void;
-  onModel(id: string, model: string): void; onKey(id: string, create: boolean): void;
+  onModel(id: string, model: string): void; onKey(id: string, create: boolean): void; onCost(id: string, cost: Cost | ''): void;
 }
 
 function Row({ r, p }: { r: ToolRow; p: ToolsProps }) {
@@ -48,6 +51,9 @@ function Row({ r, p }: { r: ToolRow; p: ToolsProps }) {
         r.connection === 'connected' ? 'Disconnect' : 'Connect') : null,
       r.preference ? h('select', { 'aria-label': `When ${r.name} is found`, value: r.preference, disabled: busy, onChange: (e: { target: { value: string } }) => p.onPreference(r.id, e.target.value as Preference) },
         ...(Object.keys(PREF_LABEL) as Preference[]).map(k => h('option', { key: k, value: k }, PREF_LABEL[k]))) : null,
+      r.cost ? h('label', { title: 'Free tools run at once; paid and unknown ones ask you first. Set it when the scan gets it wrong (e.g. a tool that runs a local model).' }, 'Cost ',
+        h('select', { 'aria-label': `What ${r.name} costs`, value: r.cost.set ? r.cost.is : '', disabled: busy, onChange: (e: { target: { value: string } }) => p.onCost(r.id, e.target.value as Cost | '') },
+          h('option', { value: '' }, r.cost.set ? 'as found by the scan' : `${COST_LABEL[r.cost.is]} (found by the scan)`), ...(Object.keys(COST_LABEL) as Cost[]).map(c => h('option', { key: c, value: c }, COST_LABEL[c])))) : null,
       h('button', { disabled: busy, onClick: () => p.onTest(r.id) }, p.busy === `test ${r.id}` ? 'Testing…' : 'Test'),
       ...(r.setup && r.state !== 'not found' ? [
         h('button', { key: 'su', disabled: busy, title: 'Install the agent-spaghetti workflow in this tool (backup first)', onClick: () => p.onSetup(r.id, {}) }, p.busy === `setup ${r.id}` ? 'Setting up…' : 'Set up'),
@@ -109,6 +115,7 @@ export function ToolsPanel({ bridge }: { bridge: Bridge }) {
   return h(ToolsView, {
     rows, busy, error: error ?? tools.error, closed, output, details, gatewayUrl: gateway.data?.url ?? null,
     models: (targets.data ?? []).filter(t => t.kind === 'model').flatMap(t => t.models.map(m => `${t.id}:${m}`)),
+    onCost: (id, cost) => act(`cost ${id}`, async () => { await bridge.call('setting', { key: 'tools.cost', value: costList((settings.data?.['tools.cost']?.value as string[]) ?? [], id, cost).join(',') }); await settings.reload(); }),
     onModel: (id, model) => act(`model ${id}`, () => bridge.call('gatewayClient', { integration: id, model })),
     onKey: (id, create) => act(`key ${id}`, async () => {
       const r = await bridge.call('gatewayClient', { integration: id, key: create ? 'create' : 'revoke' });

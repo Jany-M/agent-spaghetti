@@ -58,12 +58,14 @@ test('tools panel: blocks by type with counts, found first, missing folded; clie
   const { ToolsView, preferenceLists } = await import('@agent-spaghetti/ui');
   const row = (id: string, o: Record<string, unknown>) => ({ id, name: id.toUpperCase(), group: 'apps', source: 'builtin', levels: [], envs: ['windows'], state: 'installed', why: 'w', asks: 0, ...o }) as never;
   const props = { busy: null, error: null, closed: new Set(['apps', 'models']), output: { ed: { ok: true, lines: ['OK    detect'] }, cur: { ok: false, lines: ['FAIL  x'] } }, details: {},
-    onToggleGroup: noop, onExpand: noop, onConnect: noop, onPreference: noop, onTest: noop, onSkip: noop, onSwitch: noop, onGrant: noop, onSetup: noop, onModel: noop, onKey: noop, gatewayUrl: null, models: ['lms:m1'],
-    rows: [row('oc', { group: 'agents', setup: true }), row('ed', { connection: 'not connected', preference: 'ask', asks: 1, gateway: { model: 'auto', key: false } }), row('cur', { connection: 'connected', preference: 'always' }),
+    onToggleGroup: noop, onExpand: noop, onConnect: noop, onPreference: noop, onTest: noop, onSkip: noop, onSwitch: noop, onGrant: noop, onSetup: noop, onModel: noop, onKey: noop, onCost: noop, gatewayUrl: null, models: ['lms:m1'],
+    rows: [row('oc', { group: 'agents', setup: true, cost: { is: 'metered', set: true } }), row('ed', { connection: 'not connected', preference: 'ask', asks: 1, gateway: { model: 'auto', key: false } }), row('cur', { connection: 'connected', preference: 'always' }),
       row('lms', { group: 'models', state: 'ready', receives: 'acp' }), row('gone', { state: 'not found' })] };
   const a = html(h(ToolsView, props));
   assert.match(a, /<details class="group" open="">.*?Editors &amp; apps · 2.*?1 in use/s, 'a waiting question opens a closed block');
   assert.match(a, /<details class="group"><summary><h2>Model servers · 1/, 'closed stays closed');
+  assert.match(a, /aria-label="What OC costs"><option value="">as found by the scan<\/option><option value="free">free<\/option><option value="metered" selected="">paid/, 'your own word on a tool\'s cost');
+  assert.deepEqual((await import('@agent-spaghetti/ui')).costList(['a=free', 'b=metered'], 'a', ''), ['b=metered']);
   assert.match(a, /<details class="group"><summary><h2>Not found on this machine · 1/);
   assert.match(a, /ED<\/span>.*?installed.*?not connected.*?<button class="allow">Connect<\/button>/s);
   assert.match(a, /CUR<\/span>.*?<button class="">Disconnect<\/button>.*?<option value="always" selected="">Always connect/s);

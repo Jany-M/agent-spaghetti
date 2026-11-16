@@ -1,6 +1,6 @@
 // Routing (ADR 0010): JEV's classification of a task, the plain target ranking (free before unknown before metered, then the least
 // queued) and the ranking for one task (route). No tool is preferred by name: among equals the input order (the scan's) stays.
-import type { Classification, Cost, Difficulty, RunRequest, RunRow, Target, TaskKind } from './types.ts';
+import type { Classification, Cost, Detection, Difficulty, RunRequest, RunRow, Target, TaskKind } from './types.ts';
 import { DIFFICULTIES, TASK_KINDS } from './types.ts';
 import JEV from './jev-defaults.json' with { type: 'json' };
 /** The shipped defaults (word lists, thresholds, routing data), shown read-only in the Routing panel. */
@@ -126,9 +126,25 @@ export const offloadText = (kinds: string[]): string => (kinds.length ? `Without
   + `instead of doing them yourself: ${kinds.join(', ')}. Agent Spaghetti runs them on a free tool or model and returns the result, which saves the user's paid usage. `
   + 'Do it when the work is bigger than the hand-off (several files to read, a long answer, searching): a small task costs more to hand off than to do. '
   + 'Keep planning, decisions and anything that needs this conversation. Set `kind`, write the task so it stands alone, and if the result is missing or poor, do the task yourself.' : '');
+/** For one prompt, as a tool's prompt hook adds it (stated as a fact about the user's setup, not an order): the hand-off hint when
+ *  the prompt is one of the offload kinds and long enough to be worth it; else null. */
+export function offloadHint(prompt: string, kinds: string[]): string | null {
+  const c = classify(prompt);
+  return kinds.includes(c.kind) && c.by === 'rules' && c.confidence > 0 && words(prompt) >= JEV.offloadMinWords
+    ? `Agent Spaghetti: this request reads as a ${c.kind} task. On this machine the user has ${c.kind} tasks done through the agent-spaghetti \`delegate\` tool `
+      + `(target \`auto\`, kind \`${c.kind}\`): a free tool does the work and the result comes back here, which saves paid usage. `
+      + 'If the task is small or needs this conversation, or the hand-off fails, it is done here as usual.' : null;
+}
 /** What free targets did for other tools: finished runs there, and the tokens they reported. */
 export interface Saved { tasks: number; tokens: number }
 export function savings(rows: RunRow[], free: (target: string) => boolean, since = 0): Saved {
   const done = rows.filter(r => r.outcome === 'done' && r.ts >= since && r.source !== 'agent-spaghetti' && free(r.target));
   return { tasks: done.length, tokens: done.reduce((n, r) => n + (r.inputTokens ?? 0) + (r.outputTokens ?? 0), 0) };
+}
+
+/** A scan with the owner's own word on what each tool costs (setting `tools.cost`, `<tool>=free|metered|unknown`): detection can be
+ *  wrong or go stale, so every reader of a tool's cost (targets, questions before paid use, savings, Tools) reads it through here. */
+export function withCosts<S extends { detections: Detection[] }>(snap: S | null, list: string[]): S | null {
+  const set = new Map(list.map(x => { const i = x.lastIndexOf('='); return [x.slice(0, i), x.slice(i + 1)] as const; }).filter(([, c]) => COST_RANK[c as Cost] !== undefined));
+  return snap && set.size ? { ...snap, detections: snap.detections.map(d => (set.has(d.integration) ? { ...d, cost: set.get(d.integration) as Cost } : d)) } : snap;
 }

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DaemonDown, ENGINE_LABEL, HubClient, dataDir, ensureDaemon, logsDir, readDiscovery, OPS, parseJson, SCOPE_LABEL, detectionRows, describeRun, eventLine, permissionRows, runLine, renderStats, renderTable, settingText, renderToolRows, renderTree, serveMcpStdio, switchRows, testLines,
   type Action, type ConsentRequest, type ConsentScope, type Difficulty, type OpId, type TaskKind } from '@agent-spaghetti/sdk';
-import { planHook, under } from './hook.ts';
+import { OFFLOAD_EVENTS, planHook, under } from './hook.ts';
 
 export interface IO { out(s: string): void; err(s: string): void }
 const DOWN = 'agent-spaghetti daemon is not running. Start it with: agent-spaghetti daemon';
@@ -58,8 +58,10 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
   const op = cmd && (VERB[cmd] ?? (cmd in OPS ? cmd as OpId : undefined));
   if (!op) { io.err(usage()); return 1; }
   if (op === 'hook') {          // client hooks: always answer the client, even when the daemon is down
-    const client = args[1] ?? 'client', plan = planHook((parseJson(await readStdin()) ?? {}) as Record<string, any>, client);
+    const client = args[1] ?? 'client', input = (parseJson(await readStdin()) ?? {}) as Record<string, any>;
     const c = (() => { try { return HubClient.fromDiscovery(env); } catch { return null; } })();
+    const offload = OFFLOAD_EVENTS.includes(String(input.hook_event_name)) ? await c?.call('settings').then(s => s['routing.offload']?.value as string[], () => undefined) : undefined;
+    const plan = planHook(input, client, offload ?? []);
     if ('delegate' in plan) {
       const r = await c?.call('delegate', { ...plan.delegate, source: client, waitMs: 0 }).catch((e: Error) => e);
       io.out(JSON.stringify(plan.block(!r ? 'agent-spaghetti is not running: start it, then send again.'

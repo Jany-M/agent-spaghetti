@@ -1,6 +1,6 @@
 // Daemon wiring (no logic of its own). Started by `agent-spaghetti daemon`.
 import { join } from 'node:path';
-import { dataDir, declaredActions, emptyLive, liveState, userIntegrationsDir, withGrants, type Disposable, type LiveState, type RunRequest, type Snapshot } from '@agent-spaghetti/sdk';
+import { dataDir, declaredActions, emptyLive, liveState, userIntegrationsDir, withCosts, withGrants, type Disposable, type LiveState, type RunRequest, type Snapshot } from '@agent-spaghetti/sdk';
 import { BUILTINS } from '@agent-spaghetti/integrations';
 import { Store } from './store.ts';
 import { Bus } from './bus.ts';
@@ -73,7 +73,7 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
     }
   };
   const host = () => entries.find(e => e.env)?.env ?? null;
-  const runner: Runner = new Runner({ bus, consent, ledger, settings, resultsDir: join(dir, 'results'), host, snapshot: () => store.loadSnapshot<Snapshot>('scan'),
+  const runner: Runner = new Runner({ bus, consent, ledger, settings, resultsDir: join(dir, 'results'), host, snapshot: () => withCosts(store.loadSnapshot<Snapshot>('scan'), settings.get('tools.cost')),
     integrations: () => loaded.integrations.filter(i => !settings.get('disabled').includes(i.manifest.id)),
     route: (source, req, without): Promise<RunRequest> => dispatcher.route(source, req, without),
     async *runOn(envId, id, req, ro) {

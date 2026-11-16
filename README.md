@@ -48,8 +48,9 @@ Status keeps itself current: running tools and model servers are re-checked ever
   | any | `have the local model write the tests, then Claude Code review them, then hand it back to me` | plain words: its agent calls `delegate` |
   | VS Code (Copilot or Claude harness) | pick **agent-spaghetti** in the agent list, then `lmstudio summarize README.md` | the first word is the target; none: you pick |
   | VS Code (Local harness) | `/mcp.agent-spaghetti.delegate` | a form with a target list |
-  | Claude Code | `@`, pick the **agent-spaghetti** agent or a target (`@agent-spaghetti:target://openclaw review this`) | `@` lists both |
-  | Cursor, Claude Code | `>>openclaw >>claude-cli review src/app.ts`, then Enter | sent straight to the targets, not to the tool's model; nothing pops up while typing |
+  | Claude Code | `@`, pick the **agent-spaghetti** agent or a target (`@agent-spaghetti:target://lmstudio review this`) | `@` lists both |
+  | Cursor | `/delegate lmstudio summarize README.md` | type `/` and pick **delegate**: the first word is the target (`auto` lets Agent Spaghetti choose), `>>next` adds a step |
+  | Cursor, Claude Code | `>>lmstudio >>claude-cli review src/app.ts`, then Enter | the shortcut: sent straight to the targets, not to the tool's model; nothing pops up while typing |
 
   The open workspace goes along as the folder to work in, and attached files go too: agents get their paths (translated for WSL), models get their text. No target named? The tool asks you to pick one (or `auto`), and a paid target asks for approval right there or in the tray. Agents edit files only for editing kinds (code-edit, refactor, tests, docs). A `>>` result also lands in `<workspace>/.agent-spaghetti/results/<run>.md`.
 
@@ -57,7 +58,8 @@ Status keeps itself current: running tools and model servers are re-checked ever
 - From the tray: **Runs → New task**. From a terminal: `delegate <target> <task> [--model <m>] [--then <target>,…]`.
 - **Chains:** a hand-off can name next steps (`then`); each step gets the previous result, and the last result goes back to whoever asked: straight into the waiting call, into the caller's own session when it can continue one, into its chat (VS Code), or as a result waiting for it (`run_status`, the tray tells you).
 - **Kind and difficulty:** a tool may say what sort of work a task is and how demanding (`kind`, `difficulty`); when it doesn't, Agent Spaghetti sets both from built-in rules (English and Italian) and shows them in Runs and Live, with how sure it is.
-- **Offloading on their own:** connected tools are told which kinds of task to hand to `auto` without being asked (Routing → `routing.offload`; by default summarize, research, docs, tests, review; none = only when you ask). A tool reads this when it starts. Handing off pays for work bigger than the hand-off itself (several files, a long answer, searching); the tools are told to keep small tasks, planning and decisions. The popover header shows what free tools did this week.
+- **Saving paid usage automatically:** your connected tools hand some kinds of task to a free tool on their own, without you asking (by default summarize, research, docs, tests and review; change the list in **Routing**, or untick everything to hand off only when you ask). They keep small tasks, planning and decisions for themselves. Restart a tool after changing the list. The popover header shows how many tasks free tools did this week.
+- **What a tool costs:** free tools run at once; paid ones, and ones Agent Spaghetti is not sure about, ask you first. If it gets a tool wrong (say, an agent you run on a local model), set **Cost** in that tool's row in **Tools**.
 - **`auto`** lets Agent Spaghetti pick the target for the task's kind and difficulty: free before paid, a target big enough for it (model size from its name; a free one a size smaller may try first), then how that target's past runs of that kind went (finished, failed, your Good/Bad/Redo). Research that brings no files of its own goes first to a tool that can search the web; planning goes to the strongest target, never to a small free one first; and a tool that would have to load its own local model is not picked while another local model is loaded (name it yourself to do that). If the target it chose fails or answers nothing, the next one tries, once per chain (a paid one asks first). **Routing** shows the order for each kind of task and why; there you can make a target **First** or **Never** for a kind and switch learning, stretching and escalation off. A dispatcher model (Settings → `dispatcher.model`, off by default) can pick among the ranked targets instead; with one set, a hand-off that stops progressing is passed to another target once.
 - Targets take tasks through the standard each tool offers: the model API (LM Studio, Ollama, …), ACP (OpenCode), their own CLI (Claude Code, Cline, Codex, Hermes, Kilo, OpenClaw) or their chat (VS Code). ACP and CLI targets need the tool's CLI: the Kilo, Cline and Codex apps bundle one (Cline uses the provider and model set in Cline); the OpenCode app doesn't (`npm i -g opencode-ai`). Hermes with its own local model needs the Hermes app open (it runs that model's server). **Tools** shows which ones can take tasks now.
 - **An agent's model:** a task can name one (`--model`); otherwise the agent uses its own default, or the one you set per agent in Settings → `delegate.models` (`<target>=<model>`, e.g. `kilo=kilo/kilo-auto/free`). An agent that runs a model on this machine (Hermes with a local server) counts as free.
@@ -75,31 +77,28 @@ Tools that accept a custom OpenAI-compatible endpoint (VS Code chat, OpenCode, K
 
 Local models answer at once; a paid one (a hosted API added as your own integration) asks you first, as hand-offs do. Every request is in **Runs** (no prompt text is stored). 
 
-## Works with
+## Tested with
 
-Only tools installed and tried on the development machine (Windows 11) are supported. "Takes tasks" = other tools can hand it work; "hands off" = it can send work through Agent Spaghetti.
-
-| Tool | Takes tasks | Hands off | Last tried |
-|---|---|---|---|
-| LM Studio | yes (loaded models) | - | 2026-11-05 |
-| Ollama, llama.cpp server | yes (loaded models) | - | found by the scan; no task run yet |
-| Claude Code (CLI) | yes | yes (MCP, `>>`, agent pick) | 2026-11-04 |
-| Codex | yes | yes (MCP) | 2026-11-04 (as a target) |
-| Kilo | yes | yes (MCP) | 2026-11-04 (as a target) |
-| Cline | yes | yes (MCP) | 2026-11-05 (as a target) |
-| OpenCode | yes | yes (MCP) | 2026-11-05 (as a target) |
-| Hermes Agent | yes | yes (MCP) | 2026-11-05: its local model is woken; no full answer yet |
-| VS Code (Copilot chat) | yes (in its chat) | yes (MCP, agent pick) | 2026-10-17 |
-| Cursor | - | yes (MCP, `>>`) | owner check pending |
-| Claude Desktop | - | yes (MCP) | owner check pending |
-| MemPalace, Paperclip | - | - | found by the scan only |
-
-OpenClaw is still in the code (its workflow pack) but is not installed on the development machine, so it is untested.
+| Tool | Can be given tasks | Can hand tasks off |
+|---|---|---|
+| LM Studio | yes (the model you loaded) | - |
+| Ollama, llama.cpp server | yes (the model you loaded) | - |
+| Claude Code (CLI) | yes | yes |
+| Codex | yes | yes |
+| Kilo | yes | yes |
+| Cline | yes | yes |
+| OpenCode | yes | yes |
+| Hermes Agent | yes | yes |
+| VS Code (Copilot chat) | yes | yes |
+| Cursor | - | yes |
+| Claude Desktop | - | yes |
+| MemPalace, Paperclip | found and shown; no tasks yet | - |
 
 ## Per-tool notes
 
 - **OpenClaw:** Tools → OpenClaw → **Set up** installs its multi-step workflow pack (roles, settings, helpers; **Dry run** first if you like, **Check** any time). It needs a running OpenClaw gateway and `python3` on its host. The model it uses is the setting `openclaw.model`: `auto` (keep the current one while it answers, else the best loaded local model), `keep`, or `<server>:<model>` from `targets`.
-- **Cursor:** cannot use a local model/endpoint as its own model (its servers can't reach your machine), so it works through hand-offs instead, via local MCP and the `>>` prefix.
+- **Cursor:** cannot use a local model/endpoint as its own model (its servers can't reach your machine), so it works through hand-offs instead: the `/delegate` command, plain words, or the `>>` shortcut.
+- **Hermes Agent:** when it runs its own local model, Agent Spaghetti starts that model when a task needs it (the first answer can take a few minutes while it loads).
 - **VS Code**'s inline completions stay with GitHub.
 
 ## License

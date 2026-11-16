@@ -1,5 +1,5 @@
 {
-  "$comment": "JEV's shipped defaults (finish-line plan, Part I): word lists per hand-off kind (English and Italian; more languages are more entries), the order that breaks ties, the words that make a task heavy, and the difficulty thresholds; then how routing (route() in routing.ts) matches a task to a target: model sizes per tier (billions of parameters, from the model name) how past runs count (half-life in days, runs needed before they move a target), the kinds that go to the strongest target whatever their size (frontierKinds) and the kinds that need the web unless the task brings its sources (webKinds); last, the kinds connected tools are told to hand off on their own (the default of the setting routing.offload). Data only.",
+  "$comment": "JEV's shipped defaults (finish-line plan, Part I): word lists per hand-off kind (English and Italian; more languages are more entries), the order that breaks ties, the words that make a task heavy, and the difficulty thresholds; then how routing (route() in routing.ts) matches a task to a target: model sizes per tier (billions of parameters, from the model name) how past runs count (half-life in days, runs needed before they move a target), the kinds that go to the strongest target whatever their size (frontierKinds) and the kinds that need the web unless the task brings its sources (webKinds); last, the kinds connected tools are told to hand off on their own (the default of the setting routing.offload) and how long a prompt must be before a prompt hook suggests handing it off (offloadMinWords). Data only.",
   "kinds": {
     "tests": ["test", "tests", "unit test", "unit tests", "spec", "coverage", "pytest", "jest", "vitest", "failing test", "collaudo", "copertura", "test unitari"],
     "refactor": ["refactor", "rename", "restructure", "clean up", "simplify", "extract", "deduplicate", "split into", "rifattorizza", "ristruttura", "semplifica", "rinomina", "pulisci"],
@@ -17,5 +17,6 @@
   "heavy": { "words": 2000, "files": 5, "editKinds": ["code-edit", "refactor"], "editFiles": 2 },
   "light": { "words": 300, "files": 1, "codeLines": 50, "kinds": ["summarize", "docs", "research", "other"] },
   "route": { "lightMaxB": 8, "mediumMaxB": 32, "halfLifeDays": 30, "minRuns": 5, "frontierKinds": ["plan"], "webKinds": ["research"] },
-  "offload": ["summarize", "research", "docs", "tests", "review"]
+  "offload": ["summarize", "research", "docs", "tests", "review"],
+  "offloadMinWords": 8
 }

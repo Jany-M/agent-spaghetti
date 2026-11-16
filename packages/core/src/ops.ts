@@ -1,6 +1,6 @@
 // Handlers for the operations declared once in sdk/ops.ts. Per-environment work goes through Services.onEnvs (core/dispatch).
 import type { EnvResult, Grant, LiveState, OpId, OpIO, RunView, SettingsOut, Snapshot, Target } from '@agent-spaghetti/sdk';
-import { AUTO, DIFFICULTIES, EDIT_KINDS, HANDOFF_KINDS, OPS, declaredActions, rankTargets, savings, levelsOf, renderConfigReport, toolRows, withGrants, withoutGrants } from '@agent-spaghetti/sdk';
+import { AUTO, DIFFICULTIES, EDIT_KINDS, HANDOFF_KINDS, OPS, declaredActions, rankTargets, savings, withCosts, levelsOf, renderConfigReport, toolRows, withGrants, withoutGrants } from '@agent-spaghetti/sdk';
 import type { Store } from './store.ts';
 import type { Bus } from './bus.ts';
 import type { Loaded } from './registry.ts';
@@ -27,7 +27,7 @@ export interface Services {
 }
 type Handlers = { [K in OpId]: (input: OpIO[K]['in'], s: Services) => Promise<OpIO[K]['out']> | OpIO[K]['out'] };
 const num = (v: unknown, d: number) => (Number.isFinite(Number(v)) && v !== '' && v !== undefined ? Number(v) : d);
-const snapshot = (s: Services) => s.store.loadSnapshot<Snapshot>('scan');
+const snapshot = (s: Services) => withCosts(s.store.loadSnapshot<Snapshot>('scan'), s.settings.get('tools.cost'));
 const need = (v: unknown, what: string) => { if (typeof v !== 'string' || !v) throw new Error(`missing ${what}`); return v; };
 function userSubject(s: Services, id: string) {
   const i = s.loaded().integrations.find(i => i.manifest.id === id && i.source === 'user');
@@ -59,7 +59,7 @@ export const handlers: Handlers = {
       prefs: { auto: s.settings.get('connect.auto'), never: s.settings.get('connect.never') },
       loaded: l.integrations.map(i => ({ id: i.manifest.id, name: i.manifest.name, ...(i.manifest.color ? { color: i.manifest.color } : {}), source: i.source, roles: i.manifest.roles, levels: levelsOf(i, ENGINES), disabled: off.includes(i.manifest.id), setup: !!i.module?.setup,
         ...(i.manifest.detect?.http?.url ? { needsEnv: i.manifest.detect.env ?? [] } : {}), ...(i.manifest.speaks?.openaiClient ? { gatewayClient: true } : {}) })),
-      gateway: { routes: s.settings.get('gateway.routes'), keyed: s.gateway.status().clients.map(c => c.id) } }),
+      costs: s.settings.get('tools.cost'), gateway: { routes: s.settings.get('gateway.routes'), keyed: s.gateway.status().clients.map(c => c.id) } }),
       rejected: l.rejected };
   },
   switches: async (_i, s) => {

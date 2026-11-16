@@ -98,3 +98,15 @@ test('>> hooks (Cursor, Claude Code): one parser for target[:model] and chains; 
   assert.deepEqual(mcp, { reply: { permission: 'allow' }, report: { event: 'beforeMCPExecution', data: { tool_name: 'x', mcp_server_name: 's' } } });
   assert.ok(!JSON.stringify(planHook({ hook_event_name: 'afterAgentResponse', text: 'SECRET-MARKER' })).includes('SECRET-MARKER'));
 });
+test('offload through the prompt hook: Claude Code gets a hint for a prompt of an offload kind; Cursor gets the rule once per session', () => {
+  const kinds = ['summarize', 'research'];
+  const cc = planHook({ hook_event_name: 'UserPromptSubmit', prompt: 'Research which Node.js version is the current LTS release and list its changes' }, 'claude-cli', kinds);
+  assert.match((cc as any).reply.hookSpecificOutput.additionalContext, /^Agent Spaghetti: this request reads as a research task\..*`delegate` tool \(target `auto`, kind `research`\)/);
+  assert.equal((cc as any).reply.hookSpecificOutput.hookEventName, 'UserPromptSubmit');
+  const pass = (prompt: string, k = kinds) => (planHook({ hook_event_name: 'UserPromptSubmit', prompt }, 'claude-cli', k) as any).reply;
+  assert.deepEqual([pass('Summarize this'), pass('Fix the failing login endpoint in the auth module please now'), pass('Research which Node.js version is the current LTS release and list its changes', [])], [{}, {}, {}],
+    'too short to be worth it; not an offload kind; no kinds set');
+  assert.deepEqual((planHook({ hook_event_name: 'beforeSubmitPrompt', prompt: 'Research which Node.js version is the current LTS release and list its changes' }, 'cursor', kinds) as any).reply, { continue: true }, 'Cursor cannot add context per prompt');
+  assert.match((planHook({ hook_event_name: 'sessionStart' }, 'cursor', kinds) as any).reply.additional_context, /^Without being asked, hand these kinds of task/);
+  assert.deepEqual((planHook({ hook_event_name: 'sessionStart' }, 'cursor') as any).reply, {});
+});

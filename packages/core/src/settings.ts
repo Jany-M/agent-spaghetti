@@ -15,6 +15,7 @@ export const SETTINGS = {
   'observe.sessionPollMs': { default: 2000, help: 'How often agent sessions are polled (tools without an event stream)' },
   'backend.concurrency': { default: 1, help: 'Requests a local model server runs at once (the rest wait in its queue)' },
   'consent.timeoutSec': { default: 120, help: 'Seconds a delegation waits for your answer before it is denied' },
+  'tools.cost': { default: [] as string[], help: 'What a tool costs when you know better than the scan: <tool>=free|metered|unknown (Tools → the tool → Cost). Paid and unknown ones ask before use' },
   'delegate.deadlineSec': { default: 1800, help: 'Longest a delegated run may take' },
   'delegate.models': { default: [] as string[], help: 'The model (or agent) an agent target uses when a task names none, instead of the tool\'s own default: <target>=<model> (e.g. a free one)' },
   'delegate.maxHops': { default: 8, help: 'Most hand-offs in one chain (hops plus nested delegations); stops loops' },

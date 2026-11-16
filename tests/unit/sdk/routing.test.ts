@@ -2,7 +2,7 @@
 // ranking for one task (fit, cost, stretch, history, queue; skips with why).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { modelSize, offloadText, route, savings, summarizeRuns, tierOf, type RunRow, type Target } from '@agent-spaghetti/sdk';
+import { modelSize, offloadText, route, savings, summarizeRuns, tierOf, withCosts, type RunRow, type Target } from '@agent-spaghetti/sdk';
 
 const T = (id: string, o: Partial<Target> = {}): Target => ({ id, name: id, kind: 'model', cost: 'free', envId: 'w', models: [], engine: 'openai', resumable: false, ...o });
 test('tiers: model size from its name (active size when stated), paid → heavy, agents → medium, the owner\'s entry wins', () => {
@@ -59,4 +59,10 @@ test('offloadText and savings: the kinds a tool hands off unasked; what free tar
   const rows = [r({ inputTokens: 50, outputTokens: 20 }), r({ ts: 5 }), r({ outcome: 'error' }), r({ target: 'paid' }), r({ source: 'agent-spaghetti' })];
   assert.deepEqual(savings(rows, t => t === 'lms'), { tasks: 2, tokens: 70 });
   assert.deepEqual(savings(rows, t => t === 'lms', 50), { tasks: 1, tokens: 70 });
+});
+test('withCosts: the owner\'s word on a tool\'s cost replaces the scan\'s; unknown values are ignored', () => {
+  const d = (integration: string, cost: 'free' | 'metered' | 'unknown') => ({ integration, name: integration, envId: 'w', installs: [], levels: [], cost, connectable: 'yes' as const, why: '' });
+  const snap = { detections: [d('a', 'metered'), d('b', 'unknown')] };
+  assert.deepEqual(withCosts(snap, ['a=free', 'b=cheap'])!.detections.map(x => x.cost), ['free', 'unknown']);
+  assert.equal(withCosts(snap, []), snap); assert.equal(withCosts(null, ['a=free']), null);
 });

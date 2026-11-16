@@ -214,5 +214,8 @@ test('hermes inspect: a managed model not in memory is marked `loads` (routing k
   const det = { integration: 'hermes', name: 'Hermes Agent', envId: 'windows', installs: [], levels: [], cost: 'metered' as const, connectable: 'yes' as const, why: 'found' };
   const loads = async (http: Record<string, { status: number; body: string }>) => (await hermesModule.inspect!(fakeEnv({ files: { [conf]: yaml }, http }), { detection: det, agents: [], backends: [] }, {} as never)).detection.loads;
   assert.equal(await loads({}), 'its own local model', 'server down: the run starts it and loads the model');
+  const { localModel } = await import('../../../integrations/hermes/index.ts');
+  assert.deepEqual(localModel('model:\n  default: "q"\n  provider: "llamacpp"\nlocal_runtime:\n  enabled: true\n'), { url: 'http://127.0.0.1:18434/v1', managed: true }, 'provider llamacpp without a URL: its managed server (free)');
+  assert.equal(localModel('model:\n  provider: "openrouter"\nlocal_runtime:\n  enabled: true\n'), null);
   assert.equal(await loads({ [`${url}/models`]: { status: 200, body: '{"data":[{"id":"m","status":{"value":"loaded"}}]}' } }), undefined);
 });

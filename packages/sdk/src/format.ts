@@ -1,5 +1,5 @@
 // The one place that turns data into text (CLI, tray tooltip, app). Names always come from manifests.
-import type { AgentInfo, BackendInfo, Delivery, Level, Role, RunRow, Snapshot, StoredEvent, Switch, Target, TestResult, TraceStage } from './types.ts';
+import type { AgentInfo, BackendInfo, Cost, Delivery, Level, Role, RunRow, Snapshot, StoredEvent, Switch, Target, TestResult, TraceStage } from './types.ts';
 import { AUTO } from './types.ts';
 import type { LiveState } from './state.ts';
 import type { Saved } from './routing.ts';
@@ -192,12 +192,14 @@ export interface ToolRow {
   asks: number;                                             // questions about this tool waiting for the user
   setup?: true;                                             // has tool-side setup (Set up / Check)
   receives?: Target['engine'];                              // can take tasks now, through this engine
+  cost?: { is: Cost; set: boolean };                        // found tools that can do work: what it costs, and whether you set it (tools.cost)
   gateway?: { model: string; key: boolean };                // takes a custom model endpoint: its model through the gateway, whether it has a key
 }
 export interface ToolInput {
   loaded: Array<{ id: string; name: string; color?: string; source: 'builtin' | 'user'; roles: Role[]; levels: Level[]; disabled: boolean; setup?: boolean; needsEnv?: string[]; gatewayClient?: boolean }>;   // needsEnv: a hosted API's key variables
   snapshot: Snapshot | null; live: LiveState; targets: Target[]; prefs: { auto: string[]; never: string[] }; consents: Array<{ subject: string }>;
   gateway?: { routes: string[]; keyed: string[] };
+  costs?: string[];                                         // the setting tools.cost
 }
 /** The one row model behind the Tools panel and the CLI (ADR 0009). */
 export function toolRows(x: ToolInput): ToolRow[] {
@@ -216,6 +218,7 @@ export function toolRows(x: ToolInput): ToolRow[] {
         preference: x.prefs.auto.includes(i.id) ? 'always' as const : x.prefs.never.includes(i.id) ? 'never' as const : 'ask' as const } : {}),
       asks: x.consents.filter(c => c.subject === i.id).length, ...(i.setup ? { setup: true as const } : {}),
       ...(target ? { receives: target.engine } : {}),
+      ...(dets.length && (i.roles.includes('agent') || i.roles.includes('backend')) ? { cost: { is: dets[0].cost, set: !!x.costs?.some(c => c.startsWith(`${i.id}=`)) } } : {}),
       ...(i.gatewayClient ? { gateway: { model: x.gateway?.routes.find(r => r.startsWith(`${i.id}=`))?.slice(i.id.length + 1) ?? AUTO, key: !!x.gateway?.keyed.includes(i.id) } } : {}),
     };
   }).sort((a, b) => a.name.localeCompare(b.name));   // alphabetical: no tool comes first by design (ADR 0010)

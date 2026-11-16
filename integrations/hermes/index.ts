@@ -30,10 +30,15 @@ export function modelBaseUrl(yaml: string | null): string | null {
 const LOCAL = /^https?:\/\/(127\.\d+\.\d+\.\d+|localhost|\[::1\])(:\d+)?(\/|$)/i;
 /** Hermes manages its own local llama.cpp server (`local_runtime.enabled: true`, its Local models). */
 export const managedRuntime = (yaml: string | null) => /^local_runtime:\s*\r?\n(?:[ \t]+.*\r?\n|\s*\r?\n)*?[ \t]+enabled:\s*true\b/m.test(yaml ?? '');
-/** Hermes' local model as Agent Spaghetti uses it: on this machine (free), and whether Hermes itself can start its server. */
+/** `model.provider` in config.yaml. */
+const provider = (yaml: string | null) => /^model:\s*\r?\n(?:[ \t]+.*\r?\n|\s*\r?\n)*?[ \t]{1,4}provider:\s*["']?([\w.-]+)/m.exec(yaml ?? '')?.[1] ?? '';
+const LLAMACPP = ['llamacpp', 'llama.cpp', 'llama-cpp'];           // Hermes' names for its own managed server (hermes_cli/local_runtime/endpoint.py)
+const MANAGED_URL = 'http://127.0.0.1:18434/v1';                  // where that server listens when config.yaml names no base_url (Hermes' default port)
+/** Hermes' local model as Agent Spaghetti uses it: on this machine (free), and whether Hermes itself can start its server. Either
+ *  a local `model.base_url`, or provider llamacpp (its managed server, no URL in the config). */
 export function localModel(yaml: string | null): { url: string; managed: boolean } | null {
-  const url = modelBaseUrl(yaml);
-  return url && LOCAL.test(url) ? { url, managed: managedRuntime(yaml) } : null;
+  const url = modelBaseUrl(yaml), managed = managedRuntime(yaml);
+  return url && LOCAL.test(url) ? { url, managed } : !url && managed && LLAMACPP.includes(provider(yaml).toLowerCase()) ? { url: MANAGED_URL, managed } : null;
 }
 
 /** A llama.cpp server's /models answer: a model is in memory (its router marks each model's status; a single-model server has it loaded). */
