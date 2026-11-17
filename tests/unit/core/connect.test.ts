@@ -126,8 +126,10 @@ test('VS Code (openaiClient.auto): connect puts the gateway in its model list an
   const r = await setConnection(env, vscode, det, cli, true, false, gw);
   const list = JSON.parse((await env.readFile(models))!);
   assert.deepEqual(list[0], mine, 'the user\'s own providers stay');
-  assert.deepEqual([list[1].name, list[1].vendor, list[1].apiKey, list[1].models[0].id, list[1].models[0].url, list[1].models[0].toolCalling],
-    ['Agent Spaghetti', 'customendpoint', gw.key, 'auto', 'http://127.0.0.1:4141/v1/chat/completions', true]);
+  assert.deepEqual([list[1].name, list[1].vendor, list[1].models[0].id, list[1].models[0].url, list[1].models[0].toolCalling, list[1].models[0].requestHeaders],
+    ['Agent Spaghetti', 'customendpoint', 'auto', 'http://127.0.0.1:4141/v1/chat/completions', true, { 'X-Agent-Spaghetti-Key': gw.key }],
+    'the key in a header: VS Code keeps an API key in its secret storage and may send an older one');
+  assert.notEqual(list[1].apiKey, gw.key);
   assert.equal(await env.readFile(settings), '{\n  "chat.agentHost.byokModels.enabled": true,\n  // my comment\n  "editor.fontSize": 14\n}', 'added as text: comments stay');
   assert.ok(r.changes.includes(`write ${models}`) && r.changes.includes(`write ${settings}.bak`));
   assert.match((await env.readFile('~/.copilot/agents/agent-spaghetti.agent.md'))!, /\ntools: \['agent-spaghetti\/\*'\]\nmodel: \['Agent Spaghetti \(customendpoint\)'\]\n---\n/, 'picking the agent picks the gateway');

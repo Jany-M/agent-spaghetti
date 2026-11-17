@@ -35,7 +35,8 @@ export async function serveJson(o: ServeOpts): Promise<Server> {
   const handler: Parameters<typeof createServer>[1] = async (req, res) => {
     const send = (code: number, b: unknown) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(b)); };
     const fail = (code: number, message: string) => send(code, o.error ? o.error(code, message) : { error: message });
-    const bearer = /^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1] ?? '';
+    // the key: `X-Agent-Spaghetti-Key` when sent (a tool that keeps its own API key elsewhere, e.g. VS Code's secret storage), else the bearer token
+    const own = req.headers['x-agent-spaghetti-key'], bearer = (typeof own === 'string' && own) || (/^Bearer (.+)$/.exec(req.headers.authorization ?? '')?.[1] ?? '');
     const who = auth(bearer);
     if (who === null) return fail(401, 'unauthorized');
     const url = new URL(req.url ?? '/', 'http://127.0.0.1');

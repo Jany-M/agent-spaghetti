@@ -71,6 +71,8 @@ test('gateway: keys name the tool; models listed; streams pass through with only
   assert.ok(key.startsWith(KEY_PREFIX)); assert.ok(!JSON.stringify(store.getKv('gateway.keys')).includes(key), 'only the hash is kept');
   const call = (path: string, body?: object, k = key) => fetch(`http://127.0.0.1:${port}${path}`, { method: body ? 'POST' : 'GET', headers: { authorization: `Bearer ${k}`, 'content-type': 'application/json' }, body: body && JSON.stringify(body) });
   try {
+    const viaHeader = await fetch(`http://127.0.0.1:${port}/v1/models`, { headers: { authorization: 'Bearer stale-key-from-a-secret-store', 'x-agent-spaghetti-key': key } });
+    assert.equal(viaHeader.status, 200, 'X-Agent-Spaghetti-Key wins over a bearer token');
     const bad = await call('/v1/models', undefined, 'nope');
     assert.deepEqual([bad.status, (await bad.json()).error.type], [401, 'invalid_api_key']);
     assert.deepEqual((await (await call('/v1/models')).json()).data.map((m: any) => m.id), ['auto', 'lms:m1', 'paid:big']);
@@ -84,6 +86,7 @@ test('gateway: keys name the tool; models listed; streams pass through with only
     const row = ledger.list({})[0];
     assert.deepEqual([row.source, row.target, row.model, row.outcome, row.inputTokens, row.outputTokens, row.returnTo], ['vscode', 'lms', 'm1', 'done', 5, 2, 'none']);
     assert.ok(!JSON.stringify(store.db.prepare('SELECT * FROM runs').all()).includes('SECRET-PROMPT'));
+    assert.deepEqual([runner.taskText(row.id), ledger.result(row)], ['SECRET-PROMPT', 'Hello'], 'kept as files like any run: what the user wrote, and the answer (streamed)');
 
     const j = await call('/v1/chat/completions', { model: 'lms:m1', messages: [] });
     assert.deepEqual((await j.json()).choices[0].message.content, 'ok');

@@ -58,15 +58,16 @@ export async function* openaiForward(t: OpenAiTarget, path: string, body: Record
       const text = await r.text();
       o.write(r.status, type, text);
       if (!r.ok) { yield { type: 'error', message: `HTTP ${r.status}: ${text.slice(0, 300)}` }; return; }
-      const u = (parseJsonLoose(text) as { usage?: { prompt_tokens?: number; completion_tokens?: number } } | undefined)?.usage;
-      if (u) yield { type: 'usage', inputTokens: u.prompt_tokens, outputTokens: u.completion_tokens, costUsd: 0 };
-      yield { type: 'done', result: '' };
+      const j = parseJsonLoose(text) as { usage?: { prompt_tokens?: number; completion_tokens?: number }; choices?: Array<{ message?: { content?: string } }> } | undefined;
+      if (j?.usage) yield { type: 'usage', inputTokens: j.usage.prompt_tokens, outputTokens: j.usage.completion_tokens, costUsd: 0 };
+      yield { type: 'done', result: String(j?.choices?.[0]?.message?.content ?? '') };   // the answer's text, kept like any run's result
       return;
     }
     o.write(r.status, type);
-    const dec = new TextDecoder(); let buf = '';
+    const dec = new TextDecoder(); let buf = '', answer = '';
     const line = function* (l: string): Generator<RunEvent> {
-      const j = l.startsWith('data:') ? parseJsonLoose(l.slice(5).trim()) as { choices?: unknown[]; usage?: { prompt_tokens?: number; completion_tokens?: number } } | undefined : undefined;
+      const j = l.startsWith('data:') ? parseJsonLoose(l.slice(5).trim()) as { choices?: Array<{ delta?: { content?: string } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } } | undefined : undefined;
+      answer += j?.choices?.[0]?.delta?.content ?? '';
       if (j?.usage) yield { type: 'usage', inputTokens: j.usage.prompt_tokens, outputTokens: j.usage.completion_tokens, costUsd: 0 };
       if (ownUsage && j?.usage && !j.choices?.length) return;      // the usage chunk we asked for: not the client's
       o.write(r.status, type, l + '\n');
@@ -76,6 +77,6 @@ export async function* openaiForward(t: OpenAiTarget, path: string, body: Record
       let i; while ((i = buf.indexOf('\n')) >= 0) { yield* line(buf.slice(0, i)); buf = buf.slice(i + 1); }
     }
     if (buf) yield* line(buf);
-    yield { type: 'done', result: '' };
+    yield { type: 'done', result: answer };
   } finally { release(); report(); }
 }

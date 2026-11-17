@@ -22,7 +22,7 @@ export interface RunnerDeps {
   /** An agent's run in the environment where it was found (core/dispatch.ts runOnEnv). */
   runOn(envId: string, id: string, req: RunRequest, o: { signal: AbortSignal; runId: number }): AsyncIterable<RunEvent>;
 }
-export interface StartOpts { preapproved?: boolean; engine?(signal: AbortSignal): AsyncIterable<RunEvent> }
+export interface StartOpts { preapproved?: boolean; engine?(signal: AbortSignal): AsyncIterable<RunEvent>; asked?: string }   // asked: the request as shown and kept (gateway: the user's last message)
 /** What the runner keeps about a hand-off chain while it runs: who asked and where the result goes. */
 export interface Chain { id: number; source: string; returnTo: 'caller' | 'none'; returnSession?: string; parentRunId?: number; watchedAt?: number }
 /** What `delegate` can use right now on this machine (from the last scan). Models: servers the host reaches. Agents: tools that speak
@@ -196,8 +196,9 @@ export class Runner {
     const noteOutput = (text: string) => { pending += text; if (flushTimer) return; if (Date.now() - lastFlush >= OUTPUT_FLUSH_MS) flushOutput(); else { flushTimer = setTimeout(flushOutput, OUTPUT_FLUSH_MS); } };
     try {
       const resolved = o.engine ? req : await this.forTarget(t, req);
-      this.d.bus.trace('runner', { stage: id === req.chainId ? 'request' : 'relay', text: resolved.task, source, target: t.id, runId: id, chainId: req.chainId, model: req.model });
-      if (!o.engine) this.saveFile(`${id}.task.md`, resolved.task);   // a hand-off's task beside its result (gateway prompts are never kept)
+      const asked = o.asked ?? resolved.task;                  // a gateway request: what the user wrote, not the whole conversation sent
+      this.d.bus.trace('runner', { stage: id === req.chainId ? 'request' : 'relay', text: asked, source, target: t.id, runId: id, chainId: req.chainId, model: req.model });
+      this.saveFile(`${id}.task.md`, asked);                   // beside its result: the question comes back after a restart
       for await (const e of o.engine ? o.engine(ac.signal) : this.engine(id, t, resolved, ac.signal, m => { model = m; })) {
         const r = this.running.get(id); if (r) r.at = Date.now();
         if (e.type === 'text') { result += e.text; noteOutput(e.text); }

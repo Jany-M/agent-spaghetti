@@ -58,7 +58,7 @@
         "entry": {
           "name": "Agent Spaghetti",
           "vendor": "customendpoint",
-          "apiKey": "{key}",
+          "apiKey": "agent-spaghetti",
           "apiType": "chat-completions",
           "models": [
             {
@@ -68,7 +68,10 @@
               "toolCalling": true,
               "vision": false,
               "maxInputTokens": 32768,
-              "maxOutputTokens": 4096
+              "maxOutputTokens": 4096,
+              "requestHeaders": {
+                "X-Agent-Spaghetti-Key": "{key}"
+              }
             }
           ]
         },

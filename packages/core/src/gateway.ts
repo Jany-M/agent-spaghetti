@@ -104,7 +104,7 @@ export class Gateway {
       if (chunk !== undefined) c.res.write(chunk);
     };
     const { id, done } = this.d.runner.start(c.who, { target: r.target, model: r.model, kind: what.kind, difficulty: what.difficulty, classification: what, reason: `model gateway ${path.slice(4)}`, returnTo: 'none', jobId: this.session,
-      task: JSON.stringify(body.messages ?? body.prompt ?? body.input ?? '') }, {
+      task: JSON.stringify(body.messages ?? body.prompt ?? body.input ?? '') }, { asked: lastUserText(body),
       engine: signal => { const s = this.d.runner.server(t, r.model); return openaiForward(s.target, path.slice(3), body, { signal: AbortSignal.any([signal, c.signal]), onQueue: s.onQueue, write }); } });
     c.signal.addEventListener('abort', () => this.d.runner.cancel(id), { once: true });   // the tool gave up: no question left waiting
     const row = await done;
