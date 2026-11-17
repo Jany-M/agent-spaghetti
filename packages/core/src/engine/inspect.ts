@@ -99,11 +99,13 @@ export async function isConnected(env: Environment, m: Manifest): Promise<boolea
   const entry = (pick(parseJsonc(await env.readFile(s.mcpClient.config)), s.mcpClient.key) as Record<string, unknown> | undefined)?.['agent-spaghetti'];
   return !!entry && asMe.test(JSON.stringify(entry));
 }
+/** A client's line in the Tools panel (the scan's, and connect's when it changes it). */
+export const connectedWhy = (on: boolean) => (on ? 'connected to agent-spaghetti' : 'not connected to agent-spaghetti');
 function explain(m: Manifest, installs: Install[], hit: unknown, backends: BackendInfo[], inv: Inventory, connected: boolean | undefined): Pick<Detection, 'connectable' | 'why'> {
   const partial = inv.partial.length ? ` (partial scan: ${inv.partial.join(', ')})` : '';
   if (m.detect?.http && !hit) return { connectable: 'needs-setup', why: 'installed, server not running' + partial };
   if (m.models) return { connectable: 'yes', why: backends.length ? `${backends.length} model(s) loaded` : 'server up, no model loaded' };
-  if (connected !== undefined) return { connectable: 'yes', why: connected ? 'connected to agent-spaghetti' : 'not connected to agent-spaghetti' };
+  if (connected !== undefined) return { connectable: 'yes', why: connectedWhy(connected) };
   return { connectable: 'yes', why: installs.length > 1 ? `${installs.length} installs` : hit || installs.some(i => i.via === 'process') ? 'running' : 'installed' };
 }
 

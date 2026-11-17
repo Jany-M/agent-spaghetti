@@ -9,6 +9,7 @@ import type { Settings } from './settings.ts';
 import type { Consent } from './consent.ts';
 import type { EnvCommand, EnvResults } from './actions.ts';
 import type { Ledger } from './ledger.ts';
+import { connectedWhy } from './engine/inspect.ts';
 import type { Runner } from './runner.ts';
 import type { Gateway } from './gateway.ts';
 import type { Dispatcher } from './dispatcher.ts';
@@ -194,7 +195,7 @@ export const handlers: Handlers = {
       if (r?.result) {
         if (r.result.applied) {   // the panel updates at once: patch the saved scan, tell everyone
           const snap = snapshot(s);
-          if (snap) s.store.saveSnapshot('scan', { ...snap, detections: snap.detections.map(d => d.integration === id && d.envId === envId ? { ...d, connected: on } : d) });
+          if (snap) s.store.saveSnapshot('scan', { ...snap, detections: snap.detections.map(d => d.integration === id && d.envId === envId ? { ...d, connected: on, why: connectedWhy(on) } : d) });
           s.bus.emit({ ts: Date.now(), type: 'client.connected', envId, source: id, data: { integration: id, on } });
         }
         return r.result;
