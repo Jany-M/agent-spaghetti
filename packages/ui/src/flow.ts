@@ -5,7 +5,7 @@
 // (flowModel) from data the popover already has (status.live, the integrations rows) and one pure layout for whatever space there
 // is (flowLayout); the view only draws them. Animation is SVG/CSS only, drawn only while the page can be seen.
 import { createElement as h, useEffect, useRef, useState } from 'react';
-import { TOOL_GROUPS, type LiveResult, type LiveRun, type ToolGroup, type ToolRow } from '@agent-spaghetti/sdk/web';
+import { type LiveResult, type LiveRun, type ToolGroup, type ToolRow } from '@agent-spaghetti/sdk/web';
 import type { Bridge } from './bridge.ts';
 import { useOp } from './hooks.ts';
 import { setToolColors, toolColor } from './story.ts';
@@ -42,67 +42,71 @@ export function flowModel(rows: Row[], runs: LiveRun[], results: LiveResult[], n
     ...back.map(r => ({ from: r.from, to: r.to, back: true as const, ...(r.how === 'unread' ? { waiting: true as const } : {}) }))] };
 }
 
-/** Where a group sits around the hub, and its caption. */
-const SIDES: Array<{ side: 'left' | 'right' | 'top' | 'bottom'; groups: FlowGroup[] }> = [
-  { side: 'left', groups: ['apps', 'callers'] }, { side: 'right', groups: ['agents'] }, { side: 'top', groups: ['models'] }, { side: 'bottom', groups: ['tools'] }];
-const CAPTION: Record<string, string> = { ...Object.fromEntries(TOOL_GROUPS.map(g => [g.id, g.label])), callers: 'You' };
+/** The groups clockwise from the top (the Tools panel's groups; callers that are no listed tool come last), and their captions. */
+const ORDER: FlowGroup[] = ['models', 'agents', 'tools', 'apps', 'callers'];
+const CAPTION: Record<FlowGroup, string> = { models: 'models', agents: 'agents', tools: 'tools', apps: 'apps', callers: 'you' };   // short: they ring the sun
 export interface FlowBox { x: number; y: number; w: number; h: number }
-export interface FlowPlan { width: number; height: number; k: number; boxes: Record<string, FlowBox & { side: string }>; captions: Array<{ text: string; x: number; y: number }> }
-/** Every block's place for a space `width` wide (and `height` tall when given: the blocks then spread over all of it; without,
- *  the drawing is as tall as it needs). Model servers along the top, other tools along the bottom, editors and callers on the left,
- *  agents on the right, the hub in the middle with clear space around it; blocks grow with the space (factor `k`) and never overlap. */
+export interface FlowPlan {
+  width: number; height: number; k: number; cx: number; cy: number; r: number;   // the hub: a sun of radius r at (cx, cy)
+  boxes: Record<string, FlowBox>; orbits: Array<{ rx: number; ry: number }>; captions: Array<{ text: string; angle: number }>;
+}
+const apart = (a: FlowBox, b: FlowBox, gap: number) => a.x + a.w + gap <= b.x || b.x + b.w + gap <= a.x || a.y + a.h + gap <= b.y || b.y + b.h + gap <= a.y;
+/** How far a block is from a point (0 when the point is inside it). */
+const reach = (b: FlowBox, x: number, y: number) => Math.hypot(Math.max(b.x - x, 0, x - b.x - b.w), Math.max(b.y - y, 0, y - b.y - b.h));
+/** A solar system for a space `width` wide (and `height` tall when given; without, as tall as it needs): Agent Spaghetti is the
+ *  sun in the middle, the tools are planets on one or more elliptical orbits shaped like the space, each group in its own arc
+ *  (model servers at the top, then clockwise agents, other tools, editors and callers). Planets grow with the space (factor `k`),
+ *  never touch each other or the sun; when one orbit is too crowded, neighbours alternate between orbits, then the planets
+ *  shrink, then (only when nothing else fits) the drawing gets taller and scrolls. */
 export function flowLayout(nodes: FlowNode[], width: number, height?: number): FlowPlan {
-  const of = (side: string) => nodes.filter(n => SIDES.find(s => s.side === side)!.groups.includes(n.group as FlowGroup));
-  const [left, right, top, bottom] = ['left', 'right', 'top', 'bottom'].map(of);
-  /** Sizes at factor k; a side whose column would be taller than the window gets more columns (`cols`, from a first pass). */
-  const sizes = (k: number, cols = [1, 1]) => {
-    const [pad, gap, cap, room, hubW, hubH, bh] = [8, 8, 13, 30, 120, 60, 54].map(n => Math.round(n * k));
-    const n = cols[0] + cols[1], bw = Math.max(84, Math.min(Math.round(118 * k), Math.floor((width - hubW - 2 * room - 2 * pad - (n - 2) * gap) / n)));
-    const perRow = Math.max(1, Math.floor((width - 2 * pad + gap) / (bw + gap)));
-    const band = (m: number) => (m ? cap + Math.ceil(m / perRow) * (bh + gap) : 0);
-    const col = (m: number, c: number) => (m ? cap + Math.ceil(m / c) * (bh + gap) : 0);
-    const middle = height ? height - 2 * pad - band(top.length) - band(bottom.length) : 0, fits = Math.max(1, Math.floor((middle - cap) / (bh + gap)));
-    return { pad, gap, cap, room, hubW, hubH, bh, bw, perRow, band, fits: [left, right].map(s => (height ? Math.ceil(s.length / fits) || 1 : 1)),
-      need: 2 * pad + band(top.length) + band(bottom.length) + Math.max(col(left.length, cols[0]), col(right.length, cols[1]), hubH + 2 * room) };
+  const planets = ORDER.flatMap(g => nodes.filter(n => n.group === g)), n = planets.length;
+  const run = (g: FlowGroup) => planets.filter(p => p.group === g).length;
+  /** Angles that space n planets evenly along an ellipse (by length, not by angle: no crowding at its narrow ends), the first
+   *  group centered at the top, then clockwise. */
+  const angles = (rx: number, ry: number) => {
+    const N = 720, at = (i: number) => -Math.PI / 2 + (i / N) * 2 * Math.PI, len = [0];
+    for (let i = 1; i <= N; i++) len.push(len[i - 1] + Math.hypot(rx * (Math.cos(at(i)) - Math.cos(at(i - 1))), ry * (Math.sin(at(i)) - Math.sin(at(i - 1)))));
+    const L = len[N], step = L / Math.max(n, 1), first = -((run(planets[0]?.group as FlowGroup) - 1) / 2) * step;
+    return planets.map((_, i) => { const want = (((first + i * step) % L) + L) % L; let j = 0; while (len[j + 1] < want) j++; return at(j); });
   };
-  let k = Math.max(1, Math.min(1.7, width / 400));
-  while (height && k > 1 && sizes(k).need > height) k = Math.max(1, k - 0.02);   // smaller blocks before a second column
-  const s = sizes(k), cols = s.fits, most = Math.max(2, Math.floor((width - s.hubW - 2 * s.room - 2 * s.pad + s.gap) / (84 + s.gap)));   // columns that fit beside the hub
-  while (cols[0] + cols[1] > most) cols[cols[0] > cols[1] ? 0 : 1]--;                                      // else: taller, the window scrolls
-  const { pad, gap, cap, hubW, hubH, bh, bw, perRow, band, need } = sizes(k, cols);
-  const H = Math.max(need, height ?? 0), y0 = pad + band(top.length), y1 = H - pad - band(bottom.length);
-  const boxes: FlowPlan['boxes'] = {}, captions: FlowPlan['captions'] = [];
-  const caption = (list: FlowNode[], x: number, y: number) => captions.push({ text: [...new Set(list.map(n => CAPTION[n.group]))].join(' · '), x, y: y + cap - 4 });
-  const column = (list: FlowNode[], x: number, c: number, side: string) => {   // x: the side's outer edge; columns go inward
-    if (!list.length) return;
-    const w = c * bw + (c - 1) * gap, x0 = side === 'left' ? x : x - w, rows = Math.ceil(list.length / c), step = (y1 - y0 - cap) / rows;
-    caption(list, x0 + w / 2, y0);
-    list.forEach((n, i) => { const cx = side === 'left' ? Math.floor(i / rows) : c - 1 - Math.floor(i / rows);
-      boxes[n.id] = { x: x0 + cx * (bw + gap), y: Math.round(y0 + cap + step * (i % rows) + (step - bh) / 2), w: bw, h: bh, side }; });
+  const place = (k: number, H: number, rings: number): FlowPlan | null => {
+    const [pad, gap, room, r, bw, bh] = [8, 6, 14, 40, 108, 48].map(x => Math.round(x * k)), cx = width / 2, cy = H / 2;
+    const out = { rx: cx - pad - bw / 2, ry: cy - pad - bh / 2 }, inner = { rx: r + room + bw / 2, ry: r + room + bh / 2 };
+    if (out.rx < inner.rx || out.ry < inner.ry) return null;
+    const orbits = Array.from({ length: rings }, (_, j) => ({ rx: Math.max(inner.rx, out.rx * (1 - 0.3 * j)), ry: Math.max(inner.ry, out.ry * (1 - 0.3 * j)) }));
+    const boxes: FlowPlan['boxes'] = {}, angle = angles(out.rx, out.ry);
+    planets.forEach((p, i) => { const o = orbits[i % rings], a = angle[i];
+      boxes[p.id] = { x: Math.round(cx + o.rx * Math.cos(a) - bw / 2), y: Math.round(cy + o.ry * Math.sin(a) - bh / 2), w: bw, h: bh }; });
+    const all = Object.values(boxes);
+    if (!all.every((b, i) => reach(b, cx, cy) >= r + room && all.every((c, j) => i === j || apart(b, c, gap)))) return null;
+    const captions = ORDER.filter(run).map(g => { const ids = planets.flatMap((p, i) => (p.group === g ? [i] : [])), a = ids.map(i => angle[i]);
+      return { text: CAPTION[g], angle: Math.atan2(a.reduce((s, x) => s + Math.sin(x), 0), a.reduce((s, x) => s + Math.cos(x), 0)) }; });
+    boxes[HUB] = { x: cx - r, y: cy - r, w: 2 * r, h: 2 * r };
+    return { width, height: H, k, cx, cy, r, boxes, orbits, captions };
   };
-  const strip = (list: FlowNode[], y: number, side: string) => {
-    if (!list.length) return;
-    caption(list, width / 2, y);
-    list.forEach((n, i) => { const r = Math.floor(i / perRow), inRow = Math.min(perRow, list.length - r * perRow), w = inRow * bw + (inRow - 1) * gap;
-      boxes[n.id] = { x: Math.round(width / 2 - w / 2 + (i % perRow) * (bw + gap)), y: y + cap + r * (bh + gap), w: bw, h: bh, side }; });
-  };
-  column(left, pad, cols[0], 'left'); column(right, width - pad, cols[1], 'right'); strip(top, pad, 'top'); strip(bottom, y1, 'bottom');
-  // the hub: centered between the sides, however many columns each has
-  const span = (c: number) => c * bw + (c - 1) * gap, from = left.length ? pad + span(cols[0]) : 0, to = right.length ? width - pad - span(cols[1]) : width;
-  boxes[HUB] = { x: Math.round((from + to) / 2 - hubW / 2), y: Math.round((y0 + y1) / 2 - hubH / 2), w: hubW, h: hubH, side: 'hub' };
-  return { width, height: H, k, boxes, captions };
+  const most = Math.max(1, Math.min(1.5, width / 420, height ? height / 360 : 9));
+  for (let H = height ?? Math.round(width * 0.8), tries = 0; ; H = Math.round(H * 1.1), tries++) {   // taller only when nothing fits
+    for (let k = most; k >= 0.9; k = Math.round((k - 0.05) * 100) / 100)   // smaller (0.9: still readable) before taller
+      for (let rings = 1; rings <= 3; rings++) { const p = place(k, H, rings); if (p) return p; }
+    if (tries > 20) return place(1, H, 3) ?? place(1, H * 2, 3)!;
+  }
 }
 
-const center = (b: FlowBox) => ({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
-/** A smooth line from one block's edge to another's (leaving sideways from a column, up or down from a strip). */
-function curve(a: FlowBox & { side: string }, b: FlowBox & { side: string }): string {
-  const other = a.side === 'hub' ? b : a, across = other.side === 'left' || other.side === 'right', ca = center(a), cb = center(b);
-  const edge = (box: FlowBox, c: { x: number; y: number }, to: { x: number; y: number }) => (across ? { x: c.x + Math.sign(to.x - c.x) * box.w / 2, y: c.y } : { x: c.x, y: c.y + Math.sign(to.y - c.y) * box.h / 2 });
-  const p = edge(a, ca, cb), q = edge(b, cb, ca), mx = (p.x + q.x) / 2, my = (p.y + q.y) / 2;
-  return across ? `M${p.x},${p.y} C${mx},${p.y} ${mx},${q.y} ${q.x},${q.y}` : `M${p.x},${p.y} C${p.x},${my} ${q.x},${my} ${q.x},${q.y}`;
+/** A line from one body's edge to another's, bent a little the same way around the sun (a swirl). */
+function curve(plan: FlowPlan, from: string, to: string): string {
+  const { cx, cy, r } = plan, edge = (id: string, tx: number, ty: number) => {
+    const b = plan.boxes[id], x = b.x + b.w / 2, y = b.y + b.h / 2, dx = tx - x, dy = ty - y, d = Math.hypot(dx, dy) || 1;
+    const t = id === HUB ? r : Math.min(b.w / 2 / (Math.abs(dx) / d || 1e-9), b.h / 2 / (Math.abs(dy) / d || 1e-9));
+    return { x: x + (dx / d) * t, y: y + (dy / d) * t };
+  };
+  const planet = plan.boxes[from === HUB ? to : from], px = planet.x + planet.w / 2 - cx, py = planet.y + planet.h / 2 - cy, pl = Math.hypot(px, py) || 1;
+  const a = plan.boxes[from], b = plan.boxes[to];
+  const p = edge(from, b.x + b.w / 2, b.y + b.h / 2), q = edge(to, a.x + a.w / 2, a.y + a.h / 2), bend = 0.18 * Math.hypot(q.x - p.x, q.y - p.y);
+  const r1 = (n: number) => Math.round(n * 10) / 10;
+  return `M${r1(p.x)},${r1(p.y)} Q${r1((p.x + q.x) / 2 - (py / pl) * bend)},${r1((p.y + q.y) / 2 + (px / pl) * bend)} ${r1(q.x)},${r1(q.y)}`;
 }
-/** Text in at most `max` lines of `w` pixels at font size `f`, broken between words (after "for", "on", "from" or "answered" first, so a tool's
- *  name stays together); the last line cut with … if needed (the block's tooltip has it whole). */
+/** Text in at most `max` lines of `w` pixels at font size `f`, broken between words (after "for", "on", "from" or "answered" first,
+ *  so a tool's name stays together); the last line cut with … if needed (the block's tooltip has it whole). */
 function wrap(text: string, w: number, f: number, max: number): string[] {
   const n = Math.floor(w / (f * 0.56));
   const fill = (s: string) => s.split(' ').reduce<string[]>((ls, word) => (ls.length && ls[ls.length - 1].length + 1 + word.length <= n
@@ -114,37 +118,50 @@ function wrap(text: string, w: number, f: number, max: number): string[] {
 const LIGHTS = 3;                                                // lights travelling along one line at a time
 /** `still`: nothing moves (the page is hidden). `size`: the space to fill (the window); without a height the drawing is as tall as it needs. */
 export function FlowView({ flow, still = false, size }: { flow: Flow; still?: boolean; size?: { width: number; height?: number } }) {
-  const plan = flowLayout(flow.nodes, size?.width ?? 400, size?.height), { boxes, k } = plan, px = (n: number) => Math.round(n * k * 10) / 10;
+  const plan = flowLayout(flow.nodes, size?.width ?? 400, size?.height), { boxes, k, cx, cy, r } = plan, px = (n: number) => Math.round(n * k * 10) / 10;
   const part = (from: string, to: string, l: FlowLink, key: string) => {
-    const c = toolColor(l.back ? l.from : l.to), d = curve(boxes[from], boxes[to]);   // the work's color: the tool doing it
+    const c = toolColor(l.back ? l.from : l.to), d = curve(plan, from, to);   // the work's color: the tool doing it
     return h('g', { key, className: ['link', c.className, l.waiting ? 'waiting' : ''].filter(Boolean).join(' '), style: c.style },
       h('path', { className: 'trail', d }),
       ...(still ? [] : Array.from({ length: LIGHTS }, (_, i) => h('circle', { key: i, className: 'light', r: px(2.4) },
         h('animateMotion', { dur: l.waiting ? '3.6s' : '1.5s', begin: `${(-i * (l.waiting ? 3.6 : 1.5)) / LIGHTS}s`, repeatCount: 'indefinite', path: d })))));
   };
+  const cr = r + px(9), ring = (sweep: 0 | 1) => `M${cx - cr},${cy} A${cr},${cr} 0 1 ${sweep} ${cx + cr},${cy} A${cr},${cr} 0 1 ${sweep} ${cx - cr},${cy}`;
+  const hub = flow.nodes.find(n => n.id === HUB)!;
   return h('svg', { className: `flow${still ? ' still' : ''}`, viewBox: `0 0 ${plan.width} ${plan.height}`, width: plan.width, height: plan.height, role: 'img',
     'aria-label': flow.nodes.filter(n => n.on && n.label).map(n => `${n.name}: ${n.label}`).join('; ') || 'Nothing running' },
   h('defs', null,
     h('pattern', { id: 'flow-dots', width: 18, height: 18, patternUnits: 'userSpaceOnUse' }, h('circle', { cx: 1.5, cy: 1.5, r: 0.8 })),
-    h('linearGradient', { id: 'flow-glass', x1: 0, y1: 0, x2: 0, y2: 1 }, h('stop', { offset: 0, className: 'g0' }), h('stop', { offset: 1, className: 'g1' }))),
+    h('linearGradient', { id: 'flow-glass', x1: 0, y1: 0, x2: 0, y2: 1 }, h('stop', { offset: 0, className: 'g0' }), h('stop', { offset: 1, className: 'g1' })),
+    h('radialGradient', { id: 'flow-sun' }, h('stop', { offset: 0, className: 's0' }), h('stop', { offset: 1, className: 's1' })),
+    h('path', { id: 'flow-cap-top', d: ring(1) }), h('path', { id: 'flow-cap-bottom', d: ring(0) })),
   h('rect', { className: 'backdrop', width: plan.width, height: plan.height }),
-  ...plan.captions.map(c => h('text', { key: c.text, className: 'caption', x: c.x, y: c.y, style: { fontSize: px(7) } }, c.text)),
-  ...flow.nodes.filter(n => n.id !== HUB).map(n => h('path', { key: `s-${n.id}`, className: 'spoke', d: curve(boxes[HUB], boxes[n.id]) })),
+  ...plan.orbits.map((o, i) => h('ellipse', { key: `o${i}`, className: 'orbit', cx, cy, rx: o.rx, ry: o.ry })),
+  ...plan.captions.map(c => {                                    // around the sun, on the side of its group; upright above and below
+    const below = Math.sin(c.angle) > 0.2, deg = (c.angle * 180) / Math.PI, at = below ? (180 - deg) / 360 : (((deg + 180) % 360) + 360) % 360 / 360;
+    return h('text', { key: c.text, className: 'caption', dy: below ? px(7) : -px(2), style: { fontSize: px(6.5) } },
+      h('textPath', { href: `#flow-cap-${below ? 'bottom' : 'top'}`, startOffset: `${Math.round(at * 1000) / 10}%` }, c.text));
+  }),
+  ...flow.nodes.filter(n => n.id !== HUB).map(n => h('path', { key: `s-${n.id}`, className: 'spoke', d: curve(plan, HUB, n.id) })),
   ...flow.links.flatMap((l, i) => [part(l.from, HUB, l, `a-${i}`), part(HUB, l.to, l, `b-${i}`)]),
-  ...flow.nodes.map(n => {
-    const b = boxes[n.id], hub = n.id === HUB, c = hub ? {} : toolColor(n.id), room = b.w - px(hub ? 12 : 20);
-    const what = n.label ? wrap(n.label, room, px(8), n.sub || hub ? 2 : 3) : [], next = n.sub && !hub ? wrap(n.sub, room, px(7), 1) : [];   // name, then up to three lines
-    const x = hub ? b.w / 2 : px(12), top = hub ? 40 : 26;
-    return h('g', { key: n.id, style: c.style, className: ['node', hub ? 'hub' : c.className, n.on ? 'on' : ''].filter(Boolean).join(' '), transform: `translate(${b.x},${b.y})` },
+  h('g', { key: HUB, className: `node hub${hub.on ? ' on' : ''}` },
+    h('title', null, [hub.name, hub.label].join(': ')),
+    h('circle', { className: 'corona', cx, cy, r: r + px(6) }),
+    h('circle', { className: 'sun', cx, cy, r }),
+    h('text', { className: 'name', x: cx, y: cy - px(5), style: { fontSize: px(9) } }, 'Agent'),
+    h('text', { className: 'name', x: cx, y: cy + px(5), style: { fontSize: px(9) } }, 'Spaghetti'),
+    h('text', { className: 'what', x: cx, y: cy + px(17), style: { fontSize: px(7) } }, wrap(hub.label, 2 * r - px(14), px(7), 1)[0])),
+  ...flow.nodes.filter(n => n.id !== HUB).map(n => {
+    const b = boxes[n.id], c = toolColor(n.id), room = b.w - px(18);
+    const what = n.label ? wrap(n.label, room, px(7.5), n.sub ? 2 : 3) : [], next = n.sub ? wrap(n.sub, room, px(7), 1) : [];   // name, then up to three lines
+    return h('g', { key: n.id, style: c.style, className: ['node', c.className, n.on ? 'on' : ''].filter(Boolean).join(' '), transform: `translate(${b.x},${b.y})` },
       h('title', null, [n.name, n.label, n.sub].filter(Boolean).join(': ')),
-      hub ? h('rect', { className: 'ring', x: -px(5), y: -px(5), width: b.w + px(10), height: b.h + px(10), rx: px(16) }) : null,
-      h('rect', { className: 'box', width: b.w, height: b.h, rx: px(9) }),
-      hub ? null : h('rect', { className: 'bar', width: px(3), height: b.h - px(12), x: px(4), y: px(6), rx: px(1.5) }),
-      h('circle', { className: 'dot', cx: b.w - px(8), cy: px(8), r: px(2.2) }),
-      h('text', { className: 'name', x, y: px(hub ? 17 : 14), style: { fontSize: px(hub ? 10 : 8) } }, wrap(n.name, room - px(hub ? 0 : 8), px(hub ? 10 : 8), 1)[0]),
-      hub ? h('text', { className: 'tag', x, y: px(28), style: { fontSize: px(6.5) } }, 'JEV · ROUTING') : null,
+      h('rect', { className: 'box', width: b.w, height: b.h, rx: px(8) }),
+      h('rect', { className: 'bar', width: px(2.5), height: b.h - px(12), x: px(4), y: px(6), rx: px(1.25) }),
+      h('circle', { className: 'dot', cx: b.w - px(7), cy: px(8), r: px(2) }),
+      h('text', { className: 'name', x: px(11), y: px(13), style: { fontSize: px(8) } }, wrap(n.name, room - px(6), px(8), 1)[0]),
       ...[...what.map(t => ['what', t]), ...next.map(t => ['what next', t])].map(([cls, t], i) =>
-        h('text', { key: i, className: cls, x, y: px(top + i * 10), style: { fontSize: px(cls === 'what' ? 8 : 7) } }, t)));
+        h('text', { key: i, className: cls, x: px(11), y: px(24 + i * 9), style: { fontSize: px(cls === 'what' ? 7.5 : 7) } }, t)));
   }));
 }
 

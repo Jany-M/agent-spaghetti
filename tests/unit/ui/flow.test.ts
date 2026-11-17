@@ -52,24 +52,28 @@ test('the reducer feeds it: runs come and go; a chain\'s result is tracked until
   assert.equal(unread.results[7].how, 'unread');
   assert.equal(liveState([ev(4, 'run.delivered', { id: 7, how: 'read', to: 'ide' })], unread).results[7].how, 'read');
 });
-test('flowLayout: grouped sides, the hub clear of every block, no overlaps, and the whole space used when given', () => {
+test('flowLayout: a solar system: planets never touch each other or the sun, stay inside, fill the window, grouped in arcs', () => {
   const many = flowModel([...rows, ...Array.from({ length: 9 }, (_, i) => row(`t${i}`, `Tool${i}`, { receives: 'module' })),
     row('m2', 'More Models', { group: 'models', receives: 'openai' }), row('ed', 'Editor', { group: 'apps', connection: 'connected' })], [], [], 0).nodes;
-  for (const [w, ht] of [[380, undefined], [500, 400], [650, 490], [760, 560], [1200, 760], [1400, 900]] as const) {
-    const p = flowLayout(many, w, ht), all = Object.entries(p.boxes), hub = p.boxes[HUB];
-    const apart = (a: FlowBox, b: FlowBox) => a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y;
-    assert.ok(all.every(([i, a]) => all.every(([j, b]) => i === j || apart(a, b))), `no overlaps at ${w}`);
-    assert.ok(all.filter(([id]) => id !== HUB).every(([, b]) => Math.max(b.x - (hub.x + hub.w), hub.x - (b.x + b.w), b.y - (hub.y + hub.h), hub.y - (b.y + b.h)) >= 20), `room around the hub at ${w}`);
-    assert.ok(all.every(([, b]) => b.x >= 0 && b.x + b.w <= w && b.y >= 0 && b.y + b.h <= p.height), `inside at ${w}`);
-    if (ht) assert.ok(w < 650 ? p.height >= ht : p.height === ht, 'fills the window (taller and scrolling only when too small for all)');
-    const side = (id: string) => p.boxes[id].side;
-    assert.deepEqual([side('ide'), side('helper'), side('lms'), side('mem')], ['left', 'right', 'top', 'bottom']);
-  }
   const six = flowModel(Array.from({ length: 6 }, (_, i) => row(`a${i}`, `Agent${i}`, { receives: 'module' })), [], [], 0).nodes;
-  for (const [w, ht] of [[650, 490], [760, 560], [1200, 760]]) assert.equal(new Set(six.slice(1).map(n => flowLayout(six, w, ht).boxes[n.id].x)).size, 1, `one column of six agents at ${w}×${ht}: smaller blocks first`);
-  const small = flowLayout(many, 760, 560), big = flowLayout(many, 1400, 900);
-  assert.ok(big.k > small.k && big.boxes.helper.w > small.boxes.helper.w, 'blocks grow with the window');
-  assert.deepEqual(flowLayout(many, 380).captions.map(c => c.text).sort(), ['Agents', 'Editors & apps', 'Model servers', 'Other tools']);
+  for (const nodes of [many, six, flowModel(rows, [], [], 0).nodes])
+    for (const [w, ht] of [[380, undefined], [420, undefined], [520, 420], [650, 490], [760, 560], [1200, 760], [1400, 900]] as const) {
+      const p = flowLayout(nodes, w, ht), planets = Object.entries(p.boxes).filter(([id]) => id !== HUB).map(([, b]) => b);
+      const apart = (a: FlowBox, b: FlowBox) => a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y;
+      const reach = (b: FlowBox) => Math.hypot(Math.max(b.x - p.cx, 0, p.cx - b.x - b.w), Math.max(b.y - p.cy, 0, p.cy - b.y - b.h));
+      assert.ok(planets.every((a, i) => planets.every((b, j) => i === j || apart(a, b))), `no overlaps at ${w}×${ht}`);
+      assert.ok(planets.every(b => reach(b) >= p.r + 10), `clear of the sun at ${w}×${ht}`);
+      assert.ok(planets.every(b => b.x >= 0 && b.x + b.w <= w && b.y >= 0 && b.y + b.h <= p.height), `inside at ${w}×${ht}`);
+      if (ht && (w >= 760 || nodes !== many)) assert.equal(p.height, ht, `fills the window at ${w}×${ht}`);   // sixteen tools in a small window: it scrolls
+    }
+  const p = flowLayout(flowModel(rows, [], [], 0).nodes, 760, 560), at = (id: string) => p.boxes[id], mid = (b: FlowBox) => [b.x + b.w / 2 - p.cx, b.y + b.h / 2 - p.cy];
+  assert.ok(mid(at('lms'))[1] < 0 && Math.abs(mid(at('lms'))[0]) < 1, 'model servers at the top');
+  assert.ok(mid(at('helper'))[0] > 0 && mid(at('ide'))[0] < 0 && mid(at('mem'))[1] > 0, 'agents right, other tools below, editors left');
+  assert.deepEqual(p.captions.map(c => c.text), ['models', 'agents', 'tools', 'apps']);
+  assert.equal(p.orbits.length, 1, 'one orbit when there is room');
+  assert.ok(flowLayout(many, 760, 560).orbits.length > 1, 'crowded: neighbours alternate between orbits');
+  const big = flowLayout(six, 1400, 900), small = flowLayout(six, 650, 490);
+  assert.ok(big.k > small.k && big.boxes.a0.w > small.boxes.a0.w, 'planets grow with the window');
 });
 test('FlowView: blocks in their tool color, lights moving along the lines while work or a result is on its way; nothing animated when still', () => {
   const f = flowModel(rows, [run({ kind: 'review' })], [result({ id: 2, from: 'lms', to: 'ide' })], 9000);
@@ -84,8 +88,8 @@ test('FlowView: blocks in their tool color, lights moving along the lines while 
   assert.match(chain, /<text class="what next"[^>]*>then Local Models<\/text>/);
   const long = html(h(FlowView, { flow: flowModel([...rows, row('x', 'An Extremely Long Integration Name Indeed', { receives: 'module' })], [run({ target: 'x', kind: 'review' })], [], 9000), size: { width: 400 } }));
   assert.match(long, /<text class="name"[^>]*>An Extremely L[^<]*…<\/text>/, 'a long name is cut, the tooltip has it whole');
-  assert.match(page, /<g class="node hub on"/);
-  assert.match(page, /<text class="caption"[^>]*>Model servers<\/text>/);
+  assert.match(page, /<g class="node hub on"><title>Agent Spaghetti: 1 task running<\/title><circle class="corona"/);
+  assert.match(page, /<textPath href="#flow-cap-top" startOffset="25%">models<\/textPath>/, 'a caption around the sun on its group\'s side');
   const still = html(h(FlowView, { flow: f, still: true }));
   assert.match(still, /<svg class="flow still"/); assert.doesNotMatch(still, /animateMotion/);
   assert.match(html(h(FlowView, { flow: flowModel(rows, [], [], 0) })), /aria-label="Nothing running"/);

@@ -80,14 +80,17 @@ textarea { resize:vertical; }
 .tone-ok, .runs .line.tone-ok { border-left-color:var(--idle); } .tone-fail, .runs .line.tone-fail { border-left-color:var(--problem); }
 .tone-run, .runs .line.tone-run { border-left-color:var(--working); }
 button.badge { border:0; cursor:pointer; }
-/* the flow diagram: glassy blocks in the tools' colors (currentColor) on a dot grid; a working block glows and its dot pulses; lights
-   travel along the lines the way the work goes (slower and dimmer while a result waits for its caller); the hub's ring turns while
-   anything runs. SVG/CSS animation only, none when still or with reduced motion. */
+/* the flow diagram, a small solar system: Agent Spaghetti the sun, the tools glassy planets in their colors (currentColor) on faint
+   orbits over a dot grid; a working planet glows and its dot pulses, the sun's corona breathes while anything runs; lights travel
+   along the lines the way the work goes (slower and dimmer while a result waits for its caller). SVG/CSS animation only, none when
+   still or with reduced motion. */
 .flow-box { width:100%; } .flow-box.fill { flex:1; min-height:0; overflow:auto; }
 .flow { display:block; }
 .flow .backdrop { fill:url(#flow-dots); } .flow pattern circle { fill:var(--line); }
 .flow .g0 { stop-color:var(--card); } .flow .g1 { stop-color:var(--bg); }
-.flow .caption { text-anchor:middle; fill:var(--muted); font-weight:600; letter-spacing:.12em; text-transform:uppercase; }
+.flow .s0 { stop-color:var(--card); } .flow .s1 { stop-color:var(--bg); }
+.flow .orbit { fill:none; stroke:var(--line); stroke-width:1; stroke-dasharray:1 5; }
+.flow .caption { fill:var(--muted); font-weight:600; letter-spacing:.14em; text-transform:uppercase; text-anchor:middle; }
 .flow .spoke { stroke:var(--line); stroke-width:1; stroke-dasharray:2 4; fill:none; }
 .flow .trail { stroke:currentColor; stroke-width:1.6; stroke-opacity:.55; fill:none; stroke-linecap:round; filter:drop-shadow(0 0 2px currentColor); }
 .flow .light { fill:currentColor; filter:drop-shadow(0 0 3px currentColor) drop-shadow(0 0 6px currentColor); }
@@ -96,15 +99,17 @@ button.badge { border:0; cursor:pointer; }
 .flow .bar { fill:currentColor; opacity:.5; } .flow .on .bar { opacity:1; }
 .flow .dot { fill:var(--line); } .flow .on .dot { fill:currentColor; animation:flow-pulse 1.2s ease-in-out infinite; }
 .flow .on .box { stroke-opacity:1; stroke-width:1.4; animation:flow-glow 2s ease-in-out infinite; }
-.flow .hub { color:var(--fg); } .flow .hub .box { stroke-opacity:.6; stroke-width:1.4; }
-.flow .ring { fill:none; stroke:currentColor; stroke-opacity:.25; stroke-dasharray:6 10; } .flow .hub.on .ring { stroke-opacity:.6; animation:flow-orbit 3s linear infinite; }
+.flow .hub { color:var(--fg); }
+.flow .sun { fill:url(#flow-sun); stroke:currentColor; stroke-width:1.5; stroke-opacity:.7; filter:drop-shadow(0 0 6px currentColor); }
+.flow .corona { fill:none; stroke:currentColor; stroke-opacity:.18; stroke-width:4; }
+.flow .hub.on .corona { animation:flow-corona 2.4s ease-in-out infinite; }
 .flow text { text-anchor:start; stroke:none; } .flow .hub text { text-anchor:middle; }
-.flow .name { font-weight:700; fill:currentColor; } .flow .tag { fill:var(--muted); letter-spacing:.18em; }
+.flow .name { font-weight:700; fill:currentColor; } .flow .hub .name { fill:var(--fg); }
 .flow .what { fill:var(--muted); } .flow .on .what { fill:var(--fg); } .flow .what.next { opacity:.75; }
 .flow.still * { animation:none !important; }
 @keyframes flow-glow { 50% { filter:drop-shadow(0 0 6px currentColor); } }
 @keyframes flow-pulse { 50% { opacity:.3; } }
-@keyframes flow-orbit { to { stroke-dashoffset:-64; } }
+@keyframes flow-corona { 50% { stroke-opacity:.45; stroke-width:7; } }
 @media (prefers-reduced-motion: reduce) { .flow * { animation:none !important; } }
 .flow-card { padding:4px; }
 .flow-window { display:flex; flex-direction:column; height:100vh; }
