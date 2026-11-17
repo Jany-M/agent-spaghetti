@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { createElement as h } from 'react';
 import { renderToStaticMarkup as html } from 'react-dom/server';
 import { liveState, type LiveResult, type LiveRun } from '@agent-spaghetti/sdk';
-import { FlowView, HUB, flowLayout, flowModel, type FlowBox } from '@agent-spaghetti/ui';
+import { FLOW_MIN, FlowView, HUB, flowLayout, flowModel, type FlowBox } from '@agent-spaghetti/ui';
 
 const row = (id: string, name: string, o: object = {}) => ({ id, name, state: 'installed' as const, group: 'agents' as const, ...o });
 const rows = [row('ide', 'Acme IDE', { group: 'apps', connection: 'connected' }), row('helper', 'Helper Agent CLI', { receives: 'module' }),
@@ -72,6 +72,12 @@ test('flowLayout: a solar system: planets never touch each other or the sun, sta
   assert.deepEqual(p.captions.map(c => c.text), ['models', 'agents', 'tools', 'apps']);
   assert.equal(p.orbits.length, 1, 'one orbit when there is room');
   assert.ok(flowLayout(many, 760, 560).orbits.length > 1, 'crowded: neighbours alternate between orbits');
+  const twenty = flowModel(Array.from({ length: 20 }, (_, i) => row(`z${i}`, `Tool${i}`, { group: ['agents', 'models', 'tools', 'apps'][i % 4], receives: 'module' })), [], [], 0).nodes;
+  for (const nodes of [many, six, twenty]) for (const [w, ht] of [[0, 0], [100, 80], [200, undefined], [359, 299], [300, 1000], [2000, 120]] as Array<[number, number | undefined]>) {
+    const p = flowLayout(nodes, w, ht);                        // a window made tiny: the drawing keeps its smallest size and scrolls
+    assert.ok(p && p.width === Math.max(w, FLOW_MIN.width) && p.height >= (ht === undefined ? 0 : Math.max(ht, FLOW_MIN.height)), `a drawing at ${w}×${ht}`);
+  }
+  assert.deepEqual(flowLayout(six, 100, 80).boxes, flowLayout(six, 200, 150).boxes, 'below the smallest size nothing moves');
   const big = flowLayout(six, 1400, 900), small = flowLayout(six, 650, 490);
   assert.ok(big.k > small.k && big.boxes.a0.w > small.boxes.a0.w, 'planets grow with the window');
 });

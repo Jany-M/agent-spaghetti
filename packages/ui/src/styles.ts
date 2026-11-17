@@ -84,7 +84,7 @@ button.badge { border:0; cursor:pointer; }
    orbits over a dot grid; a working planet glows and its dot pulses, the sun's corona breathes while anything runs; lights travel
    along the lines the way the work goes (slower and dimmer while a result waits for its caller). SVG/CSS animation only, none when
    still or with reduced motion. */
-.flow-box { width:100%; } .flow-box.fill { flex:1; min-height:0; overflow:auto; }
+.flow-box { width:100%; } .flow-box.fill { flex:1; min-height:0; overflow:auto; scrollbar-gutter:stable; }
 .flow { display:block; }
 .flow .backdrop { fill:url(#flow-dots); } .flow pattern circle { fill:var(--line); }
 .flow .g0 { stop-color:var(--card); } .flow .g1 { stop-color:var(--bg); }

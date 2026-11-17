@@ -58,7 +58,9 @@ const reach = (b: FlowBox, x: number, y: number) => Math.hypot(Math.max(b.x - x,
  *  (model servers at the top, then clockwise agents, other tools, editors and callers). Planets grow with the space (factor `k`),
  *  never touch each other or the sun; when one orbit is too crowded, neighbours alternate between orbits, then the planets
  *  shrink, then (only when nothing else fits) the drawing gets taller and scrolls. */
-export function flowLayout(nodes: FlowNode[], width: number, height?: number): FlowPlan {
+export const FLOW_MIN = { width: 360, height: 300 };          // below this the planets stop shrinking and moving: the window scrolls
+export function flowLayout(nodes: FlowNode[], space: number, tall?: number): FlowPlan {
+  const width = Math.max(FLOW_MIN.width, space), height = tall === undefined ? undefined : Math.max(FLOW_MIN.height, tall);
   const planets = ORDER.flatMap(g => nodes.filter(n => n.group === g)), n = planets.length;
   const run = (g: FlowGroup) => planets.filter(p => p.group === g).length;
   /** Angles that space n planets evenly along an ellipse (by length, not by angle: no crowding at its narrow ends), the first
@@ -88,7 +90,7 @@ export function flowLayout(nodes: FlowNode[], width: number, height?: number): F
   for (let H = height ?? Math.round(width * 0.8), tries = 0; ; H = Math.round(H * 1.1), tries++) {   // taller only when nothing fits
     for (let k = most; k >= 0.9; k = Math.round((k - 0.05) * 100) / 100)   // smaller (0.9: still readable) before taller
       for (let rings = 1; rings <= 3; rings++) { const p = place(k, H, rings); if (p) return p; }
-    if (tries > 20) return place(1, H, 3) ?? place(1, H * 2, 3)!;
+    if (tries > 40) return place(0.9, H, 3) ?? place(0.9, 3 * H, 3)!;   // not reached (tested): from FLOW_MIN.width up a taller orbit fits
   }
 }
 
@@ -180,7 +182,9 @@ export function FlowPanel({ bridge, runs, results, now, fill = false }: { bridge
   const [size, setSize] = useState<{ width: number; height?: number }>();
   useEffect(() => {
     const el = box.current; if (!el) return;
-    const measure = () => setSize({ width: Math.floor(el.clientWidth), ...(fill ? { height: Math.floor(el.clientHeight) } : {}) });
+    // sizes that never depend on the drawing: the width inside the scrollbar's reserved gutter, the height of the box itself (a
+    // scrollbar coming or going must not change the layout, or the two layouts take turns: blocks seem doubled)
+    const measure = () => setSize({ width: el.clientWidth, ...(fill ? { height: el.offsetHeight } : {}) });
     measure();
     const ro = new ResizeObserver(measure); ro.observe(el);
     return () => ro.disconnect();
