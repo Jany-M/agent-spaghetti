@@ -62,18 +62,21 @@ export function flowLayout(nodes: FlowNode[], width: number, height?: number): F
     const band = (m: number) => (m ? cap + Math.ceil(m / perRow) * (bh + gap) : 0);
     const col = (m: number, c: number) => (m ? cap + Math.ceil(m / c) * (bh + gap) : 0);
     const middle = height ? height - 2 * pad - band(top.length) - band(bottom.length) : 0, fits = Math.max(1, Math.floor((middle - cap) / (bh + gap)));
-    return { pad, gap, cap, hubW, hubH, bh, bw, perRow, band, fits: [left, right].map(s => (height ? Math.ceil(s.length / fits) || 1 : 1)),
+    return { pad, gap, cap, room, hubW, hubH, bh, bw, perRow, band, fits: [left, right].map(s => (height ? Math.ceil(s.length / fits) || 1 : 1)),
       need: 2 * pad + band(top.length) + band(bottom.length) + Math.max(col(left.length, cols[0]), col(right.length, cols[1]), hubH + 2 * room) };
   };
-  const k = Math.max(1, Math.min(1.7, width / 400, height ? height / sizes(1).need : 9)), cols = sizes(k).fits;
+  let k = Math.max(1, Math.min(1.7, width / 400));
+  while (height && k > 1 && sizes(k).need > height) k = Math.max(1, k - 0.02);   // smaller blocks before a second column
+  const s = sizes(k), cols = s.fits, most = Math.max(2, Math.floor((width - s.hubW - 2 * s.room - 2 * s.pad + s.gap) / (84 + s.gap)));   // columns that fit beside the hub
+  while (cols[0] + cols[1] > most) cols[cols[0] > cols[1] ? 0 : 1]--;                                      // else: taller, the window scrolls
   const { pad, gap, cap, hubW, hubH, bh, bw, perRow, band, need } = sizes(k, cols);
   const H = Math.max(need, height ?? 0), y0 = pad + band(top.length), y1 = H - pad - band(bottom.length);
   const boxes: FlowPlan['boxes'] = {}, captions: FlowPlan['captions'] = [];
   const caption = (list: FlowNode[], x: number, y: number) => captions.push({ text: [...new Set(list.map(n => CAPTION[n.group]))].join(' · '), x, y: y + cap - 4 });
   const column = (list: FlowNode[], x: number, c: number, side: string) => {   // x: the side's outer edge; columns go inward
     if (!list.length) return;
-    const span = c * bw + (c - 1) * gap, x0 = side === 'left' ? x : x - span, rows = Math.ceil(list.length / c), step = (y1 - y0 - cap) / rows;
-    caption(list, x0 + span / 2, y0);
+    const w = c * bw + (c - 1) * gap, x0 = side === 'left' ? x : x - w, rows = Math.ceil(list.length / c), step = (y1 - y0 - cap) / rows;
+    caption(list, x0 + w / 2, y0);
     list.forEach((n, i) => { const cx = side === 'left' ? Math.floor(i / rows) : c - 1 - Math.floor(i / rows);
       boxes[n.id] = { x: x0 + cx * (bw + gap), y: Math.round(y0 + cap + step * (i % rows) + (step - bh) / 2), w: bw, h: bh, side }; });
   };
@@ -84,7 +87,9 @@ export function flowLayout(nodes: FlowNode[], width: number, height?: number): F
       boxes[n.id] = { x: Math.round(width / 2 - w / 2 + (i % perRow) * (bw + gap)), y: y + cap + r * (bh + gap), w: bw, h: bh, side }; });
   };
   column(left, pad, cols[0], 'left'); column(right, width - pad, cols[1], 'right'); strip(top, pad, 'top'); strip(bottom, y1, 'bottom');
-  boxes[HUB] = { x: Math.round(width / 2 - hubW / 2), y: Math.round((y0 + y1) / 2 - hubH / 2), w: hubW, h: hubH, side: 'hub' };
+  // the hub: centered between the sides, however many columns each has
+  const span = (c: number) => c * bw + (c - 1) * gap, from = left.length ? pad + span(cols[0]) : 0, to = right.length ? width - pad - span(cols[1]) : width;
+  boxes[HUB] = { x: Math.round((from + to) / 2 - hubW / 2), y: Math.round((y0 + y1) / 2 - hubH / 2), w: hubW, h: hubH, side: 'hub' };
   return { width, height: H, k, boxes, captions };
 }
 

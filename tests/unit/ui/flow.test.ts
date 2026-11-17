@@ -55,16 +55,18 @@ test('the reducer feeds it: runs come and go; a chain\'s result is tracked until
 test('flowLayout: grouped sides, the hub clear of every block, no overlaps, and the whole space used when given', () => {
   const many = flowModel([...rows, ...Array.from({ length: 9 }, (_, i) => row(`t${i}`, `Tool${i}`, { receives: 'module' })),
     row('m2', 'More Models', { group: 'models', receives: 'openai' }), row('ed', 'Editor', { group: 'apps', connection: 'connected' })], [], [], 0).nodes;
-  for (const [w, ht] of [[380, undefined], [760, 560], [1400, 900]] as const) {
+  for (const [w, ht] of [[380, undefined], [500, 400], [650, 490], [760, 560], [1200, 760], [1400, 900]] as const) {
     const p = flowLayout(many, w, ht), all = Object.entries(p.boxes), hub = p.boxes[HUB];
     const apart = (a: FlowBox, b: FlowBox) => a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y;
     assert.ok(all.every(([i, a]) => all.every(([j, b]) => i === j || apart(a, b))), `no overlaps at ${w}`);
     assert.ok(all.filter(([id]) => id !== HUB).every(([, b]) => Math.max(b.x - (hub.x + hub.w), hub.x - (b.x + b.w), b.y - (hub.y + hub.h), hub.y - (b.y + b.h)) >= 20), `room around the hub at ${w}`);
     assert.ok(all.every(([, b]) => b.x >= 0 && b.x + b.w <= w && b.y >= 0 && b.y + b.h <= p.height), `inside at ${w}`);
-    if (ht) assert.equal(p.height, ht, 'fills the window');
+    if (ht) assert.ok(w < 650 ? p.height >= ht : p.height === ht, 'fills the window (taller and scrolling only when too small for all)');
     const side = (id: string) => p.boxes[id].side;
     assert.deepEqual([side('ide'), side('helper'), side('lms'), side('mem')], ['left', 'right', 'top', 'bottom']);
   }
+  const six = flowModel(Array.from({ length: 6 }, (_, i) => row(`a${i}`, `Agent${i}`, { receives: 'module' })), [], [], 0).nodes;
+  for (const [w, ht] of [[650, 490], [760, 560], [1200, 760]]) assert.equal(new Set(six.slice(1).map(n => flowLayout(six, w, ht).boxes[n.id].x)).size, 1, `one column of six agents at ${w}×${ht}: smaller blocks first`);
   const small = flowLayout(many, 760, 560), big = flowLayout(many, 1400, 900);
   assert.ok(big.k > small.k && big.boxes.helper.w > small.boxes.helper.w, 'blocks grow with the window');
   assert.deepEqual(flowLayout(many, 380).captions.map(c => c.text).sort(), ['Agents', 'Editors & apps', 'Model servers', 'Other tools']);
