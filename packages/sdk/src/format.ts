@@ -199,7 +199,8 @@ export interface ToolRow {
   setup?: true;                                             // has tool-side setup (Set up / Check)
   receives?: Target['engine'];                              // can take tasks now, through this engine
   cost?: { is: Cost; set: boolean };                        // found tools that can do work: what it costs, and whether you set it (tools.cost)
-  gateway?: { model: string; key: boolean };                // takes a custom model endpoint: its model through the gateway, whether it has a key
+  gateway?: { model: string; key: boolean; auto: boolean; ready: boolean };   // takes a custom model endpoint: its model through the gateway, whether it
+                                                            // has a key, sets it up by itself when connected (auto), can use it now (gateway on + key)
 }
 /** One program of a tool: a desktop app (an installed package) or a CLI (on PATH or where the manifest says); `inApp`: a CLI that
  *  comes inside the app (it goes when the app is uninstalled). */
@@ -217,9 +218,9 @@ const PART_LABEL = { app: 'app', cli: 'CLI' } as const;
 export const partLabel = (p: ToolPart, uses?: ToolRow['uses']) => `${p.kind === 'cli' && p.inApp ? 'CLI in the app' : PART_LABEL[p.kind]}${uses === p.kind ? ' (used)' : ''}`;
 const programsText = (r: ToolRow) => r.parts?.map(p => partLabel(p, r.uses)).join(' + ') || '-';
 export interface ToolInput {
-  loaded: Array<{ id: string; name: string; color?: string; source: 'builtin' | 'user'; roles: Role[]; levels: Level[]; disabled: boolean; setup?: boolean; needsEnv?: string[]; gatewayClient?: boolean }>;   // needsEnv: a hosted API's key variables
+  loaded: Array<{ id: string; name: string; color?: string; source: 'builtin' | 'user'; roles: Role[]; levels: Level[]; disabled: boolean; setup?: boolean; needsEnv?: string[]; gatewayClient?: 'auto' | 'manual' }>;   // needsEnv: a hosted API's key variables
   snapshot: Snapshot | null; live: LiveState; targets: Target[]; prefs: { auto: string[]; never: string[] }; consents: Array<{ subject: string }>;
-  gateway?: { routes: string[]; keyed: string[] };
+  gateway?: { on: boolean; routes: string[]; keyed: string[] };
   costs?: string[];                                         // the setting tools.cost
 }
 /** The one row model behind the Tools panel and the CLI (ADR 0009). */
@@ -244,7 +245,8 @@ export function toolRows(x: ToolInput): ToolRow[] {
       asks: x.consents.filter(c => c.subject === i.id).length, ...(i.setup ? { setup: true as const } : {}),
       ...(target ? { receives: target.engine } : {}),
       ...(dets.length && (i.roles.includes('agent') || i.roles.includes('backend')) ? { cost: { is: dets[0].cost, set: !!x.costs?.some(c => c.startsWith(`${i.id}=`)) } } : {}),
-      ...(i.gatewayClient ? { gateway: { model: x.gateway?.routes.find(r => r.startsWith(`${i.id}=`))?.slice(i.id.length + 1) ?? AUTO, key: !!x.gateway?.keyed.includes(i.id) } } : {}),
+      ...(i.gatewayClient ? { gateway: { model: x.gateway?.routes.find(r => r.startsWith(`${i.id}=`))?.slice(i.id.length + 1) ?? AUTO, key: !!x.gateway?.keyed.includes(i.id),
+        auto: i.gatewayClient === 'auto', ready: !!x.gateway?.on && !!x.gateway.keyed.includes(i.id) } } : {}),
     };
   }).sort((a, b) => a.name.localeCompare(b.name));   // alphabetical: no tool comes first by design (ADR 0010)
 }

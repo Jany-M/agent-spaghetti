@@ -26,15 +26,16 @@ export function pluginFiles(variant: 'agent-plugins' | 'cursor', cli: Cli, clien
 
 /** The `agent-spaghetti` custom agent (a pick in the tool's agent list): the delegate skill's instructions under an agent header.
  *  One file for both formats in use (VS Code / Copilot `.agent.md`, Claude Code agents): name, description, argument-hint, and the
- *  tool's own `tools` line where its manifest has one (agentTools: then the agent can only hand off, not answer itself). */
-export function agentText(tools?: string): string {
+ *  tool's own `tools` and `model` lines where its manifest has them (agentTools: then the agent can only hand off, not answer itself;
+ *  agentModel: its preferred model, e.g. the gateway's: no paid model needed to hand off). */
+export function agentText(tools?: string, model?: string): string {
   const [, head, body] = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/.exec(source('skills/delegate/SKILL.md'))!;
   const description = /^description: (.*?)\r?$/m.exec(head)![1];
-  return `---\nname: agent-spaghetti\ndescription: ${description}\nargument-hint: target and task, e.g. lmstudio summarize README.md\n${tools ? `tools: ${tools}\n` : ''}---\n`
+  return `---\nname: agent-spaghetti\ndescription: ${description}\nargument-hint: target and task, e.g. lmstudio summarize README.md\n${tools ? `tools: ${tools}\n` : ''}${model ? `model: ${model}\n` : ''}---\n`
     + `\nThe user's message is the task. A first word that is a target id (see \`targets\`) is the target; with none, call \`delegate\` without one and the user picks.\n${body}`;
 }
-async function agentFile(env: Environment, path: string, tools: string | undefined, on: boolean, dryRun: boolean) {
-  const now = await env.readFile(path), text = agentText(tools);
+async function agentFile(env: Environment, path: string, sp: Speaks, on: boolean, dryRun: boolean) {
+  const now = await env.readFile(path), text = agentText(sp.agentTools, sp.agentModel);
   const description = `${on ? 'add' : 'remove'} the agent-spaghetti agent (${path})`;
   if (on ? now === text : now === null) return { description, changes: [] };   // already so
   if (on) return { description, changes: await write(env, { [path]: text }, dryRun) };
@@ -78,7 +79,7 @@ const ourHook = (client: string) => (e: any) => (e?.hooks ?? []).some((h: any) =
 export async function extrasThere(env: Environment, m: Manifest): Promise<boolean> {
   const { promptHook: h, agentFile: a } = m.speaks ?? {};
   const doc = h ? parseJsonc(await env.readFile(h.config)) as Record<string, any> | undefined : undefined;
-  return (!h || (Array.isArray(doc?.hooks?.[h.event]) && doc.hooks[h.event].some(ourHook(m.id)))) && (!a || await env.readFile(a) === agentText(m.speaks?.agentTools));
+  return (!h || (Array.isArray(doc?.hooks?.[h.event]) && doc.hooks[h.event].some(ourHook(m.id)))) && (!a || await env.readFile(a) === agentText(m.speaks?.agentTools, m.speaks?.agentModel));
 }
 /** The `>>` shortcut in a tool's prompt hook (e.g. Claude Code's UserPromptSubmit): our one entry added or removed, the rest kept. */
 async function promptHook(env: Environment, spec: NonNullable<Speaks['promptHook']>, cli: Cli, client: string, on: boolean, dryRun: boolean) {
@@ -94,6 +95,29 @@ async function promptHook(env: Environment, spec: NonNullable<Speaks['promptHook
   const files: Record<string, string> = { ...(text === null ? {} : { [`${spec.config}.bak`]: text }), [spec.config]: JSON.stringify(doc, null, 2) };
   return { description: what, changes: await write(env, files, dryRun) };
 }
+/** Where the model gateway answers and the key a tool uses there (connect writes them into the tool's own model list). */
+export interface GatewayAccess { url: string; key: string }
+/** The gateway in the tool's own list of model providers (`openaiClient.auto`): our entry replaced or added (found by name), the
+ *  settings it needs added where the user has not set them (as text: their file keeps its comments). Off: our entry goes, the settings
+ *  stay (other models may use them). Without a gateway (it is off) nothing is written. */
+async function gatewayModels(env: Environment, spec: NonNullable<NonNullable<Speaks['openaiClient']>['auto']>, gw: GatewayAccess | undefined, on: boolean, dryRun: boolean) {
+  const what = `${on ? 'add' : 'remove'} the model gateway ${on ? 'to' : 'from'} ${spec.config}`;
+  if (on && !gw) return { description: 'the model gateway is off: the tool keeps its own models', changes: [] };
+  const text = await env.readFile(spec.config), list = text === null ? [] : parseJsonc(text);
+  if (!Array.isArray(list)) throw new Error(`${spec.config} is not a JSON list; not changed`);
+  const others = list.filter(x => x?.name !== spec.entry.name);
+  const after = on ? [...others, JSON.parse(JSON.stringify(spec.entry).replaceAll('{url}', gw!.url).replaceAll('{key}', gw!.key))] : others;
+  const files: Record<string, string> = JSON.stringify(after) === JSON.stringify(list) ? {}
+    : { ...(text === null ? {} : { [`${spec.config}.bak`]: text }), [spec.config]: JSON.stringify(after, null, 2) };
+  if (on && spec.settings) {
+    let s = (await env.readFile(spec.settings.file)) ?? '{}';
+    const before = s;
+    for (const [k, v] of Object.entries(spec.settings.values))
+      if (!new RegExp(`"${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"\\s*:`).test(s)) s = s.replace('{', `{\n  ${JSON.stringify(k)}: ${JSON.stringify(v)},`);
+    if (s !== before) Object.assign(files, { [`${spec.settings.file}.bak`]: before, [spec.settings.file]: s.replace(/,(\s*)}\s*$/, '$1}') });
+  }
+  return { description: what, changes: await write(env, files, dryRun) };
+}
 /** Through the tool's own CLI: remove (also replaces an older entry), then add. */
 async function mcpCli(env: Environment, spec: NonNullable<Speaks['mcpCli']>, exe: string | undefined, cli: Cli, client: string, on: boolean, dryRun: boolean) {
   if (!exe) throw new Error(`${client}: its program was not found`);
@@ -107,17 +131,18 @@ async function mcpCli(env: Environment, spec: NonNullable<Speaks['mcpCli']>, exe
 }
 
 /** Connect (on) or disconnect a client: the module's own way, else the plugin and/or the MCP config entry. Disconnect is the exact inverse. */
-export async function setConnection(env: Environment, i: Integration, det: Detection, cli: Cli, on: boolean, dryRun: boolean): Promise<Connected> {
+export async function setConnection(env: Environment, i: Integration, det: Detection, cli: Cli, on: boolean, dryRun: boolean, gateway?: GatewayAccess): Promise<Connected> {
   if (i.module?.connect) return i.module.connect(env, det, cli, on, dryRun);
   const sp = i.manifest.speaks, client = i.manifest.id;
   if (!sp?.mcpCli && !sp?.agentPlugins && !sp?.mcpClient) throw new Error(`${i.manifest.name} has no MCP client or plugin support agent-spaghetti knows of`);
   // the server: the tool's CLI, else the plugin where supported, else the MCP config (disconnect: plugin and config, whichever is there);
-  // plus the extras the tool has: the `>>` prompt hook, the agent file
+  // plus the extras the tool has: the `>>` prompt hook, the agent file, the model gateway in its model list
   const server = sp.mcpCli ? [() => mcpCli(env, sp.mcpCli!, programOf(det, i.manifest.detect?.bin?.[0]), cli, client, on, dryRun)]
     : on ? [() => (sp.agentPlugins ? plugin(env, sp.agentPlugins, cli, client, on, dryRun) : mcpConfig(env, sp.mcpClient!, cli, client, on, dryRun))]
     : [...(sp.agentPlugins ? [() => plugin(env, sp.agentPlugins!, cli, client, on, dryRun)] : []), ...(sp.mcpClient ? [() => mcpConfig(env, sp.mcpClient!, cli, client, on, dryRun)] : [])];
   const r: Array<{ description: string; changes: string[] }> = [];
-  const extras = [...(sp.promptHook ? [() => promptHook(env, sp.promptHook!, cli, client, on, dryRun)] : []), ...(sp.agentFile ? [() => agentFile(env, sp.agentFile!, sp.agentTools, on, dryRun)] : [])];
+  const extras = [...(sp.promptHook ? [() => promptHook(env, sp.promptHook!, cli, client, on, dryRun)] : []), ...(sp.agentFile ? [() => agentFile(env, sp.agentFile!, sp, on, dryRun)] : []),
+    ...(sp.openaiClient?.auto ? [() => gatewayModels(env, sp.openaiClient!.auto!, gateway, on, dryRun)] : [])];
   for (const step of [...server, ...extras]) r.push(await step());   // in order: one file at a time
   return { description: r.map(x => x.description).join('; '), changes: r.flatMap(x => x.changes), applied: !dryRun };
 }

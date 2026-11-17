@@ -57,7 +57,12 @@ export interface Manifest {
   models?: { path?: string; list: string; id: string; filter?: Array<{ field: string; in: Array<string | boolean> }>; context?: string[] };
   speaks?: {
     openai?: { base: string; headers?: Record<string, string> };   // headers: {env:NAME} read at request time
-    openaiClient?: { setup: string };                                // takes a custom OpenAI endpoint (the gateway): steps with {url} {key}; the tool asks for model `auto`
+    openaiClient?: {                                                 // takes a custom OpenAI endpoint (the gateway): steps with {url} {key}; the tool asks for model `auto`
+      setup: string;
+      // connect sets it up by itself: our entry (by `name`; {url} {key} filled in) in the tool's JSON list of model providers,
+      // and settings it needs switched on in a JSON settings file (added only where the user has not set them)
+      auto?: { config: string; entry: Record<string, unknown> & { name: string }; settings?: { file: string; values: Record<string, unknown> } };
+    };
     mcpServer?: { command: string[] };
     acp?: { command: string[] };
     chat?: { command: string[] };   // its chat takes a task: <command…> <prompt> - (task on stdin); the result comes back through `report`
@@ -66,6 +71,7 @@ export interface Manifest {
     agentPlugins?: { dir: string; variant?: 'agent-plugins' | 'cursor' };
     mcpClientNames?: string[];   // the name it gives as an MCP client (clientInfo.name), so a server it starts from another tool's config still knows it
     promptHook?: { config: string; event: string };
+    agentModel?: string;  // the agent file's `model` line in the tool's own syntax: the agent's preferred model (the gateway's, set up by connect)
     agentTools?: string;  // the agent file's `tools` line in the tool's own syntax (VS Code: ['agent-spaghetti/*']): it only hands off
     agentFile?: string;   // where its custom agents live: connect writes the `agent-spaghetti` agent there (a pick in its agent list)   // its prompt hook (`>>` shortcut): a JSON settings file with hooks.<event>[] = { hooks: [{ type: 'command', command, args }] }
   };

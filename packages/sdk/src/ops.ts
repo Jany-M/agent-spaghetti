@@ -63,8 +63,8 @@ export const OPS = {
       input: { type: 'object', additionalProperties: false, required: ['run_id', 'result'], properties: {
         run_id: { type: 'integer' }, result: { type: 'string', description: 'Your complete result' }, status: { type: 'string', enum: ['done', 'failed'] } } } } },
   gateway:      { method: 'GET',  path: '/v1/gateway', gui: 'tools',     usage: 'gateway',                  summary: 'The model gateway: its address and the tools with a key' },
-  gatewayClient: { method: 'POST', path: '/v1/gateway/client', gui: 'tools', usage: 'gateway <tool> [--model <target:model|auto>] [--key create|revoke]',
-    summary: 'A tool\'s model through the gateway, and its key (a new key is shown once, with the tool\'s setup steps)' },
+  gatewayClient: { method: 'POST', path: '/v1/gateway/client', gui: 'tools', usage: 'gateway <tool> [--model <target:model|auto>] [--key create|revoke] [--test]',
+    summary: 'A tool\'s model through the gateway, its key (a new key is shown once, with the tool\'s setup steps), and a test request as that tool' },
   whoami:       { method: 'POST', path: '/v1/whoami', gui: 'machine',       usage: 'whoami <as> <client name>', summary: 'Which tool an MCP client is (its clientInfo name), for the bridge' },
   hook:         { method: 'POST', path: '/v1/hook', gui: 'machine',         usage: 'hook <client>',            summary: 'Run by client hooks (reads the hook JSON on stdin)' },
 } as const satisfies Record<string, OpSpec>;
@@ -92,7 +92,7 @@ export interface OpIO {
   delegate: { in: RunRequest & { source?: string; waitMs?: number }; out: RunView };
   targets: { in: {}; out: Target[] };
   gateway: { in: {}; out: GatewayStatus };
-  gatewayClient: { in: { integration: string; model?: string; key?: 'create' | 'revoke' }; out: { model: string; key?: string; setup?: string } };
+  gatewayClient: { in: { integration: string; model?: string; key?: 'create' | 'revoke'; test?: boolean }; out: { model: string; key?: string; setup?: string; test?: { ok: boolean; lines: string[] } } };
   handback: { in: { run_id: number; result: string; status?: 'done' | 'failed'; source?: string }; out: { ok: true } };
   runs: { in: { id?: number; since?: number; limit?: number; watch?: boolean; unread?: boolean; source?: string };   // watch + source: the chain's caller polling
     out: { runs: RunRow[]; result?: string; final?: RunView; unread?: RunView[] } };   // final: the chain's view (id = chain); unread: given once

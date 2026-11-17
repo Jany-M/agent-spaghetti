@@ -40,7 +40,7 @@ async function boot(scan: () => Promise<Snapshot> = async () => SNAP) {
   const runner = new Runner({ bus, consent, ledger, settings, resultsDir, host: () => host, snapshot: () => store.loadSnapshot('scan'), integrations: () => integrations,
     runOn: () => { throw new Error('no agents in this test'); } });
   const services: Services = { store, bus, settings, consent, ledger, runner, gateway: new Gateway({ settings, store, runner }), dispatcher: new Dispatcher({ runner, settings, bus, ledger, live: () => live }), host: () => host, cli: () => ({ command: 'node', args: ['/x/cli.ts'] }),
-    shutdown: () => { stopped++; }, live: () => live, scan: async () => { const snap = await scan(); store.saveSnapshot('scan', snap); return snap; },
+    shutdown: () => { stopped++; }, gatewayClients: async () => {}, live: () => live, scan: async () => { const snap = await scan(); store.saveSnapshot('scan', snap); return snap; },
     loaded: () => ({ integrations, rejected: [] }),
     onEnvs: async (cmd, args, envIds) => {
       calls.push([cmd, ...args, ...(envIds ?? ['*'])].join(' '));
@@ -253,17 +253,17 @@ test('CLI 3: targets, delegate to a free local model (result printed), runs, run
     assert.deepEqual(set['dispatcher.model'].choices, [{ value: '', label: 'off' }, { value: 'lmstudio:m', label: 'LM Studio: m' }], 'loaded models');
     assert.equal(set['scan.everyMin'].choices, undefined);
     b.services.store.saveSnapshot('scan', SNAP);
-    r = await cli('gateway'); assert.equal(r.out, 'Model gateway: off (set gateway.port, e.g. 4141)');
+    r = await cli('gateway'); assert.equal(r.out, 'Model gateway: off (gateway.port: 0 = off; or its port is taken)');
     r = await cli('gateway', 'lmstudio', '--key', 'create'); assert.equal(r.code, 1); assert.match(r.err, /lmstudio cannot use a custom model endpoint/);
     r = await cli('gateway', 'lmstudio', '--key', 'maybe'); assert.equal(r.code, 1); assert.match(r.err, /usage: .*gateway <tool>/);
     b.services.store.saveSnapshot('scan', { ...SNAP, detections: [...SNAP.detections, ...['windows', 'wsl:TestDistro'].map(envId => ({ ...SNAP.detections[0], integration: 'openclaw', name: 'OpenClaw', envId }))] });
     r = await cli('connect', 'openclaw', '--dry-run'); assert.equal(r.code, 0, r.err); assert.match(r.out, /^Would: add it \(wsl:TestDistro\)\n  x$/);
-    assert.ok(b.calls.includes('connect openclaw {"command":"node","args":["/x/cli.ts"]} on dry-run windows'), 'tried the Windows install first');
+    assert.ok(b.calls.includes('connect openclaw {"command":"node","args":["/x/cli.ts"]} on dry-run  windows'), 'tried the Windows install first');
     b.services.store.saveSnapshot('scan', { ...SNAP, detections: [...SNAP.detections, ...['windows', 'wsl:TestDistro'].map(envId => ({ ...SNAP.detections[0], integration: 'openclaw', name: 'OpenClaw', envId,
       ...(envId === 'wsl:TestDistro' ? { connected: false } : {}) }))] });
     b.calls.length = 0;
     r = await cli('connect', 'openclaw'); assert.equal(r.code, 0, r.err); assert.match(r.out, /^Done: add it \(wsl:TestDistro\)/);
-    assert.equal(b.calls[0], 'connect openclaw {"command":"node","args":["/x/cli.ts"]} on  wsl:TestDistro', 'the env where it is a client first');
+    assert.equal(b.calls[0], 'connect openclaw {"command":"node","args":["/x/cli.ts"]} on   wsl:TestDistro', 'the env where it is a client first');
     assert.equal((await b.client.call('status')).snapshot!.detections.find(d => d.integration === 'openclaw' && d.envId === 'wsl:TestDistro')!.connected, true, 'snapshot patched');
     r = await cli('disconnect', 'openclaw'); assert.equal(r.code, 0, r.err);
     assert.ok(b.calls.some(c => c.startsWith('connect openclaw {"command":"node","args":["/x/cli.ts"]} off')));

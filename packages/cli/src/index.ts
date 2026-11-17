@@ -165,14 +165,15 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
       case 'gateway': case 'gatewayClient': {
         if (!a1) {
           const r = await c.call('gateway');
-          print(r, () => [r.url ? `Model gateway: ${r.url}` : 'Model gateway: off (set gateway.port, e.g. 4141)', ...r.clients.map(x => `  key: ${x.id} (since ${new Date(x.since).toLocaleString()})`)].join('\n'));
+          print(r, () => [r.url ? `Model gateway: ${r.url}` : 'Model gateway: off (gateway.port: 0 = off; or its port is taken)', ...r.clients.map(x => `  key: ${x.id} (since ${new Date(x.since).toLocaleString()})`)].join('\n'));
           break;
         }
         const model = flag(args, '--model'), key = flag(args, '--key') as 'create' | 'revoke' | undefined;
         if (key && key !== 'create' && key !== 'revoke') { io.err(`usage: agent-spaghetti ${OPS.gatewayClient.usage}`); return 1; }
-        const r = await c.call('gatewayClient', { integration: a1, model, key });
-        print(r, () => [`${a1}: model ${r.model}`, ...(r.key ? ['', `Key (shown once): ${r.key}`, '', r.setup ?? ''] : key === 'revoke' ? ['key revoked'] : [])].join('\n'));
-        break;
+        const test = args.includes('--test');
+        const r = await c.call('gatewayClient', { integration: a1, model, key, ...(test ? { test } : {}) });
+        print(r, () => [`${a1}: model ${r.model}`, ...(r.key ? ['', `Key (shown once): ${r.key}`, '', r.setup ?? ''] : key === 'revoke' ? ['key revoked'] : []), ...(r.test?.lines ?? [])].join('\n'));
+        return r.test && !r.test.ok ? 1 : 0;
       }
       case 'handback': {
         const as = flag(args, '--as'), [, id, ...result] = args, failed = args.includes('--failed');

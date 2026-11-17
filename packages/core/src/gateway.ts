@@ -4,7 +4,8 @@
 // question as a hand-off, the same server queue, the same record. Only `model` is rewritten; prompts are never stored.
 import { createHash, randomBytes } from 'node:crypto';
 import type { Target } from '@agent-spaghetti/sdk';
-import { AUTO, classify, parseHop, rankTargets } from '@agent-spaghetti/sdk';
+import { AUTO, classify, parseHop, parseJson, rankTargets } from '@agent-spaghetti/sdk';
+import { http } from './http.ts';
 import { openaiForward } from './engine/openai.ts';
 import type { Runner } from './runner.ts';
 import { serveJson, WRITTEN, type CallCtx, type Server } from './serve.ts';
@@ -68,8 +69,26 @@ export class Gateway {
     return key;
   }
 
+  /** A real request through the gateway as a tool (Tools → Test gateway): a short answer from the model its requests go to now. */
+  async test(integration: string): Promise<{ ok: boolean; lines: string[] }> {
+    const url = this.status().url, has = !!this.keys()[integration];
+    if (!url) return { ok: false, lines: ['The model gateway is off (Settings → gateway.port).'] };
+    const token = KEY_PREFIX + randomBytes(24).toString('base64url'), t0 = Date.now();
+    this.trial.set(hash(token), integration);                // this request only: the tool's own key is never shown again
+    try {
+      const r = await http({ url: `${url}/chat/completions`, method: 'POST', timeoutMs: 120_000, headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ model: AUTO, max_tokens: 32, messages: [{ role: 'user', content: 'Reply with one word: ready' }] }) });   // up to 2 min: a model may load first
+      if (!r) return { ok: false, lines: [`The gateway at ${url} did not answer`] };
+      const j = (parseJson(r.body) ?? {}) as { model?: string; error?: { message?: string }; choices?: Array<{ message?: { content?: string } }> };
+      const key = has ? `${integration} has its key` : `${integration} has no key yet: Connect it (or Set up gateway) first`;
+      if (r.status !== 200) return { ok: false, lines: [`The gateway at ${url} answered ${r.status}: ${j.error?.message ?? 'no details'}`, key] };
+      return { ok: has, lines: [`The gateway at ${url} works: ${j.model ?? 'a model'} answered in ${Date.now() - t0} ms ("${String(j.choices?.[0]?.message?.content ?? '').trim().slice(0, 60)}")`, key] };
+    } finally { this.trial.delete(hash(token)); }
+  }
+
+  private readonly trial = new Map<string, string>();      // test tokens in flight → the tool they stand for
   private keys(): Keys { return this.d.store.getKv<Keys>(KEYS) ?? {}; }
-  private who(bearer: string): string | null { const h = hash(bearer); return Object.entries(this.keys()).find(([, k]) => k.hash === h)?.[0] ?? null; }
+  private who(bearer: string): string | null { const h = hash(bearer); return this.trial.get(h) ?? Object.entries(this.keys()).find(([, k]) => k.hash === h)?.[0] ?? null; }
   private models() {
     const models = this.d.runner.targets().filter(t => t.kind === 'model');
     return { object: 'list', data: [{ id: AUTO, object: 'model', owned_by: 'agent-spaghetti' }, ...models.flatMap(t => t.models.map(m => ({ id: `${t.id}:${m}`, object: 'model', owned_by: t.id })))] };

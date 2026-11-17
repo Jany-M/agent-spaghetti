@@ -117,6 +117,31 @@ test('the agent-spaghetti agent: the delegate skill under an agent header (one s
   assert.ok(t.endsWith(skill.slice(skill.indexOf('\n---\n') + 5)), 'the skill body, unchanged');
   assert.match(agentText("['agent-spaghetti/*']"), /\nargument-hint: .+\ntools: \['agent-spaghetti\/\*'\]\n---\n/, 'a tools line: the agent can only hand off');
 });
+test('VS Code (openaiClient.auto): connect puts the gateway in its model list and switches on the setting it needs; off takes the entry out', async () => {
+  const { BUILTINS } = await import('@agent-spaghetti/integrations');
+  const vscode = BUILTINS.find(b => b.manifest.id === 'vscode')!, models = '%APPDATA%/Code/User/chatLanguageModels.json', settings = '%APPDATA%/Code/User/settings.json';
+  const mine = { name: 'Mine', vendor: 'customendpoint', models: [] };
+  const env = fakeEnv({ files: { [models]: JSON.stringify([mine]), [settings]: '{\n  // my comment\n  "editor.fontSize": 14\n}' } });
+  const gw = { url: 'http://127.0.0.1:4141/v1', key: 'sk-agent-spaghetti-k1' };
+  const r = await setConnection(env, vscode, det, cli, true, false, gw);
+  const list = JSON.parse((await env.readFile(models))!);
+  assert.deepEqual(list[0], mine, 'the user\'s own providers stay');
+  assert.deepEqual([list[1].name, list[1].vendor, list[1].apiKey, list[1].models[0].id, list[1].models[0].url, list[1].models[0].toolCalling],
+    ['Agent Spaghetti', 'customendpoint', gw.key, 'auto', 'http://127.0.0.1:4141/v1/chat/completions', true]);
+  assert.equal(await env.readFile(settings), '{\n  "chat.agentHost.byokModels.enabled": true,\n  // my comment\n  "editor.fontSize": 14\n}', 'added as text: comments stay');
+  assert.ok(r.changes.includes(`write ${models}`) && r.changes.includes(`write ${settings}.bak`));
+  assert.match((await env.readFile('~/.copilot/agents/agent-spaghetti.agent.md'))!, /\ntools: \['agent-spaghetti\/\*'\]\nmodel: \['Agent Spaghetti \(customendpoint\)'\]\n---\n/, 'picking the agent picks the gateway');
+  const again = await setConnection(env, vscode, det, cli, true, false, { ...gw, key: 'sk-agent-spaghetti-k2' });
+  assert.equal(JSON.parse((await env.readFile(models))!).filter((x: { name: string }) => x.name === 'Agent Spaghetti').length, 1, 'replaced, not added twice');
+  assert.ok(!again.changes.includes(`write ${settings}`), 'a setting already there is left alone');
+  const off = fakeEnv({ files: { [models]: '[]' } });
+  assert.deepEqual((await setConnection(off, vscode, det, cli, true, false)).description.split('; ').at(-1), 'the model gateway is off: the tool keeps its own models');
+  assert.equal(await off.readFile(models), '[]');
+  await setConnection(env, vscode, det, cli, false, false);
+  assert.deepEqual(JSON.parse((await env.readFile(models))!), [mine], 'disconnect: our entry goes');
+  assert.match((await env.readFile(settings))!, /byokModels/, 'the setting stays (other models may need it)');
+  await assert.rejects(setConnection(fakeEnv({ files: { [models]: '{}' } }), vscode, det, cli, true, false, gw), /is not a JSON list; not changed/);
+});
 test('hermesModule.connect: dry-run, add when absent, replace foreign, already ours, probe failure restores', async () => {
   const { hermesModule } = await import('../../../integrations/hermes/index.ts');
   const exe = 'C:/tools/hermes.exe', conf = '%LOCALAPPDATA%/hermes/config.yaml';

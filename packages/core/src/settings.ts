@@ -21,7 +21,7 @@ export const SETTINGS = {
   'delegate.maxHops': { default: 8, help: 'Most hand-offs in one chain (hops plus nested delegations); stops loops' },
   'dispatcher.model': { default: '', help: 'Model the dispatcher thinks with: <target>:<model> from targets (empty = off: auto hand-offs go to the best-ranked target)', choices: { from: 'models', extra: [''] } },
   'dispatcher.stuckMin': { default: 10, help: 'Minutes without progress before the dispatcher hands a run to another target (once per chain)' },
-  'gateway.port': { default: 0, help: 'Port of the model gateway on 127.0.0.1, the OpenAI-compatible endpoint tools can use (0 = off; e.g. 4141)' },
+  'gateway.port': { default: 4141, help: 'Port of the model gateway on 127.0.0.1: the OpenAI-compatible endpoint that lets tools use your local models through Agent Spaghetti. Tools that can take it by themselves (VS Code) are set up when connected; 0 = off' },
   'routing.learn': { default: true, help: 'Order targets for each kind of task by how their past runs went (finished, failed, your grades); off: cost, tier and queue only' },
   'routing.stretch': { default: true, help: 'A free target one tier below the task may try it first (a failure escalates)' },
   'routing.escalate': { default: true, help: 'When a target Agent Spaghetti chose fails or answers nothing, the next one in the ranking tries (once per chain; paid ones ask first)' },

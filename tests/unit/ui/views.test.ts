@@ -58,8 +58,8 @@ test('tools panel: blocks by type with counts, found first, missing folded; clie
   const { ToolsView, preferenceLists } = await import('@agent-spaghetti/ui');
   const row = (id: string, o: Record<string, unknown>) => ({ id, name: id.toUpperCase(), group: 'apps', source: 'builtin', levels: [], envs: ['windows'], state: 'installed', why: 'w', asks: 0, ...o }) as never;
   const props = { busy: null, error: null, closed: new Set(['apps', 'models']), output: { ed: { ok: true, lines: ['OK    detect'] }, cur: { ok: false, lines: ['FAIL  x'] } }, details: {},
-    onToggleGroup: noop, onExpand: noop, onConnect: noop, onPreference: noop, onTest: noop, onSkip: noop, onSwitch: noop, onGrant: noop, onSetup: noop, onModel: noop, onKey: noop, onCost: noop, gatewayUrl: null, models: ['lms:m1'],
-    rows: [row('oc', { group: 'agents', setup: true, cost: { is: 'metered', set: true } }), row('ed', { connection: 'not connected', preference: 'ask', asks: 1, gateway: { model: 'auto', key: false } }), row('cur', { connection: 'connected', preference: 'always' }),
+    onToggleGroup: noop, onExpand: noop, onConnect: noop, onPreference: noop, onTest: noop, onSkip: noop, onSwitch: noop, onGrant: noop, onSetup: noop, onModel: noop, onKey: noop, onGatewayTest: noop, onCost: noop, gatewayUrl: null, models: ['lms:m1'],
+    rows: [row('oc', { group: 'agents', setup: true, cost: { is: 'metered', set: true } }), row('ed', { connection: 'not connected', preference: 'ask', asks: 1, gateway: { model: 'auto', key: false, auto: false, ready: false } }), row('cur', { connection: 'connected', preference: 'always' }),
       row('lms', { group: 'models', state: 'ready', receives: 'acp' }), row('gone', { state: 'not found' })] };
   const a = html(h(ToolsView, props));
   assert.match(a, /<details class="group" open="">.*?Editors &amp; apps · 2.*?1 in use/s, 'a waiting question opens a closed block');
@@ -72,8 +72,11 @@ test('tools panel: blocks by type with counts, found first, missing folded; clie
   assert.match(a, /ED<\/span>.*?<div class="out pass" role="status"><pre>OK {4}detect<\/pre><\/div><details>/s, 'a test result shows under the row, not inside More');
   assert.match(a, /CUR<\/span>.*?<div class="out fail" role="status"><pre>FAIL  x<\/pre>/s);
   assert.match(a, /ED<\/span>.*?<label>Model <select aria-label="ED&#x27;s model through the gateway"><option value="auto" selected="">auto \(best free first\)<\/option><option value="lms:m1">lms:m1<\/option><\/select>.*?Model gateway off/s);
-  const on = html(h(ToolsView, { ...props, gatewayUrl: 'http://127.0.0.1:4141/v1', rows: [row('ed', { gateway: { model: 'lms:m1', key: true } })] }));
-  assert.match(on, />New gateway key<\/button>.*?>Revoke key<\/button>/s); assert.match(on, /<option value="lms:m1" selected="">/);
+  const on = html(h(ToolsView, { ...props, gatewayUrl: 'http://127.0.0.1:4141/v1', rows: [row('ed', { gateway: { model: 'lms:m1', key: true, auto: false, ready: true } })] }));
+  assert.match(on, />gateway ready<\/span>.*?>New gateway key<\/button>.*?>Test gateway<\/button>.*?>Revoke key<\/button>/s); assert.match(on, /<option value="lms:m1" selected="">/);
+  const auto = html(h(ToolsView, { ...props, gatewayUrl: 'http://127.0.0.1:4141/v1', rows: [row('ed', { gateway: { model: 'auto', key: false, auto: true, ready: false } })] }));
+  assert.match(auto, />gateway not set up<\/span>.*?>Set up gateway<\/button>.*?>Test gateway<\/button>/s, 'a tool that takes the gateway by itself: set up by connecting, no key to copy');
+  assert.doesNotMatch(auto, /Revoke key|Use the gateway/);
   assert.match(a, /LMS<\/span>.*?<span class="state ready" title="Tasks can be handed to it now">takes tasks \(ACP\)<\/span>/s);
   assert.match(a, /OC<\/span>.*?>Set up<\/button>.*?>Dry run<\/button>.*?>Check<\/button>/s, 'tools with setup offer it');
   assert.ok(!/ED<\/span>.*?>Set up</s.test(a.slice(a.indexOf('ED</span>'), a.indexOf('CUR</span>'))));

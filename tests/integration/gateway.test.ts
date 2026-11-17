@@ -61,8 +61,9 @@ test('gateway: keys name the tool; models listed; streams pass through with only
   const runner = new Runner({ bus, consent, ledger, settings, resultsDir: mkdtempSync(join(tmpdir(), 'as-gw-')), host: () => fakeEnv({}), snapshot: () => snap, integrations: () => ints,
     runOn: () => { throw new Error('no agents'); } });
   const gw = new Gateway({ settings, store, runner });
+  assert.equal(settings.get('gateway.port'), 4141, 'on by default (a fixed port: the tools set up with it keep working)');
   settings.set('gateway.port', 0); await gw.sync();
-  assert.equal(gw.status().port, 0, 'off by default');
+  assert.equal(gw.status().port, 0, 'off when set to 0');
   const probe = createServer(); await new Promise<void>(r => probe.listen(0, '127.0.0.1', () => r()));
   const port = (probe.address() as { port: number }).port; await new Promise<void>(r => probe.close(() => r()));
   settings.set('gateway.port', port); await gw.sync();
@@ -105,9 +106,14 @@ test('gateway: keys name the tool; models listed; streams pass through with only
 
     const missing = await call('/v1/chat/completions', { model: 'nope:x', messages: [] });
     assert.equal(missing.status, 200, 'an unknown name follows the tool\'s route (auto)');
+    const tried = await gw.test('vscode');                    // Tools → Test gateway: a real request as the tool, its key never shown
+    assert.equal(tried.ok, true); assert.match(tried.lines[0], /^The gateway at http:\/\/127\.0\.0\.1:\d+\/v1 works: .+ answered in \d+ ms \("ok"\)$/);
+    assert.equal(tried.lines[1], 'vscode has its key');
+    assert.deepEqual([(await gw.test('cursor')).ok, (await gw.test('cursor')).lines[1]], [false, 'cursor has no key yet: Connect it (or Set up gateway) first']);
     gw.key('vscode', false);
     assert.equal((await call('/v1/models')).status, 401, 'revoked');
   } finally { await gw.close(); await up.close(); delete process.env.K; }
+  assert.deepEqual(await gw.test('vscode'), { ok: false, lines: ['The model gateway is off (Settings → gateway.port).'] });
 });
 test('gatewayClient op: a tool\'s model (route) and a key shown once with its setup steps filled in', async () => {
   const { routesFor } = await import('../../packages/core/src/ops.ts');
@@ -119,8 +125,35 @@ test('gatewayClient op: a tool\'s model (route) and a key shown once with its se
   assert.deepEqual(await op.handle({ integration: 'vscode', model: 'lms:m1' }, null as never), { model: 'lms:m1' });
   assert.deepEqual(settings.get('gateway.routes'), ['vscode=lms:m1']);
   const k = await op.handle({ integration: 'vscode', key: 'create' }, null as never) as { key: string; setup: string };
-  assert.ok(k.setup.includes(`API key: ${k.key}`) && k.setup.includes('"url": "http://127.0.0.1:<gateway.port>/v1/chat/completions"'));
+  assert.ok(k.setup.includes(`API key ${k.key}`) && k.setup.includes('"url": "http://127.0.0.1:4141/v1/chat/completions"'), 'the address it will have (on by default)');
   assert.deepEqual(await op.handle({ integration: 'vscode', model: 'auto' }, null as never), { model: 'auto' });
   assert.deepEqual(settings.get('gateway.routes'), []);
   await assert.rejects(async () => op.handle({ integration: 'lmstudio', key: 'create' }, null as never), /cannot use a custom model endpoint/);
+});
+test('connect op: a tool that takes the gateway by itself gets a new key with the address; disconnect revokes it; a new port sets it up again', async () => {
+  const { routesFor } = await import('../../packages/core/src/ops.ts');
+  const { BUILTINS } = await import('@agent-spaghetti/integrations');
+  const store = new Store(':memory:'), settings = new Settings(store), bus = new Bus(store);
+  const gateway = new Gateway({ settings, store, runner: { targets: () => [] } as unknown as Runner });
+  const probe = createServer(); await new Promise<void>(r => probe.listen(0, '127.0.0.1', () => r()));
+  const port = (probe.address() as { port: number }).port; await new Promise<void>(r => probe.close(() => r()));
+  settings.set('gateway.port', port); await gateway.sync();
+  const det = (integration: string) => ({ integration, name: integration, envId: 'windows', installs: [], levels: [], cost: 'free' as const, connectable: 'yes' as const, why: '', connected: false });
+  store.saveSnapshot('scan', { ts: 1, envs: [], agents: [], backends: [], rejected: [], detections: [det('vscode'), det('cursor')] });
+  const calls: string[][] = [];
+  let again = 0;
+  const s = { settings, store, gateway, bus, runner: { targets: () => [] }, loaded: () => ({ integrations: BUILTINS, rejected: [] }), cli: () => ({ command: 'node', args: ['/x/cli.ts'] }), gatewayClients: async (a?: boolean) => { if (a) again++; },
+    onEnvs: async (_c: string, args: string[], envIds: string[]) => { calls.push(args); return [{ envId: envIds[0], result: { integration: args[0], envId: envIds[0], description: 'd', changes: [], applied: args[3] !== 'dry-run' } }]; } } as never;
+  const op = (path: string) => routesFor(s).find(r => r.path === path)!;
+  try {
+    await op('/v1/connect').handle({ integration: 'vscode' }, null as never);
+    const gw = JSON.parse(calls[0][4]);
+    assert.deepEqual([gw.url, gw.key.startsWith(KEY_PREFIX), gateway.status().clients.map(c => c.id)], [`http://127.0.0.1:${port}/v1`, true, ['vscode']]);
+    await op('/v1/connect').handle({ integration: 'cursor' }, null as never);
+    assert.equal(calls[1][4], '', 'a tool that cannot take it (Cursor calls its endpoint from its own servers) gets nothing');
+    await op('/v1/connect').handle({ integration: 'vscode', on: false }, null as never);
+    assert.deepEqual([calls[2][4], gateway.status().clients], ['', []], 'disconnect: its key goes');
+    await op('/v1/setting').handle({ key: 'gateway.port', value: String(port) }, null as never);
+    assert.equal(again, 1, 'a port change sets the tools up again');
+  } finally { await gateway.close(); }
 });

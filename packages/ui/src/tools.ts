@@ -23,7 +23,7 @@ export interface ToolsProps {
   onConnect(id: string, on: boolean): void; onPreference(id: string, p: Preference): void; onTest(id: string): void; onSkip(id: string, skip: boolean): void;
   onSetup(id: string, o: { check?: boolean; dryRun?: boolean }): void;
   onSwitch(s: Switch, on: boolean): void; onGrant(id: string, a: DeclaredAction, mode: Mode | null): void;
-  onModel(id: string, model: string): void; onKey(id: string, create: boolean): void; onCost(id: string, cost: Cost | ''): void;
+  onModel(id: string, model: string): void; onKey(id: string, create: boolean): void; onGatewayTest(id: string): void; onCost(id: string, cost: Cost | ''): void;
 }
 
 function Row({ r, p }: { r: ToolRow; p: ToolsProps }) {
@@ -65,11 +65,15 @@ function Row({ r, p }: { r: ToolRow; p: ToolsProps }) {
         h('button', { key: 'sc', disabled: busy, onClick: () => p.onSetup(r.id, { check: true }) }, 'Check')] : []),
       h('button', { disabled: busy, onClick: () => p.onSkip(r.id, r.state !== 'skipped') }, r.state === 'skipped' ? 'Scan again' : 'Skip in scans')),
     g ? h('div', { className: 'row' },
+      h('span', { className: `state ${g.ready ? 'ready' : 'installed'}`, title: g.ready ? `${r.name} can use your models through Agent Spaghetti's gateway`
+        : !p.gatewayUrl ? 'The model gateway is off' : g.auto ? `Connect ${r.name} and it is set up by itself` : `Use the gateway: a key and the steps for ${r.name}` }, g.ready ? 'gateway ready' : 'gateway not set up'),
       h('label', null, 'Model ', h('select', { 'aria-label': `${r.name}'s model through the gateway`, value: g.model, disabled: busy, onChange: (e: { target: { value: string } }) => p.onModel(r.id, e.target.value) },
         ...[...new Set([AUTO, ...p.models, g.model])].map(m => h('option', { key: m, value: m }, m === AUTO ? 'auto (best free first)' : m)))),
-      p.gatewayUrl ? h('button', { disabled: busy, title: 'A key for this tool, shown once with the steps to use the gateway', onClick: () => p.onKey(r.id, true) }, g.key ? 'New gateway key' : 'Use the gateway')
-        : h('span', { className: 'why' }, 'Model gateway off (Settings → gateway.port)'),
-      g.key ? h('button', { disabled: busy, onClick: () => p.onKey(r.id, false) }, 'Revoke key') : null) : null,
+      !p.gatewayUrl ? h('span', { className: 'why' }, 'Model gateway off (Settings → gateway.port)')
+        : g.auto ? h('button', { disabled: busy, title: `Write the gateway (a new key) into ${r.name}'s model list again`, onClick: () => p.onConnect(r.id, true) }, g.ready ? 'Set up again' : 'Set up gateway')
+        : h('button', { disabled: busy, title: 'A key for this tool, shown once with the steps to use the gateway', onClick: () => p.onKey(r.id, true) }, g.key ? 'New gateway key' : 'Use the gateway'),
+      p.gatewayUrl ? h('button', { disabled: busy, title: `A short request through the gateway as ${r.name}`, onClick: () => p.onGatewayTest(r.id) }, p.busy === `gateway ${r.id}` ? 'Testing…' : 'Test gateway') : null,
+      g.key && !g.auto ? h('button', { disabled: busy, onClick: () => p.onKey(r.id, false) }, 'Revoke key') : null) : null,
     out ? h('div', { className: `out ${out.ok === null ? '' : out.ok ? 'pass' : 'fail'}`, role: 'status' }, h('pre', null, out.lines.join('\n'))) : null,
     h('details', { onToggle: (e: { currentTarget: { open: boolean } }) => { if (e.currentTarget.open) p.onExpand(r.id); } }, h('summary', null, 'More'),
       ...(more.length ? more : [h('div', { key: 'none', className: 'empty' }, d ? 'No switches or permissions.' : 'Loading…')])));
@@ -121,6 +125,7 @@ export function ToolsPanel({ bridge }: { bridge: Bridge }) {
     models: (targets.data ?? []).filter(t => t.kind === 'model').flatMap(t => t.models.map(m => `${t.id}:${m}`)),
     onCost: (id, cost) => act(`cost ${id}`, async () => { await bridge.call('setting', { key: 'tools.cost', value: costList((settings.data?.['tools.cost']?.value as string[]) ?? [], id, cost).join(',') }); await settings.reload(); }),
     onModel: (id, model) => act(`model ${id}`, () => bridge.call('gatewayClient', { integration: id, model })),
+    onGatewayTest: id => act(`gateway ${id}`, async () => { const r = (await bridge.call('gatewayClient', { integration: id, test: true })).test!; show(id, { ok: r.ok, lines: r.lines }); }),
     onKey: (id, create) => act(`key ${id}`, async () => {
       const r = await bridge.call('gatewayClient', { integration: id, key: create ? 'create' : 'revoke' });
       show(id, { ok: null, lines: [r.setup ? `Key for ${id} (shown only now):\n\n${r.setup}` : 'Key revoked: the tool can no longer use the gateway.'] });

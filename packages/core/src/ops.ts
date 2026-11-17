@@ -25,6 +25,8 @@ export interface Services {
   loaded(): Loaded; scan(): Promise<Snapshot>; live(): LiveState;
   /** Run a command in the given (default: every running) environment(s); failures are per env. */
   onEnvs<C extends EnvCommand>(cmd: C, args: string[], envIds?: string[]): Promise<Array<EnvResult<EnvResults[C]>>>;
+  /** Connected tools that take the gateway by themselves get it set up (once: those without a key; `again`: all, e.g. a new port). */
+  gatewayClients(again?: boolean): Promise<void>;
 }
 type Handlers = { [K in OpId]: (input: OpIO[K]['in'], s: Services) => Promise<OpIO[K]['out']> | OpIO[K]['out'] };
 const num = (v: unknown, d: number) => (Number.isFinite(Number(v)) && v !== '' && v !== undefined ? Number(v) : d);
@@ -59,8 +61,8 @@ export const handlers: Handlers = {
     return { rows: toolRows({ snapshot: snapshot(s), live: s.live(), targets: handlers.targets({}, s) as Target[], consents: s.consent.pending(),
       prefs: { auto: s.settings.get('connect.auto'), never: s.settings.get('connect.never') },
       loaded: l.integrations.map(i => ({ id: i.manifest.id, name: i.manifest.name, ...(i.manifest.color ? { color: i.manifest.color } : {}), source: i.source, roles: i.manifest.roles, levels: levelsOf(i, ENGINES), disabled: off.includes(i.manifest.id), setup: !!i.module?.setup,
-        ...(i.manifest.detect?.http?.url ? { needsEnv: i.manifest.detect.env ?? [] } : {}), ...(i.manifest.speaks?.openaiClient ? { gatewayClient: true } : {}) })),
-      costs: s.settings.get('tools.cost'), gateway: { routes: s.settings.get('gateway.routes'), keyed: s.gateway.status().clients.map(c => c.id) } }),
+        ...(i.manifest.detect?.http?.url ? { needsEnv: i.manifest.detect.env ?? [] } : {}), ...(i.manifest.speaks?.openaiClient ? { gatewayClient: i.manifest.speaks.openaiClient.auto ? 'auto' as const : 'manual' as const } : {}) })),
+      costs: s.settings.get('tools.cost'), gateway: { on: !!s.gateway.status().url, routes: s.settings.get('gateway.routes'), keyed: s.gateway.status().clients.map(c => c.id) } }),
       rejected: l.rejected };
   },
   switches: async (_i, s) => {
@@ -108,6 +110,7 @@ export const handlers: Handlers = {
   setting: async (i, s) => {
     s.settings.setText(need(i.key, 'key'), String(i.value ?? ''));
     if (String(i.key).startsWith('gateway.')) await s.gateway.sync();
+    if (i.key === 'gateway.port') await s.gatewayClients(true);   // a new address: the tools that set it up by themselves get it
     return settingsView(s);
   },
   disable: (i, s) => toggle(s, i.id, true),
@@ -147,12 +150,13 @@ export const handlers: Handlers = {
     return { runs: s.ledger.chain(run.id), result: s.ledger.result(run), final };
   },
   gateway: (_i, s) => s.gateway.status(),
-  gatewayClient: (i, s) => {
+  gatewayClient: async (i, s) => {
     const id = need(i.integration, 'integration'), m = s.loaded().integrations.find(x => x.manifest.id === id)?.manifest;
     if (!m?.speaks?.openaiClient) throw new Error(`${id} cannot use a custom model endpoint (no gateway setup known)`);
     const routes = s.settings.get('gateway.routes').filter(r => !r.startsWith(`${id}=`));
     if (i.model !== undefined) s.settings.set('gateway.routes', i.model && i.model !== AUTO ? [...routes, `${id}=${i.model}`] : routes);
     const model = s.settings.get('gateway.routes').find(r => r.startsWith(`${id}=`))?.slice(id.length + 1) ?? AUTO;
+    if (i.test) return { model, test: await s.gateway.test(id) };
     if (!i.key) return { model };
     const key = s.gateway.key(id, i.key === 'create');
     if (!key) return { model };
@@ -188,15 +192,19 @@ export const handlers: Handlers = {
     const found = snapshot(s)?.detections.filter(d => d.integration === id && (!i.envId || d.envId === i.envId)) ?? [];
     const envIds = [...new Set([...found.filter(d => d.connected !== undefined), ...found].map(d => d.envId))];
     if (!envIds.length) throw new Error(`${id} was not found by the last scan`);
-    const errors: string[] = [];
+    const errors: string[] = [], m = s.loaded().integrations.find(x => x.manifest.id === id)?.manifest;
+    // a tool that takes the gateway by itself (openaiClient.auto) gets a new key with the address; off: its key goes
+    const url = s.gateway.status().url, auto = !!m?.speaks?.openaiClient?.auto;
+    const gw = on && auto && url ? JSON.stringify({ url, key: i.dryRun ? '<new key>' : s.gateway.key(id, true) }) : '';
     for (const envId of envIds) {
       const cli = s.cli(envId);
-      const [r] = cli ? await s.onEnvs('connect', [id, JSON.stringify(cli), on ? 'on' : 'off', i.dryRun ? 'dry-run' : ''], [envId]) : [{ envId, error: 'agent-spaghetti cannot run there (see: status)' }];
+      const [r] = cli ? await s.onEnvs('connect', [id, JSON.stringify(cli), on ? 'on' : 'off', i.dryRun ? 'dry-run' : '', gw], [envId]) : [{ envId, error: 'agent-spaghetti cannot run there (see: status)' }];
       if (r?.result) {
         if (r.result.applied) {   // the panel updates at once: patch the saved scan, tell everyone
           const snap = snapshot(s);
           if (snap) s.store.saveSnapshot('scan', { ...snap, detections: snap.detections.map(d => d.integration === id && d.envId === envId ? { ...d, connected: on, why: connectedWhy(on) } : d) });
           s.bus.emit({ ts: Date.now(), type: 'client.connected', envId, source: id, data: { integration: id, on } });
+          if (!on && auto) s.gateway.key(id, false);
         }
         return r.result;
       }

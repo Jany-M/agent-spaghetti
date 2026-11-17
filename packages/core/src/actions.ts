@@ -36,11 +36,11 @@ export async function runEnvCommand<C extends EnvCommand>(env: Environment, inte
         }
         throw new Error(`unknown switch ${id} in ${env.id}`);
       }
-      case 'connect': {          // args: integration id, Cli JSON, 'on' | 'off', 'dry-run' or ''
+      case 'connect': {          // args: integration id, Cli JSON, 'on' | 'off', 'dry-run' or '', the gateway's { url, key } JSON or ''
         const i = integrations.find(i => i.manifest.id === args[0]);
         const r = i && await inspectAs(i, env, await env.inventory(i.manifest.detect?.env ?? []), grants);
         if (!i || !r) throw new Error(`${args[0]} is not installed in ${env.id}`);
-        return { integration: i.manifest.id, envId: env.id, ...await setConnection(env, i, r.detection, JSON.parse(args[1]), args[2] !== 'off', args[3] === 'dry-run') };
+        return { integration: i.manifest.id, envId: env.id, ...await setConnection(env, i, r.detection, JSON.parse(args[1]), args[2] !== 'off', args[3] === 'dry-run', args[4] ? JSON.parse(args[4]) : undefined) };
       }
       case 'setup': {            // args: integration id, Cli JSON, 'check' | 'apply', 'dry-run' or '', options JSON
         const i = integrations.find(i => i.manifest.id === args[0]);

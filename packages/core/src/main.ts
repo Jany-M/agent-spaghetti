@@ -109,6 +109,7 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
         (envId, e) => bus.emit({ ts: Date.now(), envId, ...e }));
     }
     await applyConnections(snap);
+    await gatewayClients();
     return snap;
   }
   // Connection preferences (ADR 0009). Session connections live in kv until undone: on shutdown, or at the next start after a crash.
@@ -136,6 +137,12 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
       });
     }
   }
+  async function gatewayClients(again = false) {
+    if (!gateway.status().url) return;
+    const keyed = new Set(gateway.status().clients.map(c => c.id));
+    const ids = new Set(store.loadSnapshot<Snapshot>('scan')?.detections.filter(d => d.connected).map(d => d.integration));
+    for (const id of ids) if (loaded.integrations.find(i => i.manifest.id === id)?.manifest.speaks?.openaiClient?.auto && (again || !keyed.has(id))) await connect(id, true);
+  }
   const services: Services = {
     store, bus, settings, consent, ledger, runner, gateway, dispatcher, host, loaded: () => loaded, live: () => live,
     cli: envId => {
@@ -143,7 +150,7 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
       const p = e?.distro ? prepared(e.distro) : null;
       return e?.env ? HOST_CLI : p ? { command: p.node, args: [p.bundlePath] } : null;
     },
-    shutdown: () => void close().then(() => process.exit(0)),
+    shutdown: () => void close().then(() => process.exit(0)), gatewayClients,
     scan: () => (scanning ??= fullScan().finally(() => { scanning = null; })),   // one scan at a time; callers share it
     async onEnvs(cmd, args, envIds) {
       if (!entries.length) entries = await discover((await ctx()).extraHosts);
