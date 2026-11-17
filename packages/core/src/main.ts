@@ -166,8 +166,8 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
   const server = await startDaemon({ services, token, port: Number(env.AGENT_SPAGHETTI_PORT ?? 0) });
   const removeDiscovery = writeDiscovery(dir, server.port);
   ask(store.loadSnapshot<Snapshot>('scan')?.pending);
-  // Status stays current by itself: a tool starting or stopping triggers a rescan, and a full rescan runs every `scan.everyMin`.
-  bus.subscribe(e => { if (e.type === 'tool.changed' && e.data.changed) rescanSoon(); });
+  // Status stays current by itself: a tool starting or stopping, or a model server's models changing, triggers a rescan, and a full rescan runs every `scan.everyMin`.
+  bus.subscribe(e => { if ((e.type === 'tool.changed' || e.type === 'backend.changed') && e.data.changed) rescanSoon(); });   // a model loaded or unloaded too
   const autoScan = setInterval(() => {
     const every = settings.get('scan.everyMin') * 60000, last = store.loadSnapshot<Snapshot>('scan')?.ts ?? 0;
     if (every > 0 && Date.now() - last >= every) void services.scan().catch(() => {});

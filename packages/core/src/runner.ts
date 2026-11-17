@@ -2,7 +2,7 @@
 // → events + run record + result file; then the next hop of the chain, and at the end the result goes back (ADR 0010).
 // MCP, CLI, tray and client hooks all use it.
 import { createHash } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ConsentScope, Delivery, Environment, Integration, RunEvent, RunOutcome, RunRequest, RunRow, Snapshot, Target } from '@agent-spaghetti/sdk';
 import { AUTO, classifyRequest, envPath, parseHop, programOf, runDecision, withGrants } from '@agent-spaghetti/sdk';
@@ -197,6 +197,7 @@ export class Runner {
     try {
       const resolved = o.engine ? req : await this.forTarget(t, req);
       this.d.bus.trace('runner', { stage: id === req.chainId ? 'request' : 'relay', text: resolved.task, source, target: t.id, runId: id, chainId: req.chainId, model: req.model });
+      if (!o.engine) this.saveFile(`${id}.task.md`, resolved.task);   // a hand-off's task beside its result (gateway prompts are never kept)
       for await (const e of o.engine ? o.engine(ac.signal) : this.engine(id, t, resolved, ac.signal, m => { model = m; })) {
         const r = this.running.get(id); if (r) r.at = Date.now();
         if (e.type === 'text') { result += e.text; noteOutput(e.text); }
@@ -261,12 +262,15 @@ export class Runner {
       yield r?.failed ? { type: 'error', message: r.result || 'the agent reported a failure' } : { type: 'done', result: r?.result ?? '' };
     } finally { this.reports.delete(id); }
   }
+  /** The task a run was given, as sent (`<data>/results/<run>.task.md`; none for gateway requests). */
+  taskText(id: number): string | undefined { try { return readFileSync(join(this.d.resultsDir, `${id}.task.md`), 'utf8'); } catch { return undefined; } }
+  private saveFile(name: string, text: string) { mkdirSync(this.d.resultsDir, { recursive: true }); writeFileSync(join(this.d.resultsDir, name), text); }
   /** `<data>/results/<run>.md`, plus `<chain>.md` in the caller's folder when asked (e.g. the workspace of a `>>` prompt): each hop
    *  overwrites it, so it ends with the chain's result. */
   private writeResult(id: number, req: RunRequest, result: string, error?: string): Partial<RunRow> {
     const text = error ? `${result}\n\n**Failed:** ${error}\n` : result;
     if (!text.trim()) return {};
-    mkdirSync(this.d.resultsDir, { recursive: true }); writeFileSync(join(this.d.resultsDir, `${id}.md`), text);
+    this.saveFile(`${id}.md`, text);
     if (req.resultDir) {
       const dir = envPath(req.resultDir, this.d.host()?.kind === 'windows' ? 'windows' : 'posix');
       mkdirSync(dir, { recursive: true }); writeFileSync(join(dir, `${req.chainId ?? id}.md`), text);

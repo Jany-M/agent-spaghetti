@@ -1,5 +1,5 @@
 // Handlers for the operations declared once in sdk/ops.ts. Per-environment work goes through Services.onEnvs (core/dispatch).
-import type { EnvResult, Grant, LiveState, OpId, OpIO, RunView, SettingsOut, Snapshot, Target } from '@agent-spaghetti/sdk';
+import type { EnvResult, Grant, LiveState, OpId, OpIO, RunView, SettingsOut, Snapshot, StoredEvent, Target, TraceData } from '@agent-spaghetti/sdk';
 import { AUTO, DIFFICULTIES, EDIT_KINDS, HANDOFF_KINDS, OPS, declaredActions, rankTargets, savings, withCosts, levelsOf, renderConfigReport, toolRows, withGrants, withoutGrants } from '@agent-spaghetti/sdk';
 import type { Store } from './store.ts';
 import type { Bus } from './bus.ts';
@@ -44,6 +44,14 @@ const toggle = (s: Services, id: string, off: boolean) => {
   return { disabled: s.settings.get('disabled') };
 };
 
+/** A run's question and answer after a restart (live traces are memory only): its task and result from their files, as the traces
+ *  they were (ids below zero, unique per run: never stored, never counted). */
+function replay(s: Services, e: StoredEvent): StoredEvent[] {
+  const id = Number(e.data.id), row = s.ledger.get(id), task = s.runner.taskText(id), result = row ? s.ledger.result(row) : undefined;
+  const trace = (n: number, ts: number, data: TraceData): StoredEvent => ({ id: -(id * 4 + n), ts, type: 'trace.detail', envId: 'hub', source: 'runner', data: data as never });
+  return [...(task !== undefined ? [trace(1, e.ts, { stage: row?.parentRunId ? 'relay' : 'request', text: task, source: row?.source, target: row?.target, runId: id, chainId: row?.chainId ?? id })] : []),
+    ...(row && result !== undefined ? [trace(2, row.ts + (row.durationMs ?? 0), { stage: 'output', text: result, target: row.target, runId: id, chainId: row.chainId ?? id })] : [])];
+}
 const SAVED_RUNS = 5000;                                    // the latest runs the savings count looks at
 export const handlers: Handlers = {
   status: (_i, s) => {
@@ -54,7 +62,9 @@ export const handlers: Handlers = {
   scan: async (_i, s) => ({ snapshot: await s.scan() }),
   events: (i, s) => {
     const stored = s.store.eventsSince(num(i.since, 0), num(i.limit, 500));
-    return i.traces ? [...stored, ...s.bus.recentTraces().filter(t => t.ts >= (stored[0]?.ts ?? 0))].sort((a, b) => a.ts - b.ts) : stored;
+    if (!i.traces) return stored;
+    const live = s.bus.recentTraces().filter(t => t.ts >= (stored[0]?.ts ?? 0)), seen = new Set(live.map(t => t.data.runId));
+    return [...stored, ...live, ...stored.flatMap(e => (e.type === 'run.started' && !seen.has(Number(e.data.id)) ? replay(s, e) : []))].sort((a, b) => a.ts - b.ts);
   },
   integrations: (_i, s) => {
     const l = s.loaded(), off = s.settings.get('disabled');

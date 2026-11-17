@@ -77,7 +77,7 @@ export class Gateway {
     this.trial.set(hash(token), integration);                // this request only: the tool's own key is never shown again
     try {
       const r = await http({ url: `${url}/chat/completions`, method: 'POST', timeoutMs: 120_000, headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ model: AUTO, max_tokens: 32, messages: [{ role: 'user', content: 'Reply with one word: ready' }] }) });   // up to 2 min: a model may load first
+        body: JSON.stringify({ model: AUTO, max_tokens: 256, messages: [{ role: 'user', content: 'Reply with one word: ready' }] }) });   // up to 2 min: a model may load first
       if (!r) return { ok: false, lines: [`The gateway at ${url} did not answer`] };
       const j = (parseJson(r.body) ?? {}) as { model?: string; error?: { message?: string }; choices?: Array<{ message?: { content?: string } }> };
       const key = has ? `${integration} has its key` : `${integration} has no key yet: Connect it (or Set up gateway) first`;

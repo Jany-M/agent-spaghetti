@@ -90,6 +90,11 @@ test('runner: paid target asks; once / job / always; deny and expiry are recorde
   let row = await r.done;
   assert.deepEqual([row.outcome, row.costUsd, row.inputTokens], ['done', 0.25, 5]);
   assert.equal(readFileSync(row.resultPath!, 'utf8'), 'final answer');
+  assert.equal(s.runner.taskText(row.id), 'do it', 'the task kept beside its result (the live pane shows it again after a restart)');
+  const { routesFor } = await import('../../../packages/core/src/ops.ts');
+  const events = routesFor({ store: s.store, bus: new Bus(s.store), ledger: s.ledger, runner: s.runner } as never).find(o => o.path === '/v1/events')!;
+  const back = (await events.handle({ traces: true }, null as never) as Array<{ id: number; type: string; data: { stage: string; text: string; runId: number } }>).filter(e => e.type === 'trace.detail');
+  assert.deepEqual(back.map(e => [e.data.stage, e.data.text, e.data.runId, e.id < 0]), [['request', 'do it', row.id, true], ['output', 'final answer', row.id, true]], 'a new bus (a restart): question and answer come back from the files');
   assert.equal(s.settings.grants().length, 0, 'once leaves no grant');
   assert.ok(s.store.eventsSince(0).some(e => e.type === 'run.event' && e.data.tool === 'Read'));
   r = s.runner.start('cursor', { target: 'paid-agent', task: 'x', jobId: 'j1' });

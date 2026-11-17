@@ -4,7 +4,7 @@
   "id": "mempalace",
   "name": "MemPalace",
   "roles": [
-    "tool"
+    "memory"
   ],
   "cost": "free",
   "detect": {

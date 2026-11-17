@@ -31,7 +31,7 @@ export const OPS = {
   report:       { method: 'GET',  path: '/v1/report', gui: 'settings',       usage: 'report [--out <file>]',    summary: 'Machine configuration report (Markdown)' },
   consent:      { method: 'POST', path: '/v1/consent', gui: 'home',      usage: 'answer <id> allow|deny [once|job|always]', summary: 'Answer a question waiting for you (ids: status)' },
   shutdown:     { method: 'POST', path: '/v1/shutdown', gui: 'tray-menu',     usage: 'shutdown',                 summary: 'Stop the daemon' },
-  delegate:     { method: 'POST', path: '/v1/delegate', gui: 'runs',     usage: 'delegate <target> <task> [options]', summary: 'Hand a task to a local model or agent (--kind, --difficulty, --reason, --model, --then <target[:model]>,…)',
+  delegate:     { method: 'POST', path: '/v1/delegate', gui: 'runs',     usage: 'delegate <target> <task> [options]', summary: 'Hand a task to a local model or agent (--kind, --difficulty, --reason, --model, --then <target[:model]>,…, --cwd <folder>, --files <a,b>)',
     mcp: { name: 'delegate', description: 'Hand a task to a local model or another agent on this machine (see `targets`). Free local models run at once; '
       + 'targets that may cost money ask the user first. `then` hands the result on to further targets in order; the last result comes back to you. '
       + 'Pass the files the user attached or means as `files`. Returns the result, or a run id to check with `run_status` if it takes long.',

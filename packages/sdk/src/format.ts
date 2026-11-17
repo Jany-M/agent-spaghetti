@@ -183,7 +183,7 @@ const eventFacts = (d: Record<string, unknown>) => {
 /** Tool blocks in the Tools panel and `agent-spaghetti integrations`: first role in this order wins (no manifest field needed). */
 export const TOOL_GROUPS = [
   { id: 'agents', role: 'agent', label: 'Agents' }, { id: 'models', role: 'backend', label: 'Model servers' },
-  { id: 'apps', role: 'client', label: 'Editors & apps' }, { id: 'tools', role: 'tool', label: 'Other tools' },
+  { id: 'apps', role: 'client', label: 'Editors & apps' }, { id: 'memory', role: 'memory', label: 'Memory' }, { id: 'tools', role: 'tool', label: 'Other tools' },
 ] as const satisfies ReadonlyArray<{ id: string; role: Role; label: string }>;
 export type ToolGroup = (typeof TOOL_GROUPS)[number]['id'];
 export type ToolState = 'ready' | 'running' | 'stopped' | 'installed' | 'not found' | 'skipped';

@@ -89,7 +89,8 @@ export function summarizeRuns(rows: RunRow[], now = Date.now()): Record<string, 
 }
 /** How to rank (settings `routing.*`, the run record, live queues). `source`: the caller, never its own target. */
 export interface RouteOpts { source?: string; web?: boolean;   // web: the task needs to look things up online (a webKind without its own sources)
-  stats?: Record<string, RunStats>; learn?: boolean; stretch?: boolean; prefer?: string[]; never?: string[]; tiers?: string[]; queued?(id: string): number }
+  stats?: Record<string, RunStats>; learn?: boolean; stretch?: boolean; prefer?: string[]; never?: string[]; tiers?: string[]; queued?(id: string): number;
+  busy?(id: string): boolean }                              // an agent working on another task now
 /** One target for one task: its tier, why it sits where it does, its history; `skip` when it may not take the task. */
 export interface Ranked { target: Target; tier: Difficulty; why: string; stats?: RunStats; preferred?: true; skip?: string }
 const forKind = (list: string[] | undefined, kind: string) => (list ?? []).filter(x => x.startsWith(`${kind}=`)).map(x => x.slice(kind.length + 1));
@@ -100,22 +101,26 @@ const pct = (s: RunStats) => `${s.runs} ${s.runs === 1 ? 'run' : 'runs'}, ${Math
  *  then better history for this kind (with `learn`, from `route.minRuns` runs), then the shortest queue, then the scan's order.
  *  Targets that may not take it (the caller, `never` for the kind, a model when the task edits files: permissions mayEdit, an agent that
  *  would load its own local model beside one already loaded) come last with `skip`. */
+const BUSY_RANK = (COST_RANK.unknown + COST_RANK.metered) / 2;   // a busy free agent: after every idle free or unknown one, before paid
 export function route(c: { kind: TaskKind; difficulty: Difficulty; edits?: boolean }, targets: Target[], o: RouteOpts = {}): Ranked[] {
   const frontier = R.frontierKinds.includes(c.kind), difficulty = frontier ? 'heavy' : c.difficulty;   // a frontier kind asks for the strongest target whatever its size
   const need = level(difficulty), prefer = forKind(o.prefer, c.kind), never = forKind(o.never, c.kind);
   const stretch = o.stretch && !frontier, loaded = targets.find(t => t.kind === 'model');
   return targets.map((t, i) => {
-    const tier = tierOf(t, o.tiers), s = o.stats?.[statKey(c.kind, t.id)], preferred = prefer.includes(t.id);
+    // a free agent busy with another task does one thing at a time: it goes after the idle ones of its class (just before the paid
+    // ones), so nothing waits on it; paid agents (a provider's servers) take tasks side by side
+    const tier = tierOf(t, o.tiers), s = o.stats?.[statKey(c.kind, t.id)], busy = t.kind === 'agent' && t.cost !== 'metered' && !!o.busy?.(t.id);
+    const preferred = prefer.includes(t.id) && !busy;
     const skip = t.id === o.source ? 'the caller itself' : never.includes(t.id) ? `never for ${c.kind} (your choice)`
       : c.edits && t.kind !== 'agent' ? 'edits files: needs an agent'
       : t.loads && loaded && !preferred ? `would load ${t.loads} while ${loaded.name} has a model loaded (name it as the target to do that)` : undefined;
     const fit = level(tier) >= need ? 0 : stretch && t.cost === 'free' && level(tier) === need - 1 ? 1 : 2;
     const offline = !!o.web && !t.web, paid = t.cost === 'metered';
     const history = o.learn && s && s.runs >= R.minRuns ? s.rate : 0.5;      // unknown sits between a good and a bad record
-    const why = skip ?? [preferred && `your pick for ${c.kind}`, t.cost, `${tier} tier${fit === 1 ? ` (stretch: tries a ${difficulty} task, escalates if it fails)` : fit === 2 ? ` (below ${difficulty})` : ''}`,
+    const why = skip ?? [preferred && `your pick for ${c.kind}`, busy && 'busy with another task', t.cost, `${tier} tier${fit === 1 ? ` (stretch: tries a ${difficulty} task, escalates if it fails)` : fit === 2 ? ` (below ${difficulty})` : ''}`,
       offline && 'no web access (answers from what its model knows)', s && `${c.kind}: ${pct(s)}`].filter(Boolean).join(', ');
     return { r: { target: t, tier, why, ...(s ? { stats: s } : {}), ...(preferred ? { preferred: true as const } : {}), ...(skip ? { skip } : {}) },
-      k: [skip ? 1 : 0, preferred ? 0 : 1, fit === 2 ? 1 : 0, fit === 2 ? -level(tier) : 0, o.web && paid ? 1 : 0, offline ? 1 : 0, COST_RANK[t.cost], fit, -history, o.queued?.(t.id) ?? 0, i] };
+      k: [skip ? 1 : 0, preferred ? 0 : 1, fit === 2 ? 1 : 0, fit === 2 ? -level(tier) : 0, o.web && paid ? 1 : 0, offline ? 1 : 0, busy ? BUSY_RANK : COST_RANK[t.cost], fit, -history, o.queued?.(t.id) ?? 0, i] };
   }).sort((a, b) => { for (let j = 0; j < a.k.length; j++) if (a.k[j] !== b.k[j]) return a.k[j] - b.k[j]; return 0; }).map(x => x.r);
 }
 

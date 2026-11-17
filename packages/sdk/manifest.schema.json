@@ -12,7 +12,7 @@
     "name": { "type": "string" },
     "abilities": { "type": "array", "items": { "enum": ["web"] }, "description": "what the tool's agent can do beyond answering from what its model knows: web = it can search and read the web (tasks that need it go there first)" },
     "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$", "description": "the tool's own color in activity lines (Live, Activity); without it the tool gets one of the UI's tool colors. Keep it clear of the action colors (red, gold, green)" },
-    "roles": { "type": "array", "minItems": 1, "items": { "enum": ["agent", "backend", "client", "tool"] } },
+    "roles": { "type": "array", "minItems": 1, "items": { "enum": ["agent", "backend", "client", "memory", "tool"] } },
     "cost": { "enum": ["free", "metered", "unknown"] },
     "platforms": { "type": "array", "items": { "enum": ["windows", "linux", "macos"] } },
     "detect": {

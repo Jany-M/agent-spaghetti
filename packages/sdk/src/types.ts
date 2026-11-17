@@ -3,7 +3,7 @@ import type { Pending } from './permissions.ts';
 
 /** The one version number (env bundle, MCP server info, client plugin). */
 export const VERSION = '0.3.0';
-export type Role = 'agent' | 'backend' | 'client' | 'tool';   // tool = provides services to agents (e.g. an MCP server)
+export type Role = 'agent' | 'backend' | 'client' | 'memory' | 'tool';   // memory = keeps what agents learn (e.g. MemPalace); tool = other services to agents (e.g. an MCP server)
 export type Cost = 'free' | 'metered' | 'unknown';
 export type Level = 'detect' | 'observe' | 'drive' | 'client';
 export type EnvKind = 'windows' | 'wsl' | 'linux' | 'macos';

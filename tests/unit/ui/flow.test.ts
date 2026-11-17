@@ -31,6 +31,15 @@ test('FlowView: a block says which program Agent Spaghetti works with (its CLI o
   const page = html(h(FlowView, { flow: flowModel([...rows.filter(r => r.id !== 'helper'), row('helper', 'Helper Agent', { receives: 'module', uses: 'cli' })], [], [], 0) }));
   assert.match(page, /<text class="uses"[^>]*>CLI<\/text><text class="name"[^>]*>Helper Agent<\/text>/);
 });
+test('FlowView: shapes by what a tool is: memory a brain, a CLI agent a robot head, the rest cards; the text box the same in all', () => {
+  const page = html(h(FlowView, { flow: flowModel([row('mp', 'MemPalace', { group: 'memory' }), row('k', 'Kilo', { receives: 'module', uses: 'cli' }),
+    row('ed', 'Editor', { group: 'apps', connection: 'connected', uses: 'app' })], [], [], 0) }));
+  const block = (name: string) => page.slice(page.lastIndexOf('<g', page.indexOf(`>${name}</text>`)), page.indexOf(`>${name}</text>`));
+  assert.match(block('MemPalace'), /<path class="box brain" d="M0,0 A[^"]+Z"><\/path>/);
+  assert.match(block('Kilo'), /<rect class="ear"[^>]*><\/rect><rect class="ear"[^>]*><\/rect><line class="ear"[^>]*><\/line><circle class="tip"[^>]*><\/circle><rect class="box"/);
+  assert.match(block('Editor'), /<rect class="box"/); assert.doesNotMatch(block('Editor'), /ear|brain/);
+  assert.deepEqual(flowLayout(flowModel([row('mp', 'MemPalace', { group: 'memory' })], [], [], 0).nodes, 760, 560).captions.map(c => c.text), ['memory']);
+});
 test('flowModel with a run: who works for whom, who waits, the hub routing then counting; a chain names its next step', () => {
   const f = flowModel(rows, [run({ kind: 'research', next: 'lms:m1' })], [], 2000);
   const by = Object.fromEntries(f.nodes.map(n => [n.id, n]));

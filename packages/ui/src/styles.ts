@@ -98,6 +98,8 @@ button.badge { border:0; cursor:pointer; }
 .flow .light { fill:currentColor; filter:drop-shadow(0 0 3px currentColor) drop-shadow(0 0 6px currentColor); }
 .flow .waiting .trail { stroke-dasharray:3 5; stroke-opacity:.4; } .flow .waiting .light { opacity:.6; }
 .flow .box { fill:url(#flow-glass); stroke:currentColor; stroke-opacity:.35; stroke-width:1; transition:stroke-opacity .3s; }
+.flow .ear { fill:currentColor; stroke:currentColor; stroke-width:1; opacity:.45; } .flow .tip { fill:currentColor; opacity:.6; }
+.flow .on .ear, .flow .on .tip { opacity:1; } .flow .on .tip { animation:flow-pulse 1.2s ease-in-out infinite; }
 .flow .bar { fill:currentColor; opacity:.5; } .flow .on .bar { opacity:1; }
 .flow .dot { fill:var(--line); } .flow .on .dot { fill:currentColor; animation:flow-pulse 1.2s ease-in-out infinite; }
 .flow .on .box { stroke-opacity:1; stroke-width:1.4; animation:flow-glow 2s ease-in-out infinite; }

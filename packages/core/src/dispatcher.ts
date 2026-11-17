@@ -34,11 +34,11 @@ export class Dispatcher {
   on(): boolean { return !!this.d.settings.get('dispatcher.model'); }
   /** Every available target for a task, best first (skipped ones last, with why); `source` and `without` never take it; `among` narrows them. */
   ranking(c: Pick<Classification, 'kind' | 'difficulty'> & { edits?: boolean; sources?: boolean }, source?: string, without: string[] = [], among: (t: Target) => boolean = () => true): Ranked[] {
-    const s = this.d.settings, q = this.d.live?.().queues ?? {}, learn = s.get('routing.learn');
+    const s = this.d.settings, live = this.d.live?.(), q = live?.queues ?? {}, learn = s.get('routing.learn'), working = new Set(Object.values(live?.runs ?? {}).map(r => r.target));
     return route(c, this.d.runner.targets().filter(t => !without.includes(t.id) && among(t)), { source, learn, stretch: s.get('routing.stretch'),
       web: WEB_KINDS.includes(c.kind) && !c.sources,          // a task that brings its files or a previous result needs no lookup
       prefer: s.get('routing.prefer'), never: s.get('routing.never'), tiers: s.get('routing.tiers'),
-      stats: summarizeRuns(this.d.ledger.list({ since: 0, limit: STATS_RUNS })), queued: id => (q[id]?.waiting ?? 0) + (q[id]?.running ?? 0) });
+      stats: summarizeRuns(this.d.ledger.list({ since: 0, limit: STATS_RUNS })), queued: id => (q[id]?.waiting ?? 0) + (q[id]?.running ?? 0), busy: id => working.has(id) });
   }
 
   /** The loaded model routing picks for what a tool's user said (the model gateway's `auto`). */

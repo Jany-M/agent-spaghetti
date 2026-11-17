@@ -2,7 +2,7 @@
 // ranking for one task (fit, cost, stretch, history, queue; skips with why).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { modelSize, offloadText, route, savings, summarizeRuns, tierOf, withCosts, type RunRow, type Target } from '@agent-spaghetti/sdk';
+import { modelSize, offloadText, route, savings, summarizeRuns, tierOf, withCosts, type Ranked, type RunRow, type Target } from '@agent-spaghetti/sdk';
 
 const T = (id: string, o: Partial<Target> = {}): Target => ({ id, name: id, kind: 'model', cost: 'free', envId: 'w', models: [], engine: 'openai', resumable: false, ...o });
 test('tiers: model size from its name (active size when stated), paid → heavy, agents → medium, the owner\'s entry wins', () => {
@@ -37,6 +37,19 @@ test('route: fit before cost, stretch lets a free smaller target try first, hist
   assert.equal(edit.find(x => x.target.id === 'agent')!.skip, 'the caller itself');
   assert.match(route({ kind: 'summarize', difficulty: 'medium' }, ts, { stretch: true, stats: { 'summarize small': { runs: 2, rate: 1, bad: 0 } } }).find(x => x.target.id === 'small')!.why,
     /^free, light tier \(stretch: tries a medium task, escalates if it fails\), summarize: 2 runs, 100% ok \(too few to count yet\)$/);
+});
+test('route: a free agent busy with another task goes after the idle ones (before paid); a busy paid agent takes more; a busy pick is no pick', () => {
+  const A = (id: string, o: Partial<Target> = {}) => T(id, { kind: 'agent', engine: 'module', ...o });
+  const ts = [A('kilo'), A('cline'), A('paid', { cost: 'metered' })];
+  const ids = (r: Ranked[]) => r.map(x => x.target.id);
+  assert.deepEqual(ids(route({ kind: 'summarize', difficulty: 'light' }, ts)), ['kilo', 'cline', 'paid']);
+  const busy = route({ kind: 'summarize', difficulty: 'light' }, ts, { busy: id => id === 'kilo' });
+  assert.deepEqual(ids(busy), ['cline', 'kilo', 'paid'], 'the next one in line takes it');
+  assert.match(busy[1].why, /busy with another task/);
+  assert.deepEqual(ids(route({ kind: 'summarize', difficulty: 'light' }, ts, { busy: id => id !== 'paid' })), ['kilo', 'cline', 'paid'], 'all free ones busy: still before paying');
+  assert.deepEqual(ids(route({ kind: 'summarize', difficulty: 'light' }, [A('paid', { cost: 'metered' }), A('paid2', { cost: 'metered' })], { busy: () => true })), ['paid', 'paid2'], 'paid agents are not held back');
+  assert.deepEqual(ids(route({ kind: 'summarize', difficulty: 'light' }, ts, { busy: id => id === 'kilo', prefer: ['summarize=kilo'] })), ['cline', 'kilo', 'paid'], 'even your pick: no waiting');
+  assert.deepEqual(ids(route({ kind: 'summarize', difficulty: 'light' }, [T('lms'), A('kilo')], { busy: () => true }))[0], 'lms', 'models queue instead (their server takes requests side by side)');
 });
 test('route: research needs the web (unpaid with web, then unpaid without, then paid); plan never stretches; a second local model is never loaded', () => {
   const ts = [T('lms', { models: ['m-4b'] }), T('browser', { kind: 'agent', engine: 'module', cost: 'unknown', web: true }), T('paid', { kind: 'agent', engine: 'module', cost: 'metered', web: true })];

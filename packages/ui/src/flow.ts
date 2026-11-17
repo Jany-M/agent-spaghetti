@@ -27,7 +27,7 @@ type Row = Pick<ToolRow, 'id' | 'name' | 'state' | 'group' | 'connection' | 'rec
  *  whoever takes part in a run. A line stays for as long as its run is not finished, and a result's line until it was delivered
  *  (a few seconds after) or, when nobody collected it yet, until somebody does. */
 export function flowModel(rows: Row[], runs: LiveRun[], results: LiveResult[], now: number): Flow {
-  const shown = rows.filter(r => r.state !== 'not found' && r.state !== 'skipped' && (r.connection === 'connected' || r.receives || r.group === 'tools'));
+  const shown = rows.filter(r => r.state !== 'not found' && r.state !== 'skipped' && (r.connection === 'connected' || r.receives || r.group === 'tools' || r.group === 'memory'));
   const back = results.filter(r => r.how === 'unread' || (r.how !== 'pending' && now - r.ts < RETURN_MS));
   const ids = [...new Set([...shown.map(r => r.id), ...runs.flatMap(r => [r.source, r.target]), ...back.flatMap(r => [r.from, r.to])])].filter(id => id !== HUB);
   const name = (id: string) => rows.find(r => r.id === id)?.name ?? id;
@@ -46,8 +46,8 @@ export function flowModel(rows: Row[], runs: LiveRun[], results: LiveResult[], n
 }
 
 /** The groups clockwise from the top (the Tools panel's groups; callers that are no listed tool come last), and their captions. */
-const ORDER: FlowGroup[] = ['models', 'agents', 'tools', 'apps', 'callers'];
-const CAPTION: Record<FlowGroup, string> = { models: 'models', agents: 'agents', tools: 'tools', apps: 'apps', callers: 'you' };   // short: they ring the sun
+const ORDER: FlowGroup[] = ['models', 'agents', 'memory', 'tools', 'apps', 'callers'];
+const CAPTION: Record<FlowGroup, string> = { models: 'models', agents: 'agents', memory: 'memory', tools: 'tools', apps: 'apps', callers: 'you' };   // short: they ring the sun
 export interface FlowBox { x: number; y: number; w: number; h: number }
 export interface FlowPlan {
   width: number; height: number; k: number; cx: number; cy: number; r: number;   // the hub: a sun of radius r at (cx, cy)
@@ -75,7 +75,7 @@ export function flowLayout(nodes: FlowNode[], space: number, tall?: number): Flo
     return planets.map((_, i) => { const want = (((first + i * step) % L) + L) % L; let j = 0; while (len[j + 1] < want) j++; return at(j); });
   };
   const place = (k: number, H: number, rings: number): FlowPlan | null => {
-    const [pad, gap, room, r, bw, bh] = [8, 6, 14, 40, 108, 48].map(x => Math.round(x * k)), cx = width / 2, cy = H / 2;
+    const [pad, gap, room, r, bw, bh] = [8, 10, 14, 40, 108, 48].map(x => Math.round(x * k)), cx = width / 2, cy = H / 2;
     const out = { rx: cx - pad - bw / 2, ry: cy - pad - bh / 2 }, inner = { rx: r + room + bw / 2, ry: r + room + bh / 2 };
     if (out.rx < inner.rx || out.ry < inner.ry) return null;
     const orbits = Array.from({ length: rings }, (_, j) => ({ rx: Math.max(inner.rx, out.rx * (1 - 0.3 * j)), ry: Math.max(inner.ry, out.ry * (1 - 0.3 * j)) }));
@@ -120,6 +120,25 @@ function wrap(text: string, w: number, f: number, max: number): string[] {
   if (lines.length <= max && lines.every(l => l.length <= n)) return lines;
   return [...lines.slice(0, max - 1), `${lines.slice(max - 1).join(' ').slice(0, n - 1)}…`];
 }
+/** A block's outline by what it is: memory a brain (bumpy outline), a CLI agent a robot head (ears, antenna), the rest a card; the
+ *  same box inside each, so the text always has its room (the extras stay in the gap between blocks). */
+function shape(n: FlowNode, b: FlowBox, px: (n: number) => number) {
+  if (n.group === 'memory') {
+    const s = px(7), nx = Math.max(2, Math.round(b.w / (2 * s))), ny = Math.max(1, Math.round(b.h / (2 * s))), dx = b.w / nx, dy = b.h / ny, bump = px(3.5);
+    const arc = (rx: number, ry: number, x: number, y: number) => ` A${rx},${ry} 0 0 1 ${Math.round(x * 10) / 10},${Math.round(y * 10) / 10}`;
+    let d = 'M0,0';                                          // clockwise, every arc bulging out: a brain's folds
+    for (let i = 1; i <= nx; i++) d += arc(dx / 2, bump, i * dx, 0);
+    for (let i = 1; i <= ny; i++) d += arc(bump, dy / 2, b.w, i * dy);
+    for (let i = nx - 1; i >= 0; i--) d += arc(dx / 2, bump, i * dx, b.h);
+    for (let i = ny - 1; i >= 0; i--) d += arc(bump, dy / 2, 0, i * dy);
+    return [h('path', { key: 'box', className: 'box brain', d: `${d} Z` })];
+  }
+  const card = h('rect', { key: 'box', className: 'box', width: b.w, height: b.h, rx: px(8) });
+  if (!(n.group === 'agents' && n.uses === 'cli')) return [card];
+  const ear = (x: number) => h('rect', { key: `ear${x}`, className: 'ear', x, y: Math.round(b.h * 0.3), width: px(3), height: Math.round(b.h * 0.4), rx: px(1) });
+  return [ear(-px(3)), ear(b.w), h('line', { key: 'mast', className: 'ear', x1: b.w / 2, y1: 0, x2: b.w / 2, y2: -px(5) }),
+    h('circle', { key: 'tip', className: 'tip', cx: b.w / 2, cy: -px(6), r: px(1.8) }), card];
+}
 const LIGHTS = 3;                                                // lights travelling along one line at a time
 /** `still`: nothing moves (the page is hidden). `size`: the space to fill (the window); without a height the drawing is as tall as it needs. */
 export function FlowView({ flow, still = false, size }: { flow: Flow; still?: boolean; size?: { width: number; height?: number } }) {
@@ -161,7 +180,7 @@ export function FlowView({ flow, still = false, size }: { flow: Flow; still?: bo
     const what = n.label ? wrap(n.label, room, px(7.5), n.sub ? 2 : 3) : [], next = n.sub ? wrap(n.sub, room, px(7), 1) : [];   // name, then up to three lines
     return h('g', { key: n.id, style: c.style, className: ['node', c.className, n.on ? 'on' : '', n.off ? 'off' : ''].filter(Boolean).join(' '), transform: `translate(${b.x},${b.y})` },
       h('title', null, [n.name, n.label, n.sub].filter(Boolean).join(': ')),
-      h('rect', { className: 'box', width: b.w, height: b.h, rx: px(8) }),
+      ...shape(n, b, px),
       h('rect', { className: 'bar', width: px(2.5), height: b.h - px(12), x: px(4), y: px(6), rx: px(1.25) }),
       h('circle', { className: 'dot', cx: b.w - px(7), cy: px(8), r: px(2) }),
       n.uses ? h('text', { className: 'uses', x: b.w - px(13), y: px(10.5), style: { fontSize: px(5.5) } }, n.uses === 'cli' ? 'CLI' : 'APP') : null,
