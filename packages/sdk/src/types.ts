@@ -66,6 +66,7 @@ export interface Manifest {
     agentPlugins?: { dir: string; variant?: 'agent-plugins' | 'cursor' };
     mcpClientNames?: string[];   // the name it gives as an MCP client (clientInfo.name), so a server it starts from another tool's config still knows it
     promptHook?: { config: string; event: string };
+    agentTools?: string;  // the agent file's `tools` line in the tool's own syntax (VS Code: ['agent-spaghetti/*']): it only hands off
     agentFile?: string;   // where its custom agents live: connect writes the `agent-spaghetti` agent there (a pick in its agent list)   // its prompt hook (`>>` shortcut): a JSON settings file with hooks.<event>[] = { hooks: [{ type: 'command', command, args }] }
   };
 }

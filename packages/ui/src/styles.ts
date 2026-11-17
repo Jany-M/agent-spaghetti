@@ -105,6 +105,7 @@ button.badge { border:0; cursor:pointer; }
 .flow .hub.on .corona { animation:flow-corona 2.4s ease-in-out infinite; }
 .flow text { text-anchor:start; stroke:none; } .flow .hub text { text-anchor:middle; }
 .flow .name { font-weight:700; fill:currentColor; } .flow .hub .name { fill:var(--fg); }
+.flow .off { opacity:.45; } .flow .off .box { stroke-dasharray:3 3; }
 .flow .what { fill:var(--muted); } .flow .on .what { fill:var(--fg); } .flow .what.next { opacity:.75; }
 .flow.still * { animation:none !important; }
 @keyframes flow-glow { 50% { filter:drop-shadow(0 0 6px currentColor); } }

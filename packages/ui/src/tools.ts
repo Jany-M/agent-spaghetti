@@ -43,7 +43,9 @@ function Row({ r, p }: { r: ToolRow; p: ToolsProps }) {
   return h('div', { className: `card tool${r.asks ? ' asking' : ''}` },
     h('div', { className: 'top' }, h('span', { className: 'name' }, r.name), r.version ? h('span', { className: 'meta' }, ` ${r.version}`) : null,
       h('span', { className: `state ${r.state.replace(' ', '-')}` }, r.state),
-      r.connection ? h('span', { className: `state ${r.connection === 'connected' ? 'ready' : 'installed'}` }, r.connection) : null,
+      r.connection ? h('span', { className: `state ${r.connection === 'connected' ? 'ready' : 'installed'}`, title: r.connection === 'connected'
+        ? 'Agent Spaghetti is set up in it: while it is open, it can hand tasks off' : 'Connect it to hand tasks off from it' }, r.connection) : null,
+      r.connection && r.open !== undefined ? h('span', { className: `state ${r.open ? 'running' : 'stopped'}` }, r.open ? 'open' : 'not open') : null,
       r.receives ? h('span', { className: 'state ready', title: 'Tasks can be handed to it now' }, `takes tasks (${ENGINE_LABEL[r.receives]})`) : null),
     h('div', { className: 'why' }, [r.why, r.envs.join(', ')].filter(Boolean).join(' · ')),
     h('div', { className: 'row' },

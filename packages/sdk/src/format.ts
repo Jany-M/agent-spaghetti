@@ -147,6 +147,9 @@ export function storyParts(e: StoredEvent): Part[] | null {
       : d.what === 'escalated' ? [...R, { tool: String(d.from) }, ' ', a('fail', 'failed'), ', ', AS, ' ', a('decide', 'escalates to'), ' ', { tool: String(d.to) }, ` (${d.why})`]
       : d.what === 'handed-over' ? [...R, a('fail', 'no progress'), ' on ', { tool: String(d.from) }, ', ', a('decide', 'handed to'), ' ', { tool: String(d.to) }]
       : d.what === 'stuck' ? [...R, a('fail', 'no progress'), ' on ', { tool: String(d.target) }] : null;
+    case 'client.connected': return [{ tool: e.source }, ' ', a('note', d.on ? 'connected to' : 'disconnected from'), ' ', AS];
+    case 'tool.changed': return [{ tool: String(d.integration) }, ' ', a('note', d.running ? 'is running' : 'stopped'), d.endpoint ? ` (${d.endpoint})` : ''];
+    case 'backend.changed': return [{ tool: String(d.integration) }, ' ', a('note', d.up ? 'serves models' : 'stopped serving models'), d.endpoint ? ` (${d.endpoint})` : ''];
     case 'consent.requested': return [{ tool: e.source }, ' ', a('decide', `asks to ${d.action}`), ' ', d.action === 'run' ? { tool: String(d.resource) } : String(d.resource),
       d.cost && d.cost !== 'free' ? ` (${d.cost === 'metered' ? 'paid' : d.cost})` : '', ': waiting for you'];
     case 'consent.answered': return [{ tool: e.source }, ': ', a(d.answer === 'granted' ? 'decide' : 'fail', String(d.answer)), d.scope ? ` (${d.scope})` : ''];
@@ -187,7 +190,8 @@ export type ToolState = 'ready' | 'running' | 'stopped' | 'installed' | 'not fou
 export interface ToolRow {
   id: string; name: string; color?: string; group: ToolGroup; source: 'builtin' | 'user'; levels: Level[]; envs: string[]; version?: string;
   state: ToolState; why: string;
-  connection?: 'connected' | 'not connected';               // clients only
+  open?: boolean;                                           // tools whose process is watched: running now (an editor can hand off only while open)
+  connection?: 'connected' | 'not connected';               // clients only: agent-spaghetti is set up in it (used when it is open)
   preference?: 'always' | 'never' | 'ask';                  // clients only (ADR 0009)
   asks: number;                                             // questions about this tool waiting for the user
   setup?: true;                                             // has tool-side setup (Set up / Check)
@@ -212,7 +216,7 @@ export function toolRows(x: ToolInput): ToolRow[] {
       : dets.some(d => d.endpoint || d.installs.some(n => n.via === 'process')) ? 'running' : 'installed';   // its server answered, or its process runs
     return {
       id: i.id, name: i.name, ...(i.color ? { color: i.color } : {}), group: TOOL_GROUPS.find(g => i.roles.includes(g.role))?.id ?? 'tools', source: i.source, levels: i.levels,
-      envs: [...new Set(dets.map(d => d.envId))], version: dets.find(d => d.version)?.version, state,
+      envs: [...new Set(dets.map(d => d.envId))], version: dets.find(d => d.version)?.version, state, ...(live.length ? { open: live.some(t => t.running) } : {}),
       why: i.disabled ? 'skipped in scans' : dets.find(d => d.unready)?.unready ?? (client[0] ?? dets[0])?.why ?? (i.needsEnv ? `set ${i.needsEnv.join(', ')} where Agent Spaghetti runs, then rescan` : 'not found on this machine'),
       ...(client.length ? { connection: client.some(d => d.connected) ? 'connected' as const : 'not connected' as const,
         preference: x.prefs.auto.includes(i.id) ? 'always' as const : x.prefs.never.includes(i.id) ? 'never' as const : 'ask' as const } : {}),

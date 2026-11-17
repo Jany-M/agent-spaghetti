@@ -163,6 +163,10 @@ test('live pane: work events only by default, one run on request, streamed outpu
     'run 6: cursor → codex', 'Agent Spaghetti picks lmstudio for auto (best-ranked target)']);
   assert.equal(rows[2].text, 'Hello world');
   assert.equal(liveRows(events, { all: true }).length, 7, 'everything: the scan too');
+  const tools = liveRows([ev(7, 'client.connected', { integration: 'vscode', on: true }), ev(8, 'tool.changed', { integration: 'vscode', running: true }),
+    ev(9, 'backend.changed', { integration: 'lmstudio', up: true, endpoint: 'http://127.0.0.1:1234' })].map(e => ({ ...(e as object), source: 'vscode' }) as never), { all: true });
+  assert.deepEqual(tools.map(r => r.line.slice(10)), ['vscode connected to Agent Spaghetti', 'vscode is running', 'lmstudio serves models (http://127.0.0.1:1234)'],
+    'tool events as sentences: the tools in their colors');
   assert.deepEqual(liveRows(events, { run: 6 }).map(r => r.run), [6]);
   (await import('@agent-spaghetti/ui')).setToolColors([{ id: 'claude-desktop', color: '#ea580c' }]);
   const page = html(h(LiveList, { rows, all: false, run: null, paused: false, open: new Set([-2]), onAll: noop, onRun: noop, onPause: noop, onClear: noop, onToggle: noop, onClose: noop }));

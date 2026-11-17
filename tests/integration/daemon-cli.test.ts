@@ -274,10 +274,10 @@ test('CLI 3: targets, delegate to a free local model (result printed), runs, run
 });
 test('runDaemon: a found client is asked once; "this session" connects until shutdown; a crash is cleaned up at the next start; "don\'t" sticks', async () => {
   const { runDaemon } = await import('../../packages/core/src/main.ts');
-  const conf = '%APPDATA%/Code/User/mcp.json';
+  const conf = '~/.copilot/mcp-config.json';
   const host = fakeEnv({ inventory: { processes: [{ name: 'Code', pid: 1 }] } });
   const machine = async () => [{ status: { id: 'windows', state: 'running' as const }, env: host }];
-  const entry = async () => JSON.parse((await host.readFile(conf)) ?? '{"servers":{}}').servers['agent-spaghetti'];
+  const entry = async () => JSON.parse((await host.readFile(conf)) ?? '{"mcpServers":{}}').mcpServers['agent-spaghetti'];
   const question = async (c: HubClient) => { for (let i = 0; i < 100; i++) { const q = (await c.call('status')).consents[0]; if (q) return q; await new Promise(r => setTimeout(r, 20)); } throw new Error('no question'); };
   const dir = mkdtempSync(join(tmpdir(), 'as-'));
   let d = await runDaemon({ AGENT_SPAGHETTI_DATA_DIR: dir }, { scanOnStart: false, observe: false, discover: machine });
@@ -291,12 +291,12 @@ test('runDaemon: a found client is asked once; "this session" connects until shu
   assert.equal((await c.call('status')).consents.length, 1, 'asked once per daemon run');
   await c.call('consent', { id: q.id, allow: true, scope: 'once' });
   for (let i = 0; i < 100 && !(await entry()); i++) await new Promise(r => setTimeout(r, 20));
-  assert.equal((await entry()).type, 'stdio');
+  assert.deepEqual([(await entry()).type, (await entry()).tools], ['local', ['*']], 'VS Code\'s Copilot harness reads ~/.copilot/mcp-config.json');
   await d.close(); closed = true;
   } finally { if (!closed) await d.close(); }
   assert.equal(await entry(), undefined, 'session connection undone on shutdown');
   // a crash: the session list survives, the connection too; the next start undoes it, then asks again
-  await host.writeFile(conf, '{"servers":{"agent-spaghetti":{"command":"node"}}}');
+  await host.writeFile(conf, '{"mcpServers":{"agent-spaghetti":{"command":"node"}}}');
   const st = new Store(join(dir, 'store.db')); st.setKv('connect.session', ['vscode']); st.close();
   d = await runDaemon({ AGENT_SPAGHETTI_DATA_DIR: dir }, { scanOnStart: false, observe: false, discover: machine });
   c = HubClient.fromDiscovery({ AGENT_SPAGHETTI_DATA_DIR: dir });

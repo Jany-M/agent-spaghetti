@@ -115,6 +115,7 @@ test('the agent-spaghetti agent: the delegate skill under an agent header (one s
   const t = agentText(), skill = readFileSync(new URL('../../../clients/plugin/skills/delegate/SKILL.md', import.meta.url), 'utf8');
   assert.match(t, /^---\nname: agent-spaghetti\ndescription: Hand a task to .+\nargument-hint: target and task, e\.g\. lmstudio summarize README\.md\n---\n\nThe user's message is the task\./);
   assert.ok(t.endsWith(skill.slice(skill.indexOf('\n---\n') + 5)), 'the skill body, unchanged');
+  assert.match(agentText("['agent-spaghetti/*']"), /\nargument-hint: .+\ntools: \['agent-spaghetti\/\*'\]\n---\n/, 'a tools line: the agent can only hand off');
 });
 test('hermesModule.connect: dry-run, add when absent, replace foreign, already ours, probe failure restores', async () => {
   const { hermesModule } = await import('../../../integrations/hermes/index.ts');

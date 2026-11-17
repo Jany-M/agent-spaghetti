@@ -19,6 +19,14 @@ test('flowModel idle: the hub and every tool that is connected, takes tasks or s
   assert.deepEqual(f.nodes.map(n => [n.id, n.group]), [[HUB, 'hub'], ['ide', 'apps'], ['helper', 'agents'], ['lms', 'models'], ['mem', 'tools']]);
   assert.deepEqual([f.nodes[0].label, f.nodes.some(n => n.on), f.links], ['idle', false, []]);
 });
+test('flowModel: an app that is set up but not open is drawn dim and says so; open, or taking part, it is not', () => {
+  const closed = [...rows.filter(r => r.id !== 'ide'), row('ide', 'Acme IDE', { group: 'apps', connection: 'connected', open: false })];
+  const ide = (f: ReturnType<typeof flowModel>) => f.nodes.find(n => n.id === 'ide')!;
+  assert.deepEqual([ide(flowModel(closed, [], [], 0)).off, ide(flowModel(closed, [], [], 0)).label], [true, 'not open']);
+  assert.equal(ide(flowModel(closed.map(r => (r.id === 'ide' ? { ...r, open: true } : r)), [], [], 0)).off, undefined);
+  assert.equal(ide(flowModel(closed, [run({})], [], 0)).off, undefined, 'a run from it: it is open after all');
+  assert.match(html(h(FlowView, { flow: flowModel(closed, [], [], 0) })), /<g class="node tc\d off"/);
+});
 test('flowModel with a run: who works for whom, who waits, the hub routing then counting; a chain names its next step', () => {
   const f = flowModel(rows, [run({ kind: 'research', next: 'lms:m1' })], [], 2000);
   const by = Object.fromEntries(f.nodes.map(n => [n.id, n]));

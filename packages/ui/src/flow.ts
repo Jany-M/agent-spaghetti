@@ -16,11 +16,12 @@ const RETURN_MS = 6000;                                          // how long a d
 const VERB: Record<string, string> = { research: 'researching', summarize: 'summarizing', 'code-edit': 'coding', tests: 'testing', review: 'reviewing',
   refactor: 'refactoring', docs: 'documenting', plan: 'planning', report: 'reporting' };
 export type FlowGroup = ToolGroup | 'callers';                   // callers: whoever asks without being a listed tool (the tray, a terminal)
-export interface FlowNode { id: string; name: string; group: FlowGroup | 'hub'; label: string; sub?: string; on: boolean }
+/** `off`: an app that is not open (it can hand off only while open): drawn dim. */
+export interface FlowNode { id: string; name: string; group: FlowGroup | 'hub'; label: string; sub?: string; on: boolean; off?: true }
 /** `back`: a result on its way to the caller (`waiting`: not collected yet). */
 export interface FlowLink { from: string; to: string; back?: true; waiting?: true }
 export interface Flow { nodes: FlowNode[]; links: FlowLink[] }
-type Row = Pick<ToolRow, 'id' | 'name' | 'state' | 'group' | 'connection' | 'receives'>;
+type Row = Pick<ToolRow, 'id' | 'name' | 'state' | 'group' | 'connection' | 'receives' | 'open'>;
 /** The blocks and moving lines for what happens now. Blocks: tools that are connected, can take tasks or serve other tools, plus
  *  whoever takes part in a run. A line stays for as long as its run is not finished, and a result's line until it was delivered
  *  (a few seconds after) or, when nobody collected it yet, until somebody does. */
@@ -31,9 +32,10 @@ export function flowModel(rows: Row[], runs: LiveRun[], results: LiveResult[], n
   const name = (id: string) => rows.find(r => r.id === id)?.name ?? id;
   const nodes = ids.map((id): FlowNode => {
     const doing = runs.find(r => r.target === id), asked = runs.find(r => r.source === id), sent = back.find(r => r.from === id), got = back.find(r => r.to === id);
-    return { id, name: name(id), group: rows.find(r => r.id === id)?.group ?? 'callers', on: !!(doing || asked || sent || got),
+    const row = rows.find(r => r.id === id), on = !!(doing || asked || sent || got), off = !on && row?.connection !== undefined && row.open === false;
+    return { id, name: name(id), group: row?.group ?? 'callers', on, ...(off ? { off: true as const } : {}),
       label: doing ? `${VERB[doing.kind ?? ''] ?? 'working'} for ${name(doing.source)}` : asked ? `waiting on ${name(asked.target)}`
-        : got ? (got.how === 'unread' ? 'result waiting' : `result from ${name(got.from)}`) : sent ? `answered ${name(sent.to)}` : '',
+        : got ? (got.how === 'unread' ? 'result waiting' : `result from ${name(got.from)}`) : sent ? `answered ${name(sent.to)}` : off ? 'not open' : '',
       ...(doing?.next ? { sub: `then ${name(doing.next.split(':')[0])}` } : {}) };
   });
   const hub: FlowNode = { id: HUB, name: 'Agent Spaghetti', group: 'hub', on: runs.length > 0 || back.length > 0,
@@ -156,7 +158,7 @@ export function FlowView({ flow, still = false, size }: { flow: Flow; still?: bo
   ...flow.nodes.filter(n => n.id !== HUB).map(n => {
     const b = boxes[n.id], c = toolColor(n.id), room = b.w - px(18);
     const what = n.label ? wrap(n.label, room, px(7.5), n.sub ? 2 : 3) : [], next = n.sub ? wrap(n.sub, room, px(7), 1) : [];   // name, then up to three lines
-    return h('g', { key: n.id, style: c.style, className: ['node', c.className, n.on ? 'on' : ''].filter(Boolean).join(' '), transform: `translate(${b.x},${b.y})` },
+    return h('g', { key: n.id, style: c.style, className: ['node', c.className, n.on ? 'on' : '', n.off ? 'off' : ''].filter(Boolean).join(' '), transform: `translate(${b.x},${b.y})` },
       h('title', null, [n.name, n.label, n.sub].filter(Boolean).join(': ')),
       h('rect', { className: 'box', width: b.w, height: b.h, rx: px(8) }),
       h('rect', { className: 'bar', width: px(2.5), height: b.h - px(12), x: px(4), y: px(6), rx: px(1.25) }),

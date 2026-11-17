@@ -16,6 +16,14 @@
     "installed": [
       "Claude"
     ],
+    "process": [
+      "Claude"
+    ],
+    "processNotIn": [
+      "/.local/bin/",
+      "/node_modules/",
+      "/.claude/"
+    ],
     "version": {
       "from": "installed"
     }

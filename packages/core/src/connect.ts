@@ -25,15 +25,16 @@ export function pluginFiles(variant: 'agent-plugins' | 'cursor', cli: Cli, clien
 }
 
 /** The `agent-spaghetti` custom agent (a pick in the tool's agent list): the delegate skill's instructions under an agent header.
- *  One file for both formats in use (VS Code / Copilot `.agent.md`, Claude Code agents): name, description, argument-hint, no tool list. */
-export function agentText(): string {
+ *  One file for both formats in use (VS Code / Copilot `.agent.md`, Claude Code agents): name, description, argument-hint, and the
+ *  tool's own `tools` line where its manifest has one (agentTools: then the agent can only hand off, not answer itself). */
+export function agentText(tools?: string): string {
   const [, head, body] = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/.exec(source('skills/delegate/SKILL.md'))!;
   const description = /^description: (.*?)\r?$/m.exec(head)![1];
-  return `---\nname: agent-spaghetti\ndescription: ${description}\nargument-hint: target and task, e.g. lmstudio summarize README.md\n---\n`
+  return `---\nname: agent-spaghetti\ndescription: ${description}\nargument-hint: target and task, e.g. lmstudio summarize README.md\n${tools ? `tools: ${tools}\n` : ''}---\n`
     + `\nThe user's message is the task. A first word that is a target id (see \`targets\`) is the target; with none, call \`delegate\` without one and the user picks.\n${body}`;
 }
-async function agentFile(env: Environment, path: string, on: boolean, dryRun: boolean) {
-  const now = await env.readFile(path), text = agentText();
+async function agentFile(env: Environment, path: string, tools: string | undefined, on: boolean, dryRun: boolean) {
+  const now = await env.readFile(path), text = agentText(tools);
   const description = `${on ? 'add' : 'remove'} the agent-spaghetti agent (${path})`;
   if (on ? now === text : now === null) return { description, changes: [] };   // already so
   if (on) return { description, changes: await write(env, { [path]: text }, dryRun) };
@@ -72,12 +73,12 @@ async function mcpConfig(env: Environment, spec: NonNullable<Speaks['mcpClient']
 
 /** Our entry in a prompt hook list: the one running `… hook <client>`. */
 const ourHook = (client: string) => (e: any) => (e?.hooks ?? []).some((h: any) => Array.isArray(h?.args) && h.args.at(-2) === 'hook' && h.args.at(-1) === client);
-/** Whether the extras next to the server are there (the `>>` hook entry, the agent file): a connection without them is
- *  incomplete, so it is made again. */
+/** Whether the extras next to the server are there (the `>>` hook entry, the agent file as it is now): a connection without them
+ *  is incomplete (or out of date), so it is made again. */
 export async function extrasThere(env: Environment, m: Manifest): Promise<boolean> {
   const { promptHook: h, agentFile: a } = m.speaks ?? {};
   const doc = h ? parseJsonc(await env.readFile(h.config)) as Record<string, any> | undefined : undefined;
-  return (!h || (Array.isArray(doc?.hooks?.[h.event]) && doc.hooks[h.event].some(ourHook(m.id)))) && (!a || await env.readFile(a) !== null);
+  return (!h || (Array.isArray(doc?.hooks?.[h.event]) && doc.hooks[h.event].some(ourHook(m.id)))) && (!a || await env.readFile(a) === agentText(m.speaks?.agentTools));
 }
 /** The `>>` shortcut in a tool's prompt hook (e.g. Claude Code's UserPromptSubmit): our one entry added or removed, the rest kept. */
 async function promptHook(env: Environment, spec: NonNullable<Speaks['promptHook']>, cli: Cli, client: string, on: boolean, dryRun: boolean) {
@@ -116,7 +117,7 @@ export async function setConnection(env: Environment, i: Integration, det: Detec
     : on ? [() => (sp.agentPlugins ? plugin(env, sp.agentPlugins, cli, client, on, dryRun) : mcpConfig(env, sp.mcpClient!, cli, client, on, dryRun))]
     : [...(sp.agentPlugins ? [() => plugin(env, sp.agentPlugins!, cli, client, on, dryRun)] : []), ...(sp.mcpClient ? [() => mcpConfig(env, sp.mcpClient!, cli, client, on, dryRun)] : [])];
   const r: Array<{ description: string; changes: string[] }> = [];
-  const extras = [...(sp.promptHook ? [() => promptHook(env, sp.promptHook!, cli, client, on, dryRun)] : []), ...(sp.agentFile ? [() => agentFile(env, sp.agentFile!, on, dryRun)] : [])];
+  const extras = [...(sp.promptHook ? [() => promptHook(env, sp.promptHook!, cli, client, on, dryRun)] : []), ...(sp.agentFile ? [() => agentFile(env, sp.agentFile!, sp.agentTools, on, dryRun)] : [])];
   for (const step of [...server, ...extras]) r.push(await step());   // in order: one file at a time
   return { description: r.map(x => x.description).join('; '), changes: r.flatMap(x => x.changes), applied: !dryRun };
 }

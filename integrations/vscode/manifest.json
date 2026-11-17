@@ -34,11 +34,13 @@
     },
     "mcpClientNames": ["Visual Studio Code", "copilot-cli"],
     "agentFile": "~/.copilot/agents/agent-spaghetti.agent.md",
+    "agentTools": "['agent-spaghetti/*']",
     "mcpClient": {
-      "config": "%APPDATA%/Code/User/mcp.json",
-      "key": "servers",
+      "config": "~/.copilot/mcp-config.json",
+      "key": "mcpServers",
       "entry": {
-        "type": "stdio"
+        "type": "local",
+        "tools": ["*"]
       }
     },
     "openaiClient": {
