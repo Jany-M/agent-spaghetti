@@ -91,8 +91,26 @@ test('toolRows: group by first role in TOOL_GROUPS order; state, connection, pre
   assert.equal(by.svc.state, 'running', 'its server answered the scan (e.g. a tool that only serves)');
   const text = renderToolRows(rows);
   assert.ok(text.indexOf('Agents:') < text.indexOf('Model servers:') && text.indexOf('Model servers:') < text.indexOf('Editors & apps:'));
-  assert.match(text, /oc\s+OC\s+installed\s+connected \(always\)\s+wsl:T,windows/);
+  assert.match(text, /oc\s+OC\s+installed\s+connected \(always\)\s+-\s+wsl:T,windows/);
   assert.ok(text.indexOf('ed ') < text.indexOf('nope'), 'found tools first');
+});
+test('toolParts / uses: an app and a CLI are told apart, a CLI inside the app is said so, the one in use is marked', async () => {
+  const { toolParts, toolRows, partLabel, emptyLive } = await import('@agent-spaghetti/sdk');
+  const app = 'C:\\Users\\u\\AppData\\Local\\Tool', npm = 'C:\\Users\\u\\AppData\\Roaming\\npm\\tool.cmd', inside = `${app}\\resources\\tool.exe`;
+  assert.deepEqual(toolParts([{ via: 'installed', path: app }, { via: 'bin', path: npm }, { via: 'process', path: `${app}\\Tool.exe`, pid: 1 }, { via: 'bin', path: npm }]),
+    [{ kind: 'app', path: app }, { kind: 'cli', path: npm }], 'running processes are no extra program; one entry per path');
+  assert.deepEqual(toolParts([{ via: 'installed', path: `${app}\\` }, { via: 'path', path: inside }]), [{ kind: 'app', path: `${app}\\` }, { kind: 'cli', path: inside, inApp: true }]);
+  const det = (installs: object[]) => ({ integration: 'x', name: 'X', envId: 'windows', installs, levels: [], cost: 'free' as const, connectable: 'yes' as const, why: '' });
+  const row = (roles: string[], installs: object[], engine?: 'module' | 'chat') => toolRows({ snapshot: { ts: 1, envs: [], agents: [], backends: [], rejected: [], detections: [det(installs) as never] }, live: emptyLive(),
+    targets: engine ? [{ id: 'x', name: 'X', kind: 'agent', cost: 'free', envId: 'windows', models: [], engine, resumable: false }] : [], prefs: { auto: [], never: [] }, consents: [],
+    loaded: [{ id: 'x', name: 'X', source: 'builtin', roles: roles as never, levels: [], disabled: false }] })[0];
+  const both = [{ via: 'installed', path: app }, { via: 'bin', path: npm }];
+  assert.equal(row(['agent', 'client'], both, 'module').uses, 'cli', 'tasks run through the CLI, whatever app is there');
+  assert.equal(row(['client'], both, 'chat').uses, 'app', 'a chat engine opens the app');
+  assert.equal(row(['client'], both).uses, 'app', 'an editor hands off from its app');
+  assert.equal(row(['backend'], both).uses, undefined, 'a model server: its server answers');
+  assert.deepEqual(row(['agent'], both, 'module').parts!.map(p => partLabel(p, 'cli')), ['app', 'CLI (used)']);
+  assert.equal(partLabel({ kind: 'cli', path: inside, inApp: true }, 'cli'), 'CLI in the app (used)');
 });
 test('rankTargets: free, then unknown, then metered; least queued; otherwise the input order (no tool preferred)', async () => {
   const { rankTargets } = await import('@agent-spaghetti/sdk');

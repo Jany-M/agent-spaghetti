@@ -1,7 +1,7 @@
 // Tools panel (ADR 0009): every found tool, grouped by type in collapsible blocks; connect/disconnect, preference,
 // test, skip in scans, its model through the gateway and its key; "More" shows its switches and, for third-party tools, what it may do.
 import { createElement as h, useState, type ReactNode } from 'react';
-import { ACTION_LABEL, AUTO, ENGINE_LABEL, TOOL_GROUPS, testLines, type DeclaredAction, type Grant, type Mode, type Cost, type Switch, type TestResult, type ToolRow } from '@agent-spaghetti/sdk/web';
+import { ACTION_LABEL, AUTO, ENGINE_LABEL, TOOL_GROUPS, partLabel, testLines, type DeclaredAction, type Grant, type Mode, type Cost, type Switch, type TestResult, type ToolRow } from '@agent-spaghetti/sdk/web';
 import type { Bridge } from './bridge.ts';
 import { useAct, useOp } from './hooks.ts';
 
@@ -47,6 +47,8 @@ function Row({ r, p }: { r: ToolRow; p: ToolsProps }) {
         ? 'Agent Spaghetti is set up in it: while it is open, it can hand tasks off' : 'Connect it to hand tasks off from it' }, r.connection) : null,
       r.connection && r.open !== undefined ? h('span', { className: `state ${r.open ? 'running' : 'stopped'}` }, r.open ? 'open' : 'not open') : null,
       r.receives ? h('span', { className: 'state ready', title: 'Tasks can be handed to it now' }, `takes tasks (${ENGINE_LABEL[r.receives]})`) : null),
+    r.parts ? h('div', { className: 'parts' }, ...r.parts.map(x => h('span', { key: x.path, className: `part${r.uses === x.kind ? ' used' : ''}`, title: `${x.path}${r.uses === x.kind
+      ? (x.kind === 'cli' ? '\nAgent Spaghetti runs tasks through this program' : '\nAgent Spaghetti works with this program') : ''}${x.inApp ? '\nIt comes with the app: uninstalling the app removes it' : ''}` }, partLabel(x, r.uses)))) : null,
     h('div', { className: 'why' }, [r.why, r.envs.join(', ')].filter(Boolean).join(' · ')),
     h('div', { className: 'row' },
       r.connection ? h('button', { className: r.connection === 'connected' ? '' : 'allow', disabled: busy, onClick: () => p.onConnect(r.id, r.connection !== 'connected') },

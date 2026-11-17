@@ -80,6 +80,8 @@ textarea { resize:vertical; }
 .tone-ok, .runs .line.tone-ok { border-left-color:var(--idle); } .tone-fail, .runs .line.tone-fail { border-left-color:var(--problem); }
 .tone-run, .runs .line.tone-run { border-left-color:var(--working); }
 button.badge { border:0; cursor:pointer; }
+.tool .parts { display:flex; gap:6px; flex-wrap:wrap; margin:2px 0; } .tool .part { font-size:11px; color:var(--muted); border:1px solid var(--line); border-radius:6px; padding:0 6px; }
+.tool .part.used { color:var(--fg); border-color:var(--muted); }
 /* the flow diagram, a small solar system: Agent Spaghetti the sun, the tools glassy planets in their colors (currentColor) on faint
    orbits over a dot grid; a working planet glows and its dot pulses, the sun's corona breathes while anything runs; lights travel
    along the lines the way the work goes (slower and dimmer while a result waits for its caller). SVG/CSS animation only, none when
@@ -104,7 +106,7 @@ button.badge { border:0; cursor:pointer; }
 .flow .corona { fill:none; stroke:currentColor; stroke-opacity:.18; stroke-width:4; }
 .flow .hub.on .corona { animation:flow-corona 2.4s ease-in-out infinite; }
 .flow text { text-anchor:start; stroke:none; } .flow .hub text { text-anchor:middle; }
-.flow .name { font-weight:700; fill:currentColor; } .flow .hub .name { fill:var(--fg); }
+.flow .name { font-weight:700; fill:currentColor; } .flow .uses { text-anchor:end; fill:var(--muted); letter-spacing:.08em; font-weight:600; } .flow .hub .name { fill:var(--fg); }
 .flow .off { opacity:.45; } .flow .off .box { stroke-dasharray:3 3; }
 .flow .what { fill:var(--muted); } .flow .on .what { fill:var(--fg); } .flow .what.next { opacity:.75; }
 .flow.still * { animation:none !important; }

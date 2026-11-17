@@ -131,7 +131,7 @@ test('CLI 1b: switches, on (env resolved, switch.changed → live), test (record
   r = await cli('set', 'routing.learn', 'off'); assert.match(r.out, /routing\.learn\s+off/);
   r = await cli('set', 'routing.learn', 'maybe'); assert.equal(r.code, 1); assert.match(r.err, /invalid value for routing\.learn/);
   r = await cli('disable', 'acme'); assert.match(r.out, /disabled: acme/);
-  r = await cli('integrations'); assert.match(r.out, /^Model servers:\n/m); assert.match(r.out, /acme\s+Acme\s+skipped\s+-\s+-\s+skipped in scans/);
+  r = await cli('integrations'); assert.match(r.out, /^Model servers:\n/m); assert.match(r.out, /acme\s+Acme\s+skipped\s+-\s+-\s+-\s+skipped in scans/);
   r = await cli('enable', 'acme'); assert.match(r.out, /disabled: none/);
   r = await cli('whoami', 'claude-desktop', 'acme desk'); assert.equal(r.out, 'acme', 'a server started from another tool\'s config knows its client by name');
   r = await cli('whoami', 'claude-desktop', 'Some Client'); assert.equal(r.out, 'claude-desktop', 'unknown name: the configured id');

@@ -27,6 +27,10 @@ test('flowModel: an app that is set up but not open is drawn dim and says so; op
   assert.equal(ide(flowModel(closed, [run({})], [], 0)).off, undefined, 'a run from it: it is open after all');
   assert.match(html(h(FlowView, { flow: flowModel(closed, [], [], 0) })), /<g class="node tc\d off"/);
 });
+test('FlowView: a block says which program Agent Spaghetti works with (its CLI or its app)', () => {
+  const page = html(h(FlowView, { flow: flowModel([...rows.filter(r => r.id !== 'helper'), row('helper', 'Helper Agent', { receives: 'module', uses: 'cli' })], [], [], 0) }));
+  assert.match(page, /<text class="uses"[^>]*>CLI<\/text><text class="name"[^>]*>Helper Agent<\/text>/);
+});
 test('flowModel with a run: who works for whom, who waits, the hub routing then counting; a chain names its next step', () => {
   const f = flowModel(rows, [run({ kind: 'research', next: 'lms:m1' })], [], 2000);
   const by = Object.fromEntries(f.nodes.map(n => [n.id, n]));

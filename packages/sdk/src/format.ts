@@ -1,5 +1,5 @@
 // The one place that turns data into text (CLI, tray tooltip, app). Names always come from manifests.
-import type { AgentInfo, BackendInfo, Cost, Delivery, Level, Role, RunRow, Snapshot, StoredEvent, Switch, Target, TestResult, TraceStage } from './types.ts';
+import type { AgentInfo, BackendInfo, Cost, Delivery, Install, Level, Role, RunRow, Snapshot, StoredEvent, Switch, Target, TestResult, TraceStage } from './types.ts';
 import { AUTO } from './types.ts';
 import type { LiveState } from './state.ts';
 import type { Saved } from './routing.ts';
@@ -191,6 +191,8 @@ export interface ToolRow {
   id: string; name: string; color?: string; group: ToolGroup; source: 'builtin' | 'user'; levels: Level[]; envs: string[]; version?: string;
   state: ToolState; why: string;
   open?: boolean;                                           // tools whose process is watched: running now (an editor can hand off only while open)
+  parts?: ToolPart[];                                       // the programs found: its desktop app, its command-line program (CLI)
+  uses?: 'app' | 'cli';                                     // the one Agent Spaghetti works with: tasks run through the CLI; an app (or `code chat`) hands off and takes chats
   connection?: 'connected' | 'not connected';               // clients only: agent-spaghetti is set up in it (used when it is open)
   preference?: 'always' | 'never' | 'ask';                  // clients only (ADR 0009)
   asks: number;                                             // questions about this tool waiting for the user
@@ -199,6 +201,21 @@ export interface ToolRow {
   cost?: { is: Cost; set: boolean };                        // found tools that can do work: what it costs, and whether you set it (tools.cost)
   gateway?: { model: string; key: boolean };                // takes a custom model endpoint: its model through the gateway, whether it has a key
 }
+/** One program of a tool: a desktop app (an installed package) or a CLI (on PATH or where the manifest says); `inApp`: a CLI that
+ *  comes inside the app (it goes when the app is uninstalled). */
+export interface ToolPart { kind: 'app' | 'cli'; path: string; inApp?: true }
+const slash = (p: string) => p.replaceAll('\\', '/').replace(/\/+$/, '').toLowerCase();
+/** The programs in what the scan found, apps first. */
+export function toolParts(installs: Install[]): ToolPart[] {
+  const apps = [...new Map(installs.filter(n => n.via === 'installed' && n.path).map(n => [slash(n.path!), n.path!])).values()];
+  const clis = [...new Map(installs.filter(n => (n.via === 'bin' || n.via === 'path') && n.path).map(n => [slash(n.path!), n.path!])).values()];
+  return [...apps.map((path): ToolPart => ({ kind: 'app', path })),
+    ...clis.map((path): ToolPart => ({ kind: 'cli', path, ...(apps.some(a => slash(path).startsWith(`${slash(a)}/`)) ? { inApp: true as const } : {}) }))];
+}
+const PART_LABEL = { app: 'app', cli: 'CLI' } as const;
+/** A tool's programs in a few words, the one in use marked: "app + CLI (used)", "CLI in the app (used)". */
+export const partLabel = (p: ToolPart, uses?: ToolRow['uses']) => `${p.kind === 'cli' && p.inApp ? 'CLI in the app' : PART_LABEL[p.kind]}${uses === p.kind ? ' (used)' : ''}`;
+const programsText = (r: ToolRow) => r.parts?.map(p => partLabel(p, r.uses)).join(' + ') || '-';
 export interface ToolInput {
   loaded: Array<{ id: string; name: string; color?: string; source: 'builtin' | 'user'; roles: Role[]; levels: Level[]; disabled: boolean; setup?: boolean; needsEnv?: string[]; gatewayClient?: boolean }>;   // needsEnv: a hosted API's key variables
   snapshot: Snapshot | null; live: LiveState; targets: Target[]; prefs: { auto: string[]; never: string[] }; consents: Array<{ subject: string }>;
@@ -211,12 +228,16 @@ export function toolRows(x: ToolInput): ToolRow[] {
     const dets = x.snapshot?.detections.filter(d => d.integration === i.id) ?? [];
     const live = Object.values(x.live.tools).filter(t => t.integration === i.id);
     const client = dets.filter(d => d.connected !== undefined), target = x.targets.find(t => t.id === i.id);
+    const parts = toolParts(dets.flatMap(d => d.installs)), has = (k: ToolPart['kind']) => parts.some(p => p.kind === k);
+    const uses = target ? (target.engine === 'chat' ? 'app' : target.engine === 'openai' ? undefined : 'cli')   // a model server is neither: its server answers
+      : i.roles.includes('backend') ? undefined : has('app') ? 'app' : has('cli') ? 'cli' : undefined;
     const state: ToolState = i.disabled ? 'skipped' : !dets.length ? 'not found' : target ? 'ready'
       : live.some(t => t.running) ? 'running' : live.length || dets.every(d => d.connectable === 'needs-setup') ? 'stopped'
       : dets.some(d => d.endpoint || d.installs.some(n => n.via === 'process')) ? 'running' : 'installed';   // its server answered, or its process runs
     return {
       id: i.id, name: i.name, ...(i.color ? { color: i.color } : {}), group: TOOL_GROUPS.find(g => i.roles.includes(g.role))?.id ?? 'tools', source: i.source, levels: i.levels,
       envs: [...new Set(dets.map(d => d.envId))], version: dets.find(d => d.version)?.version, state, ...(live.length ? { open: live.some(t => t.running) } : {}),
+      ...(parts.length ? { parts } : {}), ...(uses ? { uses } : {}),
       why: i.disabled ? 'skipped in scans' : dets.find(d => d.unready)?.unready ?? (client[0] ?? dets[0])?.why ?? (i.needsEnv ? `set ${i.needsEnv.join(', ')} where Agent Spaghetti runs, then rescan` : 'not found on this machine'),
       ...(client.length ? { connection: client.some(d => d.connected) ? 'connected' as const : 'not connected' as const,
         preference: x.prefs.auto.includes(i.id) ? 'always' as const : x.prefs.never.includes(i.id) ? 'never' as const : 'ask' as const } : {}),
@@ -231,7 +252,7 @@ export function toolRows(x: ToolInput): ToolRow[] {
 export function renderToolRows(rows: ToolRow[]): string {
   return TOOL_GROUPS.map(g => {
     const r = rows.filter(x => x.group === g.id).sort((a, b) => Number(a.state === 'not found') - Number(b.state === 'not found'));
-    return r.length ? [`${g.label}:`, renderTable([['Id', 'Name', 'State', 'Connection', 'Envs', 'Why'],
-      ...r.map(x => [x.id, x.name, x.state, x.connection ? `${x.connection}${x.preference !== 'ask' ? ` (${x.preference})` : ''}` : '-', x.envs.join(',') || '-', x.why])])].join('\n') : '';
+    return r.length ? [`${g.label}:`, renderTable([['Id', 'Name', 'State', 'Connection', 'Programs', 'Envs', 'Why'],
+      ...r.map(x => [x.id, x.name, x.state, x.connection ? `${x.connection}${x.preference !== 'ask' ? ` (${x.preference})` : ''}` : '-', programsText(x), x.envs.join(',') || '-', x.why])])].join('\n') : '';
   }).filter(Boolean).join('\n\n');
 }

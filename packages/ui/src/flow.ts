@@ -16,12 +16,13 @@ const RETURN_MS = 6000;                                          // how long a d
 const VERB: Record<string, string> = { research: 'researching', summarize: 'summarizing', 'code-edit': 'coding', tests: 'testing', review: 'reviewing',
   refactor: 'refactoring', docs: 'documenting', plan: 'planning', report: 'reporting' };
 export type FlowGroup = ToolGroup | 'callers';                   // callers: whoever asks without being a listed tool (the tray, a terminal)
-/** `off`: an app that is not open (it can hand off only while open): drawn dim. */
-export interface FlowNode { id: string; name: string; group: FlowGroup | 'hub'; label: string; sub?: string; on: boolean; off?: true }
+/** `off`: an app that is not open (it can hand off only while open): drawn dim. `uses`: which of its programs Agent Spaghetti works
+ *  with (its app or its CLI), shown on the block. */
+export interface FlowNode { id: string; name: string; group: FlowGroup | 'hub'; label: string; sub?: string; on: boolean; off?: true; uses?: 'app' | 'cli' }
 /** `back`: a result on its way to the caller (`waiting`: not collected yet). */
 export interface FlowLink { from: string; to: string; back?: true; waiting?: true }
 export interface Flow { nodes: FlowNode[]; links: FlowLink[] }
-type Row = Pick<ToolRow, 'id' | 'name' | 'state' | 'group' | 'connection' | 'receives' | 'open'>;
+type Row = Pick<ToolRow, 'id' | 'name' | 'state' | 'group' | 'connection' | 'receives' | 'open' | 'uses'>;
 /** The blocks and moving lines for what happens now. Blocks: tools that are connected, can take tasks or serve other tools, plus
  *  whoever takes part in a run. A line stays for as long as its run is not finished, and a result's line until it was delivered
  *  (a few seconds after) or, when nobody collected it yet, until somebody does. */
@@ -33,7 +34,7 @@ export function flowModel(rows: Row[], runs: LiveRun[], results: LiveResult[], n
   const nodes = ids.map((id): FlowNode => {
     const doing = runs.find(r => r.target === id), asked = runs.find(r => r.source === id), sent = back.find(r => r.from === id), got = back.find(r => r.to === id);
     const row = rows.find(r => r.id === id), on = !!(doing || asked || sent || got), off = !on && row?.connection !== undefined && row.open === false;
-    return { id, name: name(id), group: row?.group ?? 'callers', on, ...(off ? { off: true as const } : {}),
+    return { id, name: name(id), group: row?.group ?? 'callers', on, ...(off ? { off: true as const } : {}), ...(row?.uses ? { uses: row.uses } : {}),
       label: doing ? `${VERB[doing.kind ?? ''] ?? 'working'} for ${name(doing.source)}` : asked ? `waiting on ${name(asked.target)}`
         : got ? (got.how === 'unread' ? 'result waiting' : `result from ${name(got.from)}`) : sent ? `answered ${name(sent.to)}` : off ? 'not open' : '',
       ...(doing?.next ? { sub: `then ${name(doing.next.split(':')[0])}` } : {}) };
@@ -163,7 +164,8 @@ export function FlowView({ flow, still = false, size }: { flow: Flow; still?: bo
       h('rect', { className: 'box', width: b.w, height: b.h, rx: px(8) }),
       h('rect', { className: 'bar', width: px(2.5), height: b.h - px(12), x: px(4), y: px(6), rx: px(1.25) }),
       h('circle', { className: 'dot', cx: b.w - px(7), cy: px(8), r: px(2) }),
-      h('text', { className: 'name', x: px(11), y: px(13), style: { fontSize: px(8) } }, wrap(n.name, room - px(6), px(8), 1)[0]),
+      n.uses ? h('text', { className: 'uses', x: b.w - px(13), y: px(10.5), style: { fontSize: px(5.5) } }, n.uses === 'cli' ? 'CLI' : 'APP') : null,
+      h('text', { className: 'name', x: px(11), y: px(13), style: { fontSize: px(8) } }, wrap(n.name, room - px(n.uses ? 20 : 6), px(8), 1)[0]),
       ...[...what.map(t => ['what', t]), ...next.map(t => ['what next', t])].map(([cls, t], i) =>
         h('text', { key: i, className: cls, x: px(11), y: px(24 + i * 9), style: { fontSize: px(cls === 'what' ? 7.5 : 7) } }, t)));
   }));
