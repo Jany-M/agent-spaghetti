@@ -90,16 +90,20 @@ export function Popover({ bridge }: { bridge: Bridge }) {
   const onScan = () => { setScanning(true); void bridge.call('scan').catch(() => {}).finally(() => { setScanning(false); void hub.refresh(); }); };
   const home = panel === 'home' && hub.up;                    // the diagram exists only while Home shows
   return h(PopoverView, { view: hub, now, onAnswer, onScan, scanning, panel, onPanel: setPanel, onLive: () => void window.open('popover.html?window=live'),   // the tray opens its panes
-    onFlow: () => void window.open('popover.html?window=flow'), flow: home ? h(FlowPanel, { bridge, runs: Object.values(hub.status?.live.runs ?? {}), now }) : undefined },
+    onFlow: () => void window.open('popover.html?window=flow'), flow: home ? h(FlowPanel, { bridge, ...flowData(hub), now }) : undefined },
     panel === 'home' ? null : h(PANEL_COMPONENT[panel], { bridge }));
 }
-/** The diagram in its own window (?window=flow): bigger, stays open; it is gone, with its work, when closed. */
+/** What the diagram shows from the hub's live state: the runs going on and the results on their way back. */
+const flowData = (hub: HubView) => ({ runs: Object.values(hub.status?.live.runs ?? {}), results: Object.values(hub.status?.live.results ?? {}) });
+/** The diagram in its own window (?window=flow): bigger, uses the whole window, stays open; it is gone, with its work, when closed.
+ *  Live opens the live pane docked to its right side (it follows the window). */
 export function FlowWindow({ bridge }: { bridge: Bridge }) {
   const hub = useHub(bridge);
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const i = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(i); }, []);
   return h('div', { className: 'flow-window' },
     h('header', { className: 'bar' }, h('span', { className: 'label' }, 'Flow'), h('span', { className: 'grow' }),
+      h('button', { className: 'live-btn', title: 'The live pane, docked to the right of this window: each step of the work as it happens', onClick: () => void window.open('popover.html?window=live') }, 'Live'),
       h('button', { 'aria-label': 'Close', title: 'Close (Home → Open bigger opens it again)', onClick: () => window.close() }, '×')),
-    hub.up ? h(FlowPanel, { bridge, runs: Object.values(hub.status?.live.runs ?? {}), now }) : h('div', { className: 'empty' }, 'Agent Spaghetti is not running.'));
+    hub.up ? h(FlowPanel, { bridge, ...flowData(hub), now, fill: true }) : h('div', { className: 'empty' }, 'Agent Spaghetti is not running.'));
 }

@@ -1,72 +1,145 @@
-// The flow diagram (Home, and bigger in its own window: ?window=flow): Agent Spaghetti in the middle, the tools around it as
-// blocks in their live-pane colors (story.ts toolColor). A block lights up while it works, with at most three words on what it
-// does and for whom, and lines move in the direction the work goes (caller → Agent Spaghetti → target). One pure model
-// (flowModel) from data the popover already has (status.live.runs, the integrations rows); the view only draws it. Animation is
-// CSS only and stops when the page is hidden; the diagram exists only while it is shown.
-import { createElement as h, useEffect, useState } from 'react';
-import { type LiveRun, type ToolRow } from '@agent-spaghetti/sdk/web';
+// The flow diagram (Home, and bigger in its own window: ?window=flow): Agent Spaghetti in the middle, the tools around it grouped
+// by what they are (the Tools panel's groups), each block in its live-pane color (story.ts toolColor). A block lights up while it
+// works and says what it does, for whom and what comes next; lights travel along the lines the way the work goes (caller → Agent
+// Spaghetti → worker, and back with the result) for as long as the work or its answer is still on the way. One pure model
+// (flowModel) from data the popover already has (status.live, the integrations rows) and one pure layout for whatever space there
+// is (flowLayout); the view only draws them. Animation is SVG/CSS only, drawn only while the page can be seen.
+import { createElement as h, useEffect, useRef, useState } from 'react';
+import { TOOL_GROUPS, type LiveResult, type LiveRun, type ToolGroup, type ToolRow } from '@agent-spaghetti/sdk/web';
 import type { Bridge } from './bridge.ts';
 import { useOp } from './hooks.ts';
 import { setToolColors, toolColor } from './story.ts';
 
 export const HUB = 'agent-spaghetti';
 const ROUTING_MS = 4000;                                         // how long the middle block says it is routing after a run starts
+const RETURN_MS = 6000;                                          // how long a delivered result is shown going back
 const VERB: Record<string, string> = { research: 'researching', summarize: 'summarizing', 'code-edit': 'coding', tests: 'testing', review: 'reviewing',
   refactor: 'refactoring', docs: 'documenting', plan: 'planning', report: 'reporting' };
-/** A name short enough for a block and one word in a label: its first word ("Claude Code CLI" → "Claude"), with the second
- *  joined on when the first is only an abbreviation ("LM Studio" → "LMStudio"). */
-export const shortName = (name: string) => { const [a, b] = name.split(/\s+/); return a.length <= 2 && b ? a + b : a; };
-export interface FlowNode { id: string; name: string; label: string; sub?: string; on: boolean }
-export interface FlowLink { from: string; to: string }
+export type FlowGroup = ToolGroup | 'callers';                   // callers: whoever asks without being a listed tool (the tray, a terminal)
+export interface FlowNode { id: string; name: string; group: FlowGroup | 'hub'; label: string; sub?: string; on: boolean }
+/** `back`: a result on its way to the caller (`waiting`: not collected yet). */
+export interface FlowLink { from: string; to: string; back?: true; waiting?: true }
 export interface Flow { nodes: FlowNode[]; links: FlowLink[] }
 type Row = Pick<ToolRow, 'id' | 'name' | 'state' | 'group' | 'connection' | 'receives'>;
-/** The blocks and moving lines for what runs now. Blocks: tools that are connected, can take tasks or serve other tools, plus
- *  whoever takes part in a run (a caller such as the tray). Labels have at most three words. */
-export function flowModel(rows: Row[], runs: LiveRun[], now: number): Flow {
+/** The blocks and moving lines for what happens now. Blocks: tools that are connected, can take tasks or serve other tools, plus
+ *  whoever takes part in a run. A line stays for as long as its run is not finished, and a result's line until it was delivered
+ *  (a few seconds after) or, when nobody collected it yet, until somebody does. */
+export function flowModel(rows: Row[], runs: LiveRun[], results: LiveResult[], now: number): Flow {
   const shown = rows.filter(r => r.state !== 'not found' && r.state !== 'skipped' && (r.connection === 'connected' || r.receives || r.group === 'tools'));
-  const name = (id: string) => shortName(rows.find(r => r.id === id)?.name ?? id);
-  const ids = [...new Set([...shown.map(r => r.id), ...runs.flatMap(r => [r.source, r.target])])].filter(id => id !== HUB);
+  const back = results.filter(r => r.how === 'unread' || (r.how !== 'pending' && now - r.ts < RETURN_MS));
+  const ids = [...new Set([...shown.map(r => r.id), ...runs.flatMap(r => [r.source, r.target]), ...back.flatMap(r => [r.from, r.to])])].filter(id => id !== HUB);
+  const name = (id: string) => rows.find(r => r.id === id)?.name ?? id;
   const nodes = ids.map((id): FlowNode => {
-    const doing = runs.find(r => r.target === id), asked = runs.find(r => r.source === id);
-    return { id, name: name(id), on: !!(doing || asked),
-      label: doing ? `${VERB[doing.kind ?? ''] ?? 'working'} for ${name(doing.source)}` : asked ? `waiting on ${name(asked.target)}` : '',
+    const doing = runs.find(r => r.target === id), asked = runs.find(r => r.source === id), sent = back.find(r => r.from === id), got = back.find(r => r.to === id);
+    return { id, name: name(id), group: rows.find(r => r.id === id)?.group ?? 'callers', on: !!(doing || asked || sent || got),
+      label: doing ? `${VERB[doing.kind ?? ''] ?? 'working'} for ${name(doing.source)}` : asked ? `waiting on ${name(asked.target)}`
+        : got ? (got.how === 'unread' ? 'result waiting' : `result from ${name(got.from)}`) : sent ? `answered ${name(sent.to)}` : '',
       ...(doing?.next ? { sub: `then ${name(doing.next.split(':')[0])}` } : {}) };
   });
-  const hub: FlowNode = { id: HUB, name: 'Agent Spaghetti', on: runs.length > 0,
-    label: runs.some(r => now - r.ts < ROUTING_MS) ? 'routing task' : runs.length ? `${runs.length} ${runs.length === 1 ? 'task' : 'tasks'} running` : 'idle' };
-  return { nodes: [hub, ...nodes], links: runs.map(r => ({ from: r.source, to: r.target })) };
+  const hub: FlowNode = { id: HUB, name: 'Agent Spaghetti', group: 'hub', on: runs.length > 0 || back.length > 0,
+    label: runs.some(r => now - r.ts < ROUTING_MS) ? 'routing task' : runs.length ? `${runs.length} ${runs.length === 1 ? 'task' : 'tasks'} running` : back.length ? 'returning result' : 'idle' };
+  return { nodes: [hub, ...nodes], links: [...runs.map(r => ({ from: r.source, to: r.target })),
+    ...back.map(r => ({ from: r.from, to: r.to, back: true as const, ...(r.how === 'unread' ? { waiting: true as const } : {}) }))] };
 }
 
-const W = 360, BW = 96, BH = 36, ROW = 44, PAD = 8;
-/** Where each block sits: the hub in the middle, the others in two columns beside it, top to bottom in the same order every time
- *  (no two ever overlap, however many tools there are; the drawing grows downward). */
-export function flowLayout(nodes: FlowNode[]): { height: number; at: Record<string, { x: number; y: number }> } {
-  const around = nodes.filter(n => n.id !== HUB), left = Math.ceil(around.length / 2), rows = Math.max(left, 3), height = rows * ROW + PAD * 2;
-  const y = (i: number, of: number) => Math.round(PAD + (height - PAD * 2) * (i + 0.5) / of);
-  return { height, at: Object.fromEntries([[HUB, { x: W / 2, y: Math.round(height / 2) }],
-    ...around.map((n, i) => [n.id, i < left ? { x: PAD + BW / 2, y: y(i, left) } : { x: W - PAD - BW / 2, y: y(i - left, around.length - left) }])]) };
+/** Where a group sits around the hub, and its caption. */
+const SIDES: Array<{ side: 'left' | 'right' | 'top' | 'bottom'; groups: FlowGroup[] }> = [
+  { side: 'left', groups: ['apps', 'callers'] }, { side: 'right', groups: ['agents'] }, { side: 'top', groups: ['models'] }, { side: 'bottom', groups: ['tools'] }];
+const CAPTION: Record<string, string> = { ...Object.fromEntries(TOOL_GROUPS.map(g => [g.id, g.label])), callers: 'You' };
+export interface FlowBox { x: number; y: number; w: number; h: number }
+export interface FlowPlan { width: number; height: number; k: number; boxes: Record<string, FlowBox & { side: string }>; captions: Array<{ text: string; x: number; y: number }> }
+/** Every block's place for a space `width` wide (and `height` tall when given: the blocks then spread over all of it; without,
+ *  the drawing is as tall as it needs). Model servers along the top, other tools along the bottom, editors and callers on the left,
+ *  agents on the right, the hub in the middle with clear space around it; blocks grow with the space (factor `k`) and never overlap. */
+export function flowLayout(nodes: FlowNode[], width: number, height?: number): FlowPlan {
+  const of = (side: string) => nodes.filter(n => SIDES.find(s => s.side === side)!.groups.includes(n.group as FlowGroup));
+  const [left, right, top, bottom] = ['left', 'right', 'top', 'bottom'].map(of);
+  /** Sizes at factor k; a side whose column would be taller than the window gets more columns (`cols`, from a first pass). */
+  const sizes = (k: number, cols = [1, 1]) => {
+    const [pad, gap, cap, room, hubW, hubH, bh] = [8, 8, 13, 30, 120, 60, 54].map(n => Math.round(n * k));
+    const n = cols[0] + cols[1], bw = Math.max(84, Math.min(Math.round(118 * k), Math.floor((width - hubW - 2 * room - 2 * pad - (n - 2) * gap) / n)));
+    const perRow = Math.max(1, Math.floor((width - 2 * pad + gap) / (bw + gap)));
+    const band = (m: number) => (m ? cap + Math.ceil(m / perRow) * (bh + gap) : 0);
+    const col = (m: number, c: number) => (m ? cap + Math.ceil(m / c) * (bh + gap) : 0);
+    const middle = height ? height - 2 * pad - band(top.length) - band(bottom.length) : 0, fits = Math.max(1, Math.floor((middle - cap) / (bh + gap)));
+    return { pad, gap, cap, hubW, hubH, bh, bw, perRow, band, fits: [left, right].map(s => (height ? Math.ceil(s.length / fits) || 1 : 1)),
+      need: 2 * pad + band(top.length) + band(bottom.length) + Math.max(col(left.length, cols[0]), col(right.length, cols[1]), hubH + 2 * room) };
+  };
+  const k = Math.max(1, Math.min(1.7, width / 400, height ? height / sizes(1).need : 9)), cols = sizes(k).fits;
+  const { pad, gap, cap, hubW, hubH, bh, bw, perRow, band, need } = sizes(k, cols);
+  const H = Math.max(need, height ?? 0), y0 = pad + band(top.length), y1 = H - pad - band(bottom.length);
+  const boxes: FlowPlan['boxes'] = {}, captions: FlowPlan['captions'] = [];
+  const caption = (list: FlowNode[], x: number, y: number) => captions.push({ text: [...new Set(list.map(n => CAPTION[n.group]))].join(' · '), x, y: y + cap - 4 });
+  const column = (list: FlowNode[], x: number, c: number, side: string) => {   // x: the side's outer edge; columns go inward
+    if (!list.length) return;
+    const span = c * bw + (c - 1) * gap, x0 = side === 'left' ? x : x - span, rows = Math.ceil(list.length / c), step = (y1 - y0 - cap) / rows;
+    caption(list, x0 + span / 2, y0);
+    list.forEach((n, i) => { const cx = side === 'left' ? Math.floor(i / rows) : c - 1 - Math.floor(i / rows);
+      boxes[n.id] = { x: x0 + cx * (bw + gap), y: Math.round(y0 + cap + step * (i % rows) + (step - bh) / 2), w: bw, h: bh, side }; });
+  };
+  const strip = (list: FlowNode[], y: number, side: string) => {
+    if (!list.length) return;
+    caption(list, width / 2, y);
+    list.forEach((n, i) => { const r = Math.floor(i / perRow), inRow = Math.min(perRow, list.length - r * perRow), w = inRow * bw + (inRow - 1) * gap;
+      boxes[n.id] = { x: Math.round(width / 2 - w / 2 + (i % perRow) * (bw + gap)), y: y + cap + r * (bh + gap), w: bw, h: bh, side }; });
+  };
+  column(left, pad, cols[0], 'left'); column(right, width - pad, cols[1], 'right'); strip(top, pad, 'top'); strip(bottom, y1, 'bottom');
+  boxes[HUB] = { x: Math.round(width / 2 - hubW / 2), y: Math.round((y0 + y1) / 2 - hubH / 2), w: hubW, h: hubH, side: 'hub' };
+  return { width, height: H, k, boxes, captions };
 }
-/** `still`: nothing moves (the page is hidden). */
-export function FlowView({ flow, still = false }: { flow: Flow; still?: boolean }) {
-  const { height, at } = flowLayout(flow.nodes), hubW = BW + 14, hubH = BH + 10;
-  /** A line between two blocks' facing edges (the hub in the middle, the others beside it), so an arrowhead at its end shows. */
-  const line = (a: string, b: string) => { const edge = (id: string, other: string) => ({ x: at[id].x + Math.sign(at[other].x - at[id].x) * ((id === HUB ? hubW : BW) / 2 + 2), y: at[id].y });
-    const p = edge(a, b), q = edge(b, a); return `M${p.x},${p.y} L${q.x},${q.y}`; };
-  const busy = new Set(flow.links.flatMap(l => [l.from, l.to]));
-  return h('svg', { className: `flow${still ? ' still' : ''}`, viewBox: `0 0 ${W} ${height}`, role: 'img',
+
+const center = (b: FlowBox) => ({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
+/** A smooth line from one block's edge to another's (leaving sideways from a column, up or down from a strip). */
+function curve(a: FlowBox & { side: string }, b: FlowBox & { side: string }): string {
+  const other = a.side === 'hub' ? b : a, across = other.side === 'left' || other.side === 'right', ca = center(a), cb = center(b);
+  const edge = (box: FlowBox, c: { x: number; y: number }, to: { x: number; y: number }) => (across ? { x: c.x + Math.sign(to.x - c.x) * box.w / 2, y: c.y } : { x: c.x, y: c.y + Math.sign(to.y - c.y) * box.h / 2 });
+  const p = edge(a, ca, cb), q = edge(b, cb, ca), mx = (p.x + q.x) / 2, my = (p.y + q.y) / 2;
+  return across ? `M${p.x},${p.y} C${mx},${p.y} ${mx},${q.y} ${q.x},${q.y}` : `M${p.x},${p.y} C${p.x},${my} ${q.x},${my} ${q.x},${q.y}`;
+}
+/** Text in at most `max` lines of `w` pixels at font size `f`, broken between words (after "for", "on", "from" or "answered" first, so a tool's
+ *  name stays together); the last line cut with … if needed (the block's tooltip has it whole). */
+function wrap(text: string, w: number, f: number, max: number): string[] {
+  const n = Math.floor(w / (f * 0.56));
+  const fill = (s: string) => s.split(' ').reduce<string[]>((ls, word) => (ls.length && ls[ls.length - 1].length + 1 + word.length <= n
+    ? [...ls.slice(0, -1), `${ls[ls.length - 1]} ${word}`] : [...ls, word]), []);
+  const m = text.length > n ? /^(.*? (?:for|on|from)|answered) (.+)$/.exec(text) : null, lines = m ? [...fill(m[1]), ...fill(m[2])] : fill(text);
+  if (lines.length <= max && lines.every(l => l.length <= n)) return lines;
+  return [...lines.slice(0, max - 1), `${lines.slice(max - 1).join(' ').slice(0, n - 1)}…`];
+}
+const LIGHTS = 3;                                                // lights travelling along one line at a time
+/** `still`: nothing moves (the page is hidden). `size`: the space to fill (the window); without a height the drawing is as tall as it needs. */
+export function FlowView({ flow, still = false, size }: { flow: Flow; still?: boolean; size?: { width: number; height?: number } }) {
+  const plan = flowLayout(flow.nodes, size?.width ?? 400, size?.height), { boxes, k } = plan, px = (n: number) => Math.round(n * k * 10) / 10;
+  const part = (from: string, to: string, l: FlowLink, key: string) => {
+    const c = toolColor(l.back ? l.from : l.to), d = curve(boxes[from], boxes[to]);   // the work's color: the tool doing it
+    return h('g', { key, className: ['link', c.className, l.waiting ? 'waiting' : ''].filter(Boolean).join(' '), style: c.style },
+      h('path', { className: 'trail', d }),
+      ...(still ? [] : Array.from({ length: LIGHTS }, (_, i) => h('circle', { key: i, className: 'light', r: px(2.4) },
+        h('animateMotion', { dur: l.waiting ? '3.6s' : '1.5s', begin: `${(-i * (l.waiting ? 3.6 : 1.5)) / LIGHTS}s`, repeatCount: 'indefinite', path: d })))));
+  };
+  return h('svg', { className: `flow${still ? ' still' : ''}`, viewBox: `0 0 ${plan.width} ${plan.height}`, width: plan.width, height: plan.height, role: 'img',
     'aria-label': flow.nodes.filter(n => n.on && n.label).map(n => `${n.name}: ${n.label}`).join('; ') || 'Nothing running' },
-  h('defs', null, h('marker', { id: 'flow-head', viewBox: '0 0 8 8', refX: 7, refY: 4, markerWidth: 4.5, markerHeight: 4.5, orient: 'auto' }, h('path', { d: 'M0,0 L8,4 L0,8 Z', fill: 'context-stroke' }))),
-  ...flow.nodes.filter(n => n.id !== HUB).map(n => h('path', { key: `s-${n.id}`, className: 'spoke', d: line(HUB, n.id) })),
-  ...flow.links.flatMap((l, i) => { const c = toolColor(l.to), cls = ['link', c.className].filter(Boolean).join(' ');   // the work's color: the tool doing it
-    return [h('path', { key: `a-${i}`, className: cls, style: c.style, d: line(l.from, HUB), markerEnd: 'url(#flow-head)' }),
-      h('path', { key: `b-${i}`, className: cls, style: c.style, d: line(HUB, l.to), markerEnd: 'url(#flow-head)' })]; }),
+  h('defs', null,
+    h('pattern', { id: 'flow-dots', width: 18, height: 18, patternUnits: 'userSpaceOnUse' }, h('circle', { cx: 1.5, cy: 1.5, r: 0.8 })),
+    h('linearGradient', { id: 'flow-glass', x1: 0, y1: 0, x2: 0, y2: 1 }, h('stop', { offset: 0, className: 'g0' }), h('stop', { offset: 1, className: 'g1' }))),
+  h('rect', { className: 'backdrop', width: plan.width, height: plan.height }),
+  ...plan.captions.map(c => h('text', { key: c.text, className: 'caption', x: c.x, y: c.y, style: { fontSize: px(7) } }, c.text)),
+  ...flow.nodes.filter(n => n.id !== HUB).map(n => h('path', { key: `s-${n.id}`, className: 'spoke', d: curve(boxes[HUB], boxes[n.id]) })),
+  ...flow.links.flatMap((l, i) => [part(l.from, HUB, l, `a-${i}`), part(HUB, l.to, l, `b-${i}`)]),
   ...flow.nodes.map(n => {
-    const p = at[n.id], hub = n.id === HUB, c = hub ? {} : toolColor(n.id), w = hub ? hubW : BW, hh = hub ? hubH : BH, lines = [n.label, n.sub].filter(Boolean) as string[];
-    return h('g', { key: n.id, ...c, className: ['node', hub ? 'hub' : c.className, n.on || busy.has(n.id) ? 'on' : ''].filter(Boolean).join(' '), transform: `translate(${p.x - w / 2},${p.y - hh / 2})` },
-      h('rect', { width: w, height: hh, rx: 9 }),
-      h('text', { className: 'name', x: w / 2, y: lines.length === 2 ? 12 : lines.length ? 15 : hh / 2 + 4 }, n.name),
-      ...lines.map((t, i) => h('text', { key: i, className: i ? 'what next' : 'what', x: w / 2, y: lines.length === 2 ? 22 + i * 9 : 27 }, t)),
-      hub ? h('text', { className: 'what tag', x: w / 2, y: hh - 5 }, 'JEV') : null);
+    const b = boxes[n.id], hub = n.id === HUB, c = hub ? {} : toolColor(n.id), room = b.w - px(hub ? 12 : 20);
+    const what = n.label ? wrap(n.label, room, px(8), n.sub || hub ? 2 : 3) : [], next = n.sub && !hub ? wrap(n.sub, room, px(7), 1) : [];   // name, then up to three lines
+    const x = hub ? b.w / 2 : px(12), top = hub ? 40 : 26;
+    return h('g', { key: n.id, style: c.style, className: ['node', hub ? 'hub' : c.className, n.on ? 'on' : ''].filter(Boolean).join(' '), transform: `translate(${b.x},${b.y})` },
+      h('title', null, [n.name, n.label, n.sub].filter(Boolean).join(': ')),
+      hub ? h('rect', { className: 'ring', x: -px(5), y: -px(5), width: b.w + px(10), height: b.h + px(10), rx: px(16) }) : null,
+      h('rect', { className: 'box', width: b.w, height: b.h, rx: px(9) }),
+      hub ? null : h('rect', { className: 'bar', width: px(3), height: b.h - px(12), x: px(4), y: px(6), rx: px(1.5) }),
+      h('circle', { className: 'dot', cx: b.w - px(8), cy: px(8), r: px(2.2) }),
+      h('text', { className: 'name', x, y: px(hub ? 17 : 14), style: { fontSize: px(hub ? 10 : 8) } }, wrap(n.name, room - px(hub ? 0 : 8), px(hub ? 10 : 8), 1)[0]),
+      hub ? h('text', { className: 'tag', x, y: px(28), style: { fontSize: px(6.5) } }, 'JEV · ROUTING') : null,
+      ...[...what.map(t => ['what', t]), ...next.map(t => ['what next', t])].map(([cls, t], i) =>
+        h('text', { key: i, className: cls, x, y: px(top + i * 10), style: { fontSize: px(cls === 'what' ? 8 : 7) } }, t)));
   }));
 }
 
@@ -76,11 +149,21 @@ export function useVisible(): boolean {
   useEffect(() => { const on = () => set(document.visibilityState !== 'hidden'); document.addEventListener('visibilitychange', on); return () => document.removeEventListener('visibilitychange', on); }, []);
   return v;
 }
-/** The diagram with its data: the tools (integrations rows, also their own colors) and what runs now. */
-export function FlowPanel({ bridge, runs, now }: { bridge: Bridge; runs: LiveRun[]; now: number }) {
+/** The diagram with its data: the tools (integrations rows, also their own colors), what runs now and what is on its way back.
+ *  `fill`: use all of its container (the flow window: blocks spread out as it is resized); else its width, as tall as needed. */
+export function FlowPanel({ bridge, runs, results, now, fill = false }: { bridge: Bridge; runs: LiveRun[]; results: LiveResult[]; now: number; fill?: boolean }) {
   const tools = useOp(bridge, 'integrations');
   const visible = useVisible();
+  const box = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState<{ width: number; height?: number }>();
+  useEffect(() => {
+    const el = box.current; if (!el) return;
+    const measure = () => setSize({ width: Math.floor(el.clientWidth), ...(fill ? { height: Math.floor(el.clientHeight) } : {}) });
+    measure();
+    const ro = new ResizeObserver(measure); ro.observe(el);
+    return () => ro.disconnect();
+  }, [fill]);
   const rows = tools.data?.rows ?? [];
   setToolColors(rows);
-  return h(FlowView, { flow: flowModel(rows, runs, now), still: !visible });
+  return h('div', { ref: box, className: `flow-box${fill ? ' fill' : ''}` }, size ? h(FlowView, { flow: flowModel(rows, runs, results, now), still: !visible, size }) : null);
 }

@@ -1,10 +1,10 @@
 // The one stylesheet for the tray popover (Phase 4 app reuses it). Follows the OS light/dark setting.
 export const CSS = `
-/* tools (tc0-6: hues 175-319 every 24°; a manifest color may take orange 25) never share a hue with the actions (red 0, gold 45, green 142;
-   sending is plain bold text, like the → between tools) */
-:root { --tc0:#0d9c90; --tc1:#0d6e9c; --tc2:#0d359c; --tc3:#1d0d9c; --tc4:#570d9c; --tc5:#900d9c; --tc6:#9c0d6e;
+/* tools (tc0-6: teal 172, violet 262, lime 84, rose 330, azure 217, fuchsia 292, slate; neighbours far apart; a manifest color may take
+   orange 25) never share a hue with the actions (red 0, gold 45, green 142; sending is plain bold text, like the → between tools) */
+:root { --tc0:#0f9488; --tc1:#7c3aed; --tc2:#4d7c0f; --tc3:#db2777; --tc4:#2563eb; --tc5:#c026d3; --tc6:#64748b;
   --a-answer:#15803d; --a-decide:#a16207; --a-fail:#dc2626; }
-@media (prefers-color-scheme: dark) { :root { --tc0:#68f3e7; --tc1:#68c7f3; --tc2:#688ff3; --tc3:#7868f3; --tc4:#b068f3; --tc5:#e768f3; --tc6:#f368c7;
+@media (prefers-color-scheme: dark) { :root { --tc0:#2dd4bf; --tc1:#a78bfa; --tc2:#bef264; --tc3:#f472b6; --tc4:#60a5fa; --tc5:#e879f9; --tc6:#94a3b8;
   --a-answer:#4ade80; --a-decide:#facc15; --a-fail:#f87171; } }
 :root { --bg:#f7f7f8; --card:#fff; --fg:#1d1f23; --muted:#646a73; --line:#e3e5e8; --accent:#e8892b;
   --idle:#4b9c6b; --working:#3b82f6; --approval:#f59e0b; --problem:#dc2626; --btn:#eceef1; color-scheme: light dark; }
@@ -80,22 +80,34 @@ textarea { resize:vertical; }
 .tone-ok, .runs .line.tone-ok { border-left-color:var(--idle); } .tone-fail, .runs .line.tone-fail { border-left-color:var(--problem); }
 .tone-run, .runs .line.tone-run { border-left-color:var(--working); }
 button.badge { border:0; cursor:pointer; }
-/* the flow diagram: blocks in the tools' colors (currentColor), lit while they work; lines move the way the work goes. CSS animation only. */
-.flow { display:block; width:100%; height:auto; }
-.flow .spoke { stroke:var(--line); stroke-width:1; fill:none; }
-.flow .link { stroke:currentColor; stroke-width:2; fill:none; stroke-linecap:round; stroke-dasharray:3 7; animation:flow-move .7s linear infinite; filter:drop-shadow(0 0 3px currentColor); }
-.flow .node rect { fill:var(--card); stroke:currentColor; stroke-width:1; opacity:.55; transition:opacity .3s; }
-.flow .node.hub { color:var(--fg); } .flow .node.hub rect { stroke-width:1.5; opacity:.8; }
-.flow .node.on rect { opacity:1; stroke-width:1.6; filter:drop-shadow(0 0 5px currentColor); animation:flow-glow 1.6s ease-in-out infinite; }
-.flow text { text-anchor:middle; font-size:9px; fill:var(--fg); stroke:none; }
-.flow .name { font-weight:600; font-size:10px; fill:currentColor; } .flow .hub .name { fill:var(--fg); }
-.flow .what { font-size:7.5px; fill:var(--muted); } .flow .node.on .what { fill:var(--fg); } .flow .what.tag { font-size:6.5px; letter-spacing:1.5px; } .flow .what.next { font-size:7px; opacity:.8; }
-.flow.still .link, .flow.still .node.on rect { animation:none; }
-@keyframes flow-move { to { stroke-dashoffset:-10; } }
-@keyframes flow-glow { 50% { opacity:.7; } }
-@media (prefers-reduced-motion: reduce) { .flow .link, .flow .node.on rect { animation:none; } }
+/* the flow diagram: glassy blocks in the tools' colors (currentColor) on a dot grid; a working block glows and its dot pulses; lights
+   travel along the lines the way the work goes (slower and dimmer while a result waits for its caller); the hub's ring turns while
+   anything runs. SVG/CSS animation only, none when still or with reduced motion. */
+.flow-box { width:100%; } .flow-box.fill { flex:1; min-height:0; overflow:auto; }
+.flow { display:block; }
+.flow .backdrop { fill:url(#flow-dots); } .flow pattern circle { fill:var(--line); }
+.flow .g0 { stop-color:var(--card); } .flow .g1 { stop-color:var(--bg); }
+.flow .caption { text-anchor:middle; fill:var(--muted); font-weight:600; letter-spacing:.12em; text-transform:uppercase; }
+.flow .spoke { stroke:var(--line); stroke-width:1; stroke-dasharray:2 4; fill:none; }
+.flow .trail { stroke:currentColor; stroke-width:1.6; stroke-opacity:.55; fill:none; stroke-linecap:round; filter:drop-shadow(0 0 2px currentColor); }
+.flow .light { fill:currentColor; filter:drop-shadow(0 0 3px currentColor) drop-shadow(0 0 6px currentColor); }
+.flow .waiting .trail { stroke-dasharray:3 5; stroke-opacity:.4; } .flow .waiting .light { opacity:.6; }
+.flow .box { fill:url(#flow-glass); stroke:currentColor; stroke-opacity:.35; stroke-width:1; transition:stroke-opacity .3s; }
+.flow .bar { fill:currentColor; opacity:.5; } .flow .on .bar { opacity:1; }
+.flow .dot { fill:var(--line); } .flow .on .dot { fill:currentColor; animation:flow-pulse 1.2s ease-in-out infinite; }
+.flow .on .box { stroke-opacity:1; stroke-width:1.4; animation:flow-glow 2s ease-in-out infinite; }
+.flow .hub { color:var(--fg); } .flow .hub .box { stroke-opacity:.6; stroke-width:1.4; }
+.flow .ring { fill:none; stroke:currentColor; stroke-opacity:.25; stroke-dasharray:6 10; } .flow .hub.on .ring { stroke-opacity:.6; animation:flow-orbit 3s linear infinite; }
+.flow text { text-anchor:start; stroke:none; } .flow .hub text { text-anchor:middle; }
+.flow .name { font-weight:700; fill:currentColor; } .flow .tag { fill:var(--muted); letter-spacing:.18em; }
+.flow .what { fill:var(--muted); } .flow .on .what { fill:var(--fg); } .flow .what.next { opacity:.75; }
+.flow.still * { animation:none !important; }
+@keyframes flow-glow { 50% { filter:drop-shadow(0 0 6px currentColor); } }
+@keyframes flow-pulse { 50% { opacity:.3; } }
+@keyframes flow-orbit { to { stroke-dashoffset:-64; } }
+@media (prefers-reduced-motion: reduce) { .flow * { animation:none !important; } }
 .flow-card { padding:4px; }
-.flow-window { display:flex; flex-direction:column; height:100vh; } .flow-window .flow { flex:1; min-height:0; height:100%; }
+.flow-window { display:flex; flex-direction:column; height:100vh; }
 .live { display:flex; flex-direction:column; height:100vh; }
 .live .bar, .flow-window .bar { display:flex; gap:6px; align-items:center; padding:6px 8px; border-bottom:1px solid var(--line); background:var(--card); -webkit-app-region:drag; user-select:none; }
 .live .bar .label, .flow-window .bar .label { font-weight:600; } .live .bar .grow, .flow-window .bar .grow { flex:1; }

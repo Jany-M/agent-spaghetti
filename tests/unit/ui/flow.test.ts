@@ -1,57 +1,90 @@
-// The flow diagram (plan 2026-11-16-flow-diagram): the pure model (who works for whom, in at most three words) and what is drawn.
+// The flow diagram (plan 2026-11-16-flow-diagram): the pure model (who works for whom, what comes back), the grouped layout for any
+// space, and what is drawn.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createElement as h } from 'react';
 import { renderToStaticMarkup as html } from 'react-dom/server';
-import { liveState, type LiveRun } from '@agent-spaghetti/sdk';
-import { FlowView, HUB, flowLayout, flowModel, shortName } from '@agent-spaghetti/ui';
+import { liveState, type LiveResult, type LiveRun } from '@agent-spaghetti/sdk';
+import { FlowView, HUB, flowLayout, flowModel, type FlowBox } from '@agent-spaghetti/ui';
 
 const row = (id: string, name: string, o: object = {}) => ({ id, name, state: 'installed' as const, group: 'agents' as const, ...o });
-const rows = [row('ide', 'Acme IDE', { connection: 'connected' }), row('helper', 'Helper Agent CLI', { receives: 'module' }), row('lms', 'Local Models', { group: 'models', receives: 'openai' }),
-  row('mem', 'MemStore', { group: 'tools' }), row('gone', 'Gone', { state: 'not found', group: 'tools' }), row('idle', 'Unconnected', { connection: 'not connected' })];
+const rows = [row('ide', 'Acme IDE', { group: 'apps', connection: 'connected' }), row('helper', 'Helper Agent CLI', { receives: 'module' }),
+  row('lms', 'Local Models', { group: 'models', receives: 'openai' }), row('mem', 'MemStore', { group: 'tools' }),
+  row('gone', 'Gone', { state: 'not found', group: 'tools' }), row('idle', 'Unconnected', { connection: 'not connected' })];
 const run = (o: Partial<LiveRun>): LiveRun => ({ id: 1, source: 'ide', target: 'helper', ts: 1000, ...o });
-const words = (s: string) => s.split(' ').length;
+const result = (o: Partial<LiveResult>): LiveResult => ({ id: 1, from: 'helper', to: 'ide', how: 'unread', ts: 1000, ...o });
 
-test('flowModel idle: the hub and every tool that is connected, takes tasks or serves others; nothing lit', () => {
-  const f = flowModel(rows, [], 5000);
-  assert.deepEqual(f.nodes.map(n => n.id), [HUB, 'ide', 'helper', 'lms', 'mem']);
+test('flowModel idle: the hub and every tool that is connected, takes tasks or serves others, with its group; nothing lit', () => {
+  const f = flowModel(rows, [], [], 5000);
+  assert.deepEqual(f.nodes.map(n => [n.id, n.group]), [[HUB, 'hub'], ['ide', 'apps'], ['helper', 'agents'], ['lms', 'models'], ['mem', 'tools']]);
   assert.deepEqual([f.nodes[0].label, f.nodes.some(n => n.on), f.links], ['idle', false, []]);
-  assert.deepEqual([shortName('Helper Agent CLI'), shortName('LM Studio'), shortName('X')], ['Helper', 'LMStudio', 'X']);
 });
 test('flowModel with a run: who works for whom, who waits, the hub routing then counting; a chain names its next step', () => {
-  const f = flowModel(rows, [run({ kind: 'research', next: 'lms:m1' })], 2000);
+  const f = flowModel(rows, [run({ kind: 'research', next: 'lms:m1' })], [], 2000);
   const by = Object.fromEntries(f.nodes.map(n => [n.id, n]));
-  assert.deepEqual([by.helper.label, by.helper.sub, by.ide.label, by[HUB].label], ['researching for Acme', 'then Local', 'waiting on Helper', 'routing task']);
+  assert.deepEqual([by.helper.label, by.helper.sub, by.ide.label, by[HUB].label], ['researching for Acme IDE', 'then Local Models', 'waiting on Helper Agent CLI', 'routing task']);
   assert.deepEqual([by.helper.on, by.ide.on, by.lms.on, by[HUB].on], [true, true, false, true]);
   assert.deepEqual(f.links, [{ from: 'ide', to: 'helper' }]);
-  assert.equal(flowModel(rows, [run({ kind: 'research' })], 9000).nodes[0].label, '1 task running', 'after the first seconds');
-  assert.equal(flowModel(rows, [run({}), run({ id: 2, target: 'lms' })], 9000).nodes[0].label, '2 tasks running');
-  assert.equal(flowModel(rows, [run({ kind: 'unheard-of' })], 9000).nodes.find(n => n.id === 'helper')!.label, 'working for Acme', 'a kind without a verb');
+  assert.equal(flowModel(rows, [run({ kind: 'research' })], [], 9000).nodes[0].label, '1 task running', 'after the first seconds');
+  assert.equal(flowModel(rows, [run({}), run({ id: 2, target: 'lms' })], [], 9000).nodes[0].label, '2 tasks running');
+  assert.equal(flowModel(rows, [run({ kind: 'unheard-of' })], [], 9000).nodes.find(n => n.id === 'helper')!.label, 'working for Acme IDE', 'a kind without a verb');
 });
-test('flowModel: a caller that is not a listed tool (the tray, a terminal) gets a block; labels never exceed three words', () => {
-  const f = flowModel(rows, [run({ source: 'tray', target: 'lms', kind: 'code-edit' }), run({ id: 2, source: 'ide', target: 'helper', kind: 'plan', next: 'lms' })], 9000);
-  assert.ok(f.nodes.some(n => n.id === 'tray' && n.label === 'waiting on Local'));
+test('flowModel results: a result nobody collected keeps its line moving back; a delivered one shows for a few seconds', () => {
+  const waiting = flowModel(rows, [], [result({})], 999_999);
+  assert.deepEqual(waiting.links, [{ from: 'helper', to: 'ide', back: true, waiting: true }]);
+  assert.deepEqual(waiting.nodes.filter(n => n.on).map(n => [n.id, n.label]), [[HUB, 'returning result'], ['ide', 'result waiting'], ['helper', 'answered Acme IDE']]);
+  assert.deepEqual(flowModel(rows, [], [result({ how: 'inline', ts: 1000 })], 3000).links, [{ from: 'helper', to: 'ide', back: true }]);
+  assert.deepEqual(flowModel(rows, [], [result({ how: 'inline', ts: 1000 })], 9000).links, [], 'gone after a few seconds');
+  assert.deepEqual(flowModel(rows, [], [result({ how: 'pending' })], 1000).links, [], 'a finished step of a chain still going: its run shows it');
+});
+test('flowModel: a caller that is not a listed tool (the tray, a terminal) gets a block with the callers', () => {
+  const f = flowModel(rows, [run({ source: 'tray', target: 'lms', kind: 'code-edit' }), run({ id: 2, source: 'ide', target: 'helper', kind: 'plan', next: 'lms' })], [], 9000);
+  assert.ok(f.nodes.some(n => n.id === 'tray' && n.group === 'callers' && n.label === 'waiting on Local Models'));
   assert.equal(f.nodes.find(n => n.id === 'lms')!.label, 'coding for tray');
-  assert.ok(f.nodes.every(n => words(n.label || 'x') <= 3 && words(n.sub ?? 'x') <= 3));
 });
-test('the reducer feeds it: run.started carries kind and the next hop; run.finished clears the run', () => {
+test('the reducer feeds it: runs come and go; a chain\'s result is tracked until its caller collects it', () => {
   const ev = (id: number, type: string, data: object) => ({ id, ts: id, type, envId: 'hub', source: 'runner', data }) as never;
   const live = liveState([ev(1, 'run.started', { id: 7, source: 'ide', target: 'helper', kind: 'summarize', next: 'lms' })]);
   assert.deepEqual(live.runs[7], { id: 7, source: 'ide', target: 'helper', ts: 1, kind: 'summarize', next: 'lms' });
-  assert.deepEqual(liveState([ev(2, 'run.finished', { id: 7 })], live).runs, {});
+  const done = liveState([ev(2, 'run.finished', { id: 7, chainId: 7 })], live);
+  assert.deepEqual([done.runs, done.results[7]], [{}, { id: 7, from: 'helper', to: 'ide', how: 'pending', ts: 2 }]);
+  const unread = liveState([ev(3, 'run.delivered', { id: 7, how: 'unread', to: 'ide' })], done);
+  assert.equal(unread.results[7].how, 'unread');
+  assert.equal(liveState([ev(4, 'run.delivered', { id: 7, how: 'read', to: 'ide' })], unread).results[7].how, 'read');
 });
-test('FlowView: blocks in their tool color, the working ones and the moving lines marked, an arrow toward the worker; nothing animated when still', () => {
-  const f = flowModel(rows, [run({ kind: 'review' })], 9000);
-  const { at, height } = flowLayout(f.nodes);
-  assert.deepEqual([at[HUB], height], [{ x: 180, y: 74 }, 148]);
-  const many = flowLayout(flowModel(Array.from({ length: 15 }, (_, i) => row(`t${i}`, `Tool${i}`, { receives: 'module' })), [], 0).nodes), spots = Object.values(many.at);
-  assert.ok(spots.every((p, i) => spots.every((q, j) => i === j || Math.abs(p.x - q.x) >= 96 || Math.abs(p.y - q.y) >= 36)), 'no two blocks overlap, however many tools');
-  const page = html(h(FlowView, { flow: f }));
-  assert.match(page, /<svg class="flow" viewBox="0 0 360 148" role="img" aria-label="Agent Spaghetti: 1 task running; Acme: waiting on Helper; Helper: reviewing for Acme">/);
+test('flowLayout: grouped sides, the hub clear of every block, no overlaps, and the whole space used when given', () => {
+  const many = flowModel([...rows, ...Array.from({ length: 9 }, (_, i) => row(`t${i}`, `Tool${i}`, { receives: 'module' })),
+    row('m2', 'More Models', { group: 'models', receives: 'openai' }), row('ed', 'Editor', { group: 'apps', connection: 'connected' })], [], [], 0).nodes;
+  for (const [w, ht] of [[380, undefined], [760, 560], [1400, 900]] as const) {
+    const p = flowLayout(many, w, ht), all = Object.entries(p.boxes), hub = p.boxes[HUB];
+    const apart = (a: FlowBox, b: FlowBox) => a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y;
+    assert.ok(all.every(([i, a]) => all.every(([j, b]) => i === j || apart(a, b))), `no overlaps at ${w}`);
+    assert.ok(all.filter(([id]) => id !== HUB).every(([, b]) => Math.max(b.x - (hub.x + hub.w), hub.x - (b.x + b.w), b.y - (hub.y + hub.h), hub.y - (b.y + b.h)) >= 20), `room around the hub at ${w}`);
+    assert.ok(all.every(([, b]) => b.x >= 0 && b.x + b.w <= w && b.y >= 0 && b.y + b.h <= p.height), `inside at ${w}`);
+    if (ht) assert.equal(p.height, ht, 'fills the window');
+    const side = (id: string) => p.boxes[id].side;
+    assert.deepEqual([side('ide'), side('helper'), side('lms'), side('mem')], ['left', 'right', 'top', 'bottom']);
+  }
+  const small = flowLayout(many, 760, 560), big = flowLayout(many, 1400, 900);
+  assert.ok(big.k > small.k && big.boxes.helper.w > small.boxes.helper.w, 'blocks grow with the window');
+  assert.deepEqual(flowLayout(many, 380).captions.map(c => c.text).sort(), ['Agents', 'Editors & apps', 'Model servers', 'Other tools']);
+});
+test('FlowView: blocks in their tool color, lights moving along the lines while work or a result is on its way; nothing animated when still', () => {
+  const f = flowModel(rows, [run({ kind: 'review' })], [result({ id: 2, from: 'lms', to: 'ide' })], 9000);
+  const page = html(h(FlowView, { flow: f, size: { width: 400 } }));
+  assert.match(page, /<svg class="flow" viewBox="0 0 400 \d+" width="400"[^>]*aria-label="Agent Spaghetti: 1 task running; Acme IDE: waiting on Helper Agent CLI; Helper Agent CLI: reviewing for Acme IDE; Local Models: answered Acme IDE"/);
   assert.equal((page.match(/class="link tc\d"/g) ?? []).length, 2, 'caller → hub → worker, in the worker\'s color');
-  assert.match(page, /marker-end="url\(#flow-head\)"/);
-  assert.match(page, /<g class="node tc\d on"[^>]*><rect[^>]*><\/rect><text class="name"[^>]*>Helper<\/text><text class="what"[^>]*>reviewing for Acme<\/text>/);
-  assert.match(page, /<g class="node hub on"/); assert.match(page, /<g class="node tc\d"[^>]*><rect[^>]*><\/rect><text class="name"[^>]*>MemStore<\/text><\/g>/, 'an idle block: its name only');
-  assert.match(html(h(FlowView, { flow: f, still: true })), /<svg class="flow still"/);
-  assert.match(html(h(FlowView, { flow: flowModel(rows, [], 0) })), /aria-label="Nothing running"/);
+  assert.equal((page.match(/class="link tc\d waiting"/g) ?? []).length, 2, 'worker → hub → caller while the result waits');
+  assert.equal((page.match(/<animateMotion /g) ?? []).length, 12, 'three lights on each of the four lines');
+  assert.doesNotMatch(page, /marker-end/, 'no arrowheads');
+  assert.match(page, /<g class="node tc\d on"[^>]*><title>Helper Agent CLI: reviewing for Acme IDE<\/title>.*?<text class="name"[^>]*>Helper Agent CLI<\/text><text class="what"[^>]*>reviewing for<\/text><text class="what"[^>]*>Acme IDE<\/text>/, 'a label broken between words');
+  const chain = html(h(FlowView, { flow: flowModel(rows, [run({ kind: 'research', next: 'lms' })], [], 9000), size: { width: 400 } }));
+  assert.match(chain, /<text class="what next"[^>]*>then Local Models<\/text>/);
+  const long = html(h(FlowView, { flow: flowModel([...rows, row('x', 'An Extremely Long Integration Name Indeed', { receives: 'module' })], [run({ target: 'x', kind: 'review' })], [], 9000), size: { width: 400 } }));
+  assert.match(long, /<text class="name"[^>]*>An Extremely L[^<]*…<\/text>/, 'a long name is cut, the tooltip has it whole');
+  assert.match(page, /<g class="node hub on"/);
+  assert.match(page, /<text class="caption"[^>]*>Model servers<\/text>/);
+  const still = html(h(FlowView, { flow: f, still: true }));
+  assert.match(still, /<svg class="flow still"/); assert.doesNotMatch(still, /animateMotion/);
+  assert.match(html(h(FlowView, { flow: flowModel(rows, [], [], 0) })), /aria-label="Nothing running"/);
 });

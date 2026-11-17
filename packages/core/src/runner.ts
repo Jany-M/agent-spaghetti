@@ -156,10 +156,16 @@ export class Runner {
   }
   /** Where the chain's result went (on the chain's first row, the one its caller knows). */
   setDelivered(c: Pick<Chain, 'id' | 'source'>, how: Delivery) {
-    this.d.ledger.update(c.id, { delivered: how });
-    this.d.bus.emit({ ts: Date.now(), type: 'run.delivered', envId: 'hub', source: 'runner', data: { id: c.id, how, to: c.source } });
+    this.delivered(c.id, how, c.source);
     const last = this.d.ledger.hops(c.id).at(-1);                 // the chain's result, as its caller gets it (the live pane)
     if (last) this.d.bus.trace('runner', { stage: 'return', text: this.d.ledger.result(last) ?? last.error ?? '', target: c.source, how, runId: c.id, chainId: c.id });
+  }
+
+  /** The caller collected a result that was waiting for it (by id, or with its unread ones). */
+  read(chainId: number) { this.delivered(chainId, 'read', this.d.ledger.get(chainId)?.source); }
+  private delivered(id: number, how: Delivery, to?: string) {
+    this.d.ledger.update(id, { delivered: how });
+    this.d.bus.emit({ ts: Date.now(), type: 'run.delivered', envId: 'hub', source: 'runner', data: { id, how, to } });
   }
 
   private async run(id: number, source: string, t: Target, req: RunRequest, ac: AbortController, o: StartOpts): Promise<RunRow> {

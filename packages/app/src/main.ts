@@ -69,9 +69,23 @@ function showLive(toggle = false) {
 /** The flow diagram, bigger: a window that stays open; closing it ends it (nothing left running for it). */
 function showFlow() {
   if (flowWin && !flowWin.isDestroyed()) { flowWin.show(); return; }
-  flowWin = pane('flow', FLOW, 'center');
-  flowWin.on('closed', () => { flowWin = null; });
+  const w = flowWin = pane('flow', FLOW, 'center');
+  w.on('move', dock); w.on('resize', dock);
+  w.on('closed', () => { flowWin = null; docked = false; });
 }
+let docked = false;                                         // the live pane sits on the right of the flow window (its Live button) and follows it
+/** The live pane beside the flow window, as tall as it: on its right, or on its left where the screen ends. */
+function dock() {
+  if (!docked || !flowWin || flowWin.isDestroyed() || !liveWin || liveWin.isDestroyed()) return;
+  const f = flowWin.getBounds(), width = liveWin.getBounds().width, area = screen.getDisplayMatching(f).workArea;
+  liveWin.setBounds({ x: f.x + f.width + width <= area.x + area.width ? f.x + f.width : Math.max(area.x, f.x - width), y: f.y, width, height: f.height });
+}
+/** A pane's Live / Open bigger buttons (window.open of ?window=live|flow): the tray opens its own windows; from the flow window, Live docks. */
+const opens = (from: 'popover' | 'flow') => ({ url }: { url: string }) => {
+  const w = new URL(url).searchParams.get('window');
+  if (w === 'live') { showLive(); docked = from === 'flow'; dock(); } else if (w === 'flow') showFlow();
+  return { action: 'deny' as const };
+};
 /** A floating window of the popover page (?window=<name>): frameless, on top, stays open when you click elsewhere. */
 function pane(name: string, size: { width: number; height: number }, where: 'bottom-right' | 'center'): BrowserWindow {
   const area = screen.getPrimaryDisplay().workArea;
@@ -81,7 +95,7 @@ function pane(name: string, size: { width: number; height: number }, where: 'bot
     icon: asset('icon.png'), title: `Agent Spaghetti: ${name}`, webPreferences: { preload: asset('preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false } });
   w.on('show', () => w.setAlwaysOnTop(true, 'floating'));   // set again once shown (no moveTop: on Windows it clears "on top")
   w.webContents.on('will-navigate', e => e.preventDefault());
-  w.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  w.webContents.setWindowOpenHandler(name === 'flow' ? opens('flow') : () => ({ action: 'deny' }));
   void w.loadFile(asset('popover.html'), { query: { window: name } }).then(() => { if (!w.isDestroyed()) w.show(); });
   return w;
 }
@@ -133,7 +147,7 @@ else {
     });
     pop.on('close', e => { if (!quitting) { e.preventDefault(); pop?.hide(); } });   // Alt+F4 hides: the popover lives as long as the tray
     pop.webContents.on('will-navigate', e => e.preventDefault());
-    pop.webContents.setWindowOpenHandler(({ url }) => { const w = new URL(url).searchParams.get('window'); if (w === 'live') showLive(); else if (w === 'flow') showFlow(); return { action: 'deny' }; });   // its Live and Open bigger buttons
+    pop.webContents.setWindowOpenHandler(opens('popover'));
     ipcMain.handle(CHANNEL.call, (_e, op: unknown, input: Record<string, unknown>) => {   // before the page loads: it calls at once
       if (!isBridgeOp(op)) throw new Error(`op not allowed: ${String(op)}`);
       if (!client) throw new Error('agent-spaghetti daemon is not running');

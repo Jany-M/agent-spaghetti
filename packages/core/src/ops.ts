@@ -133,7 +133,7 @@ export const handlers: Handlers = {
   runs: (i, s) => {
     if (i.unread) {                                           // results waiting for their caller: given once, then read
       const rows = s.ledger.unread(need(i.source, 'source'));
-      for (const r of rows) s.ledger.update(r.id, { delivered: 'read' });
+      for (const r of rows) s.runner.read(r.id);
       return { runs: [], unread: rows.map(r => chainView(s, r.id)) };
     }
     if (i.id === undefined || i.id === null || String(i.id) === '') return { runs: s.ledger.list({ since: num(i.since, 0), limit: num(i.limit, 50) }) };
@@ -142,7 +142,7 @@ export const handlers: Handlers = {
     const caller = i.watch && i.source === s.ledger.get(run.chainId)?.source;   // the chain's caller is polling: it gets the result inline
     if (caller) s.runner.watch(run.chainId);
     const final = chainView(s, run.chainId);
-    if (caller && final.run.outcome !== 'running' && final.run.delivered === 'unread') s.ledger.update(run.chainId, { delivered: 'read' });   // collected by id
+    if (caller && final.run.outcome !== 'running' && final.run.delivered === 'unread') s.runner.read(run.chainId);   // collected by id
     return { runs: s.ledger.chain(run.id), result: s.ledger.result(run), final };
   },
   gateway: (_i, s) => s.gateway.status(),
@@ -180,7 +180,7 @@ export const handlers: Handlers = {
   dismiss: (i, s) => {
     const run = s.ledger.get(num(i.id, 0)), chainId = run?.chainId ?? 0;
     if (s.ledger.get(chainId)?.delivered !== 'unread') throw new Error(`run ${i.id} has no result waiting for its caller`);
-    s.ledger.update(chainId, { delivered: 'read' }); return { ok: true };
+    s.runner.read(chainId); return { ok: true };
   },
   connect: async (i, s) => {   // where the last scan found it as a client (else every env it was found in), until one works
     const id = need(i.integration, 'integration'), on = i.on !== false;
