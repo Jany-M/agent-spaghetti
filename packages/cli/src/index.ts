@@ -93,7 +93,7 @@ export async function run(argv: string[], io: IO, env: NodeJS.ProcessEnv = proce
       }
       case 'events':
         if (args.includes('--follow')) { for await (const e of c.stream()) io.out(json ? JSON.stringify(e) : eventLine(e)); }
-        else { const ev = await c.call('events', {}); print(ev, () => ev.map(eventLine).join('\n')); }
+        else { const opt = (f: string) => args[args.indexOf(f) + 1]; const ev = await c.call('events', { last: Number(args.includes('--last') ? opt('--last') : 100), ...(args.includes('--type') ? { type: opt('--type') } : {}) }); print(ev, () => ev.map(eventLine).join('\n')); }
         break;
       case 'integrations': {
         const r = await c.call('integrations');

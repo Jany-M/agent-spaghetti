@@ -15,6 +15,12 @@ test('events persist in order, can be read since an id, and pruned by age', () =
   assert.equal(s.pruneEvents(3), 1);
   assert.equal(s.eventsSince(0).length, 1);
 });
+test('recentEvents: the newest n (of one type), oldest first', () => {
+  const s = new Store(':memory:');
+  for (const t of ['scan.completed', 'debug.capture', 'env.status', 'debug.capture'] as const) s.appendEvent(ev(t));
+  assert.deepEqual(s.recentEvents(2).map(e => e.type), ['env.status', 'debug.capture']);
+  assert.deepEqual(s.recentEvents(5, 'debug.capture').map(e => e.id), [2, 4]);
+});
 test('snapshots and kv round-trip; missing → null/undefined; undefined deletes', () => {
   const s = new Store(':memory:');
   s.saveSnapshot('scan', { x: [1, 2] }); assert.deepEqual(s.loadSnapshot('scan'), { x: [1, 2] });

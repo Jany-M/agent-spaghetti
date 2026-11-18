@@ -61,7 +61,7 @@ export const handlers: Handlers = {
   },
   scan: async (_i, s) => ({ snapshot: await s.scan() }),
   events: (i, s) => {
-    const stored = s.store.eventsSince(num(i.since, 0), num(i.limit, 500));
+    const stored = i.last || i.type ? s.store.recentEvents(num(i.last, 100), typeof i.type === 'string' ? i.type : undefined) : s.store.eventsSince(num(i.since, 0), num(i.limit, 500));
     if (!i.traces) return stored;
     const live = s.bus.recentTraces().filter(t => t.ts >= (stored[0]?.ts ?? 0)), seen = new Set(live.map(t => t.data.runId));
     return [...stored, ...live, ...stored.flatMap(e => (e.type === 'run.started' && !seen.has(Number(e.data.id)) ? replay(s, e) : []))].sort((a, b) => a.ts - b.ts);

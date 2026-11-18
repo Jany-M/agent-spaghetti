@@ -155,7 +155,7 @@ export function storyParts(e: StoredEvent): Part[] | null {
       d.cost && d.cost !== 'free' ? ` (${d.cost === 'metered' ? 'paid' : d.cost})` : '', ': waiting for you'];
     case 'consent.answered': return [{ tool: e.source }, ': ', a(d.answer === 'granted' ? 'decide' : 'fail', String(d.answer)), d.scope ? ` (${d.scope})` : ''];
     case 'consent.expired': return [{ tool: e.source }, ': ', a('fail', 'question expired (denied)')];
-    case 'debug.capture': return [a('decide', 'debug'), ' ', { tool: e.source }, ` ${d.what}: `, cut(JSON.stringify(Object.fromEntries(Object.entries(d).filter(([k]) => k !== 'what'))))];
+    case 'debug.capture': return [a('decide', 'debug'), ' ', { tool: e.source }, ` ${d.what}: `, JSON.stringify(Object.fromEntries(Object.entries(d).filter(([k]) => k !== 'what'))).slice(0, 1500)];
     case 'trace.detail': {
       const stage = d.stage as TraceStage, text = cut(d.text);
       return stage === 'request' ? [...R, { tool: String(d.source) }, ' ', a('send', 'asks'), ' ', who(d), ': ', text]

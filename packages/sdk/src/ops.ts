@@ -16,7 +16,7 @@ export interface OpSpec { method: 'GET' | 'POST'; path: string; summary: string;
 export const OPS = {
   status:       { method: 'GET',  path: '/v1/status', gui: 'home',       usage: 'status [--short]',         summary: 'Last scan, live state and questions waiting for you' },
   scan:         { method: 'POST', path: '/v1/scan', gui: 'home',         usage: 'scan',                     summary: 'Scan every environment now' },
-  events:       { method: 'GET',  path: '/v1/events', gui: 'activity',       usage: 'events [--follow]',        summary: 'Stored events (or follow new ones)' },
+  events:       { method: 'GET',  path: '/v1/events', gui: 'activity',       usage: 'events [--last N] [--type T] [--follow]', summary: 'The latest stored events (100 by default; --type e.g. debug.capture, then 100 of that type), or follow new ones' },
   integrations: { method: 'GET',  path: '/v1/integrations', gui: 'tools', usage: 'integrations',             summary: 'Every supported tool by type: found where, state, connection' },
   switches:     { method: 'GET',  path: '/v1/switches', gui: 'tools',     usage: 'switches',                 summary: 'On/off switches in every environment' },
   switch:       { method: 'POST', path: '/v1/switch', gui: 'tools',       usage: 'on|off <switch> [--env <id>]', summary: 'Turn a switch on or off' },
@@ -75,7 +75,7 @@ export interface GrantIn { subject: string; mode: Mode; action?: Action; resourc
 export interface OpIO {
   status: { in: {}; out: { snapshot: Snapshot | null; live: LiveState; consents: ConsentRequest[]; saved: { week: Saved; all: Saved } } };   // saved: tasks free targets did (routing savings)
   scan: { in: {}; out: { snapshot: Snapshot } };
-  events: { in: { since?: number; limit?: number; traces?: boolean }; out: StoredEvent[] };   // traces: also the latest live-only ones (memory only)
+  events: { in: { since?: number; limit?: number; traces?: boolean; last?: number; type?: string }; out: StoredEvent[] };   // traces: also the latest live-only ones (memory only)
   integrations: { in: {}; out: { rows: ToolRow[]; rejected: Array<{ id: string; why: string }> } };
   switches: { in: {}; out: { switches: Switch[]; errors: Array<{ envId: string; error: string }> } };
   switch: { in: { id: string; on: boolean; envId?: string }; out: Switch };
