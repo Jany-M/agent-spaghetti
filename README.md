@@ -23,10 +23,14 @@ You decide who does what, when you want them to.
 
 <div align="center">
 <img width="380" height="520" alt="taskbar_dark" src="https://github.com/user-attachments/assets/345fcd88-737a-4870-94dc-856b6ffc28cd" />
-<img width="380" height="520" alt="preview" src="https://github.com/user-attachments/assets/0ae9022f-b21b-433b-82f4-7bc498c24006" />
 <img width="380" height="520" alt="preview (3)" src="https://github.com/user-attachments/assets/04cef01e-a242-4faf-96bc-526c13eaab41" />
 <img width="380" height="520" alt="preview (4)" src="https://github.com/user-attachments/assets/8d2be3b2-9f36-4d49-afd1-bec7fbae0096" />
 <img width="380" height="520" alt="preview (6)" src="https://github.com/user-attachments/assets/29905432-99db-410f-b455-c4959d369de3" />
+<img width="1280" height="800" alt="app-window-big" src="https://github.com/user-attachments/assets/b7ae3faa-0da9-470e-b5de-d5bc98008569" />
+<img width="1224" height="1887" alt="activity" src="https://github.com/user-attachments/assets/71049687-6f41-47e5-8d37-8a4e1853bceb" />
+<img width="3531" height="1686" alt="flow" src="https://github.com/user-attachments/assets/da378c2d-e304-49dd-8c2e-e8fd29bc9773" />
+
+
 </div>
 
 ## Install (Windows 11 + WSL)
