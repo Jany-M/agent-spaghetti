@@ -6,7 +6,7 @@
 // generic `-- <command…>` form of speaks.mcpCli does not fit it), so the module does it. The real cause of earlier probe failures
 // was the spawned probe child not finding the daemon (env/discovery), not path separators; no backslash conversion is applied.
 // It asks "enable all tools?" on stdin; the add sequence feeds `Y` explicitly. Identity: shared server name 'agent-spaghetti' with '--as hermes'.
-import type { IntegrationModule, RunEvent, RunRequest } from '@agent-spaghetti/sdk';
+import type { Environment, IntegrationModule, RunEvent, RunRequest } from '@agent-spaghetti/sdk';
 import { parseJson, programOf } from '@agent-spaghetti/sdk';
 
 const SERVER_NAME = 'agent-spaghetti';
@@ -30,8 +30,17 @@ export function modelBaseUrl(yaml: string | null): string | null {
 const LOCAL = /^https?:\/\/(127\.\d+\.\d+\.\d+|localhost|\[::1\])(:\d+)?(\/|$)/i;
 /** Hermes manages its own local llama.cpp server (`local_runtime.enabled: true`, its Local models). */
 export const managedRuntime = (yaml: string | null) => /^local_runtime:\s*\r?\n(?:[ \t]+.*\r?\n|\s*\r?\n)*?[ \t]+enabled:\s*true\b/m.test(yaml ?? '');
-/** `model.provider` in config.yaml. */
-const provider = (yaml: string | null) => /^model:\s*\r?\n(?:[ \t]+.*\r?\n|\s*\r?\n)*?[ \t]{1,4}provider:\s*["']?([\w.-]+)/m.exec(yaml ?? '')?.[1] ?? '';
+/** A key of the `model:` block in config.yaml (`provider`, `default`: the model it runs). */
+const modelKey = (yaml: string | null, key: string) => new RegExp(`^model:\\s*\\r?\\n(?:[ \\t]+.*\\r?\\n|\\s*\\r?\\n)*?[ \\t]{1,4}${key}:\\s*["']?([^"'\\s#]+)`, 'm').exec(yaml ?? '')?.[1] ?? '';
+const provider = (yaml: string | null) => modelKey(yaml, 'provider');
+/** Hermes profiles (its custom agents, `hermes -p <name>`): one folder each beside config.yaml, with its own config.yaml
+ *  (docs: hermes-agent.nousresearch.com/docs/reference/profile-commands, checked 2026-11-18). */
+const PROFILES = CONFIG.replace(/config\.yaml$/, 'profiles/*/config.yaml');
+const profileOf = (path: string) => path.replaceAll('\\', '/').split('/').at(-2) ?? '';
+async function profiles(env: Environment): Promise<Array<{ name: string; model: string; provider: string }>> {
+  const paths = (await env.globAll(PROFILES).catch(() => [])).filter(p => !profileOf(p).startsWith('.'));   // '.deleted': Hermes' bin
+  return Promise.all(paths.map(async p => { const y = await env.readFile(p).catch(() => null); return { name: profileOf(p), model: modelKey(y, 'default'), provider: provider(y) }; }));
+}
 const LLAMACPP = ['llamacpp', 'llama.cpp', 'llama-cpp'];           // Hermes' names for its own managed server (hermes_cli/local_runtime/endpoint.py)
 const MANAGED_URL = 'http://127.0.0.1:18434/v1';                  // where that server listens when config.yaml names no base_url (Hermes' default port)
 /** Hermes' local model as Agent Spaghetti uses it: on this machine (free), and whether Hermes itself can start its server. Either
@@ -44,10 +53,12 @@ export function localModel(yaml: string | null): { url: string; managed: boolean
 /** A llama.cpp server's /models answer: a model is in memory (its router marks each model's status; a single-model server has it loaded). */
 export const modelLoaded = (body: string | undefined) => !!body && (!/"status"/.test(body) || /"value"\s*:\s*"loaded"/.test(body));
 
-/** `wake`: Hermes' managed local model (provider llamacpp: Hermes finds its server and starts it when it is not running, checked in
+/** `profile`: req.model names one of its profiles. `wake`: Hermes' managed local model (provider llamacpp: Hermes finds its server and starts it when it is not running, checked in
  *  hermes_cli/local_runtime/endpoint.py and live 2026-11-05; a fixed base_url never starts it). The model loads on the first request. */
-export function hermesArgs(req: RunRequest, o: { wake?: boolean } = {}): string[] {
-  return ['chat', '--query-file', '-', '-Q', '--format', 'stream-json', ...(o.wake ? ['--provider', 'llamacpp'] : []), ...(req.model ? ['--model', req.model] : []),
+export function hermesArgs(req: RunRequest, o: { wake?: boolean; profile?: boolean } = {}): string[] {
+  // a profile (one of its agents) brings its own model and provider: `hermes -p <name> chat …` (global flag before the command)
+  return [...(o.profile ? ['-p', req.model!] : []), 'chat', '--query-file', '-', '-Q', '--format', 'stream-json', ...(o.wake ? ['--provider', 'llamacpp'] : []),
+    ...(req.model && !o.profile ? ['--model', req.model] : []),
     ...(req.session ? ['--resume', req.session] : [])];
 }
 /** One stream-json line → run events. */
@@ -70,6 +81,9 @@ export const hermesModule: IntegrationModule = {
    *  `loads`: its managed model is not in memory now, so a task loads it (routing keeps that away from another loaded model: two
    *  local models at once ran the test machine out of memory, 2026-11-05). */
   async inspect(env, base) {
+    const agents = (await profiles(env)).map(p => ({ id: `hermes:${p.name}`, integration: 'hermes', name: p.name, envId: env.id,
+      ...(p.model ? { model: p.model } : {}), ...(p.provider ? { provider: p.provider } : {}) }));
+    base = { ...base, agents: [...base.agents, ...agents] };
     const local = localModel(await env.readFile(CONFIG).catch(() => null));
     if (!local) return base;
     const models = await env.http({ url: `${local.url.replace(/\/+$/, '')}/models`, timeoutMs: 2500 }).catch(() => null);
@@ -80,8 +94,9 @@ export const hermesModule: IntegrationModule = {
   async *run(env, det, req, ctx) {
     const exe = programOf(det, 'hermes');
     if (!exe) throw new Error('Hermes Agent not found');
-    const wake = !req.model && !!localModel(await env.readFile(CONFIG).catch(() => null))?.managed;   // a named model: Hermes' own choice of provider
-    for await (const line of env.execLines(exe, hermesArgs(req, { wake }), { input: req.task, cwd: req.cwd, signal: ctx.signal,
+    const profile = !!req.model && (await profiles(env)).some(p => p.name === req.model);
+    const wake = !req.model && !!localModel(await env.readFile(CONFIG).catch(() => null))?.managed;   // a named model or profile: Hermes' own choice of provider
+    for await (const line of env.execLines(exe, hermesArgs(req, { wake, profile }), { input: req.task, cwd: req.cwd, signal: ctx.signal,
       env: ctx.runId ? { AGENT_SPAGHETTI_PARENT_RUN: String(ctx.runId) } : undefined })) yield* hermesEvents(line);
   },
   async connect(env, det, cli, on, dryRun) {

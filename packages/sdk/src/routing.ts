@@ -40,7 +40,7 @@ export function classify(text: string, files = 0, given: { kind?: string; diffic
   const kind = caller ? given.kind as TaskKind : top.n ? top.kind : 'other';
   const n = words(text), h = JEV.heavy, l = JEV.light;
   const difficulty: Difficulty = (DIFFICULTIES as readonly string[]).includes(given.difficulty ?? '') ? given.difficulty as Difficulty
-    : JEV.route.frontierKinds.includes(kind) || n > h.words || files > h.files || HEAVY.some(re => re.test(text)) || (h.editKinds.includes(kind) && files > h.editFiles) ? 'heavy'
+    : n > h.words || files > h.files || HEAVY.some(re => re.test(text)) || (h.editKinds.includes(kind) && files > h.editFiles) ? 'heavy'
     : n <= l.words && files <= l.files && longestCodeBlock(text) <= l.codeLines && l.kinds.includes(kind) ? 'light' : 'medium';
   return { kind, difficulty, by: caller ? 'caller' : 'rules', confidence: caller ? 1 : top.n ? Math.round(((top.n - (second?.n ?? 0)) / top.n) * 100) / 100 : 0 };
 }
@@ -69,6 +69,14 @@ export function tierOf(t: Pick<Target, 'id' | 'kind' | 'cost' | 'models'>, tiers
   const b = model ? modelSize(model) : null;
   return b === null ? 'medium' : b <= R.lightMaxB ? 'light' : b <= R.mediumMaxB ? 'medium' : 'heavy';
 }
+/** The owner's model for an agent target (`delegate.models`, `<target>[:<kind>|:<difficulty>]=<model>`): the most specific entry,
+ *  kind before difficulty before the plain one (e.g. `<agent>:research=<its researcher>`, `<agent>:heavy=<its strongest model>`). */
+export function ownModel(list: string[], target: string, kind?: string, difficulty?: string): string | undefined {
+  for (const key of [kind && `${target}:${kind}`, difficulty && `${target}:${difficulty}`, target].filter(Boolean)) {
+    const hit = list.find(x => x.startsWith(`${key}=`));
+    if (hit) return hit.slice(key!.length + 1);
+  }
+}
 /** A target's past runs of one kind: `rate` = share that went well, recency-weighted (half-life `route.halfLifeDays`). */
 export interface RunStats { runs: number; rate: number; bad: number; medianMs?: number }
 export const statKey = (kind: string, target: string) => `${kind} ${target}`;
@@ -89,7 +97,8 @@ export function summarizeRuns(rows: RunRow[], now = Date.now()): Record<string, 
 }
 /** How to rank (settings `routing.*`, the run record, live queues). `source`: the caller, never its own target. */
 export interface RouteOpts { source?: string; web?: boolean;   // web: the task needs to look things up online (a webKind without its own sources)
-  stats?: Record<string, RunStats>; learn?: boolean; stretch?: boolean; prefer?: string[]; never?: string[]; tiers?: string[]; queued?(id: string): number;
+  stats?: Record<string, RunStats>; learn?: boolean; models?: string[];   // models: setting delegate.models
+  stretch?: boolean; prefer?: string[]; never?: string[]; tiers?: string[]; queued?(id: string): number;
   busy?(id: string): boolean }                              // an agent working on another task now
 /** One target for one task: its tier, why it sits where it does, its history; `skip` when it may not take the task. */
 export interface Ranked { target: Target; tier: Difficulty; why: string; stats?: RunStats; preferred?: true; skip?: string }
@@ -103,7 +112,8 @@ const pct = (s: RunStats) => `${s.runs} ${s.runs === 1 ? 'run' : 'runs'}, ${Math
  *  would load its own local model beside one already loaded) come last with `skip`. */
 const BUSY_RANK = (COST_RANK.unknown + COST_RANK.metered) / 2;   // a busy free agent: after every idle free or unknown one, before paid
 export function route(c: { kind: TaskKind; difficulty: Difficulty; edits?: boolean }, targets: Target[], o: RouteOpts = {}): Ranked[] {
-  const frontier = R.frontierKinds.includes(c.kind), difficulty = frontier ? 'heavy' : c.difficulty;   // a frontier kind asks for the strongest target whatever its size
+  // a frontier kind asks for the strongest target whatever its size (its own difficulty still picks the agent's model: delegate.models)
+  const frontier = R.frontierKinds.includes(c.kind), difficulty = frontier ? 'heavy' : c.difficulty;
   const need = level(difficulty), prefer = forKind(o.prefer, c.kind), never = forKind(o.never, c.kind);
   const stretch = o.stretch && !frontier, loaded = targets.find(t => t.kind === 'model');
   return targets.map((t, i) => {
@@ -113,7 +123,7 @@ export function route(c: { kind: TaskKind; difficulty: Difficulty; edits?: boole
     const preferred = prefer.includes(t.id) && !busy;
     const skip = t.id === o.source ? 'the caller itself' : never.includes(t.id) ? `never for ${c.kind} (your choice)`
       : c.edits && t.kind !== 'agent' ? 'edits files: needs an agent'
-      : t.loads && loaded && !preferred ? `would load ${t.loads} while ${loaded.name} has a model loaded (name it as the target to do that)` : undefined;
+      : t.loads && loaded && !preferred && !ownModel(o.models ?? [], t.id, c.kind, c.difficulty) ? `would load ${t.loads} while ${loaded.name} has a model loaded (name it as the target to do that)` : undefined;
     const fit = level(tier) >= need ? 0 : stretch && t.cost === 'free' && level(tier) === need - 1 ? 1 : 2;
     const offline = !!o.web && !t.web, paid = t.cost === 'metered';
     const history = o.learn && s && s.runs >= R.minRuns ? s.rate : 0.5;      // unknown sits between a good and a bad record

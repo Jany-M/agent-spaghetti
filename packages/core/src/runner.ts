@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ConsentScope, Delivery, Environment, Integration, RunEvent, RunOutcome, RunRequest, RunRow, Snapshot, Target } from '@agent-spaghetti/sdk';
-import { AUTO, classifyRequest, envPath, parseHop, programOf, runDecision, withGrants } from '@agent-spaghetti/sdk';
+import { AUTO, classifyRequest, envPath, ownModel, parseHop, programOf, runDecision, withGrants } from '@agent-spaghetti/sdk';
 import type { Bus } from './bus.ts';
 import type { Consent } from './consent.ts';
 import type { Ledger } from './ledger.ts';
@@ -75,14 +75,15 @@ export class Runner {
   start(source: string, req: RunRequest, o: StartOpts = {}): { id: number; done: Promise<RunRow> } {
     const t = this.targets().find(x => x.id === req.target);
     if (!t) throw new Error(`unknown or unavailable target ${req.target} (see: targets)`);
-    const own = t.kind === 'agent' && !req.model ? this.d.settings.get('delegate.models').find(x => x.startsWith(`${t.id}=`))?.slice(t.id.length + 1) : undefined;
-    if (own) req = { ...req, model: own };                                  // the owner's default model for this agent (delegate.models)
-    if (req.model && t.models.length && !t.models.includes(req.model))
-      throw new Error(`${t.name} has no ${t.kind === 'model' ? 'loaded model' : 'agent'} ${req.model} (${t.kind === 'model' ? 'loaded' : 'agents'}: ${t.models.join(', ')})`);
     for (const hop of req.then ?? []) if (parseHop(hop).target !== AUTO && !this.targets().some(x => x.id === parseHop(hop).target)) throw new Error(`unknown or unavailable target ${parseHop(hop).target} in then (see: targets)`);
     // JEV (finish-line plan, Part I): the caller's kind and difficulty when valid, else the default rules; a chain's later hops keep it.
     const c = classifyRequest(req);
     const kind = c.kind;
+    // the owner's model for this agent and task (delegate.models: by kind, then difficulty)
+    const own = t.kind === 'agent' && !req.model ? ownModel(this.d.settings.get('delegate.models'), t.id, kind, c.difficulty) : undefined;
+    if (own) req = { ...req, model: own };
+    if (req.model && t.models.length && !t.models.includes(req.model))
+      throw new Error(`${t.name} has no ${t.kind === 'model' ? 'loaded model' : 'agent'} ${req.model} (${t.kind === 'model' ? 'loaded' : 'agents'}: ${t.models.join(', ')})`);
     // An agent that delegates while it runs a delegated task works on that task (one such run: it is the parent).
     const busy = [...this.running].filter(([, r]) => r.target === source);
     req = { ...req, kind, difficulty: c.difficulty, classification: c, parentRunId: req.parentRunId ?? (busy.length === 1 && !o.engine ? busy[0][0] : undefined) };

@@ -37,7 +37,7 @@ export class Dispatcher {
     const s = this.d.settings, live = this.d.live?.(), q = live?.queues ?? {}, learn = s.get('routing.learn'), working = new Set(Object.values(live?.runs ?? {}).map(r => r.target));
     return route(c, this.d.runner.targets().filter(t => !without.includes(t.id) && among(t)), { source, learn, stretch: s.get('routing.stretch'),
       web: WEB_KINDS.includes(c.kind) && !c.sources,          // a task that brings its files or a previous result needs no lookup
-      prefer: s.get('routing.prefer'), never: s.get('routing.never'), tiers: s.get('routing.tiers'),
+      prefer: s.get('routing.prefer'), never: s.get('routing.never'), tiers: s.get('routing.tiers'), models: s.get('delegate.models'),
       stats: summarizeRuns(this.d.ledger.list({ since: 0, limit: STATS_RUNS })), queued: id => (q[id]?.waiting ?? 0) + (q[id]?.running ?? 0), busy: id => working.has(id) });
   }
 

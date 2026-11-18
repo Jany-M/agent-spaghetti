@@ -115,6 +115,9 @@ test('delegate.models: an agent target without a model in the task uses the owne
   const r = s.runner.start('cli', { target: 'coder', task: 'summarize x' });
   assert.equal((await r.done).model, 'fast');
   assert.equal((await s.runner.start('cli', { target: 'coder', task: 'summarize y', model: 'other' }).done).model, 'other', 'the task\'s own model wins');
+  s.settings.setText('delegate.models', 'coder=fast, coder:plan=deep, coder:heavy=strong');
+  assert.equal((await s.runner.start('cli', { target: 'coder', task: 'plan the move', kind: 'plan' }).done).model, 'deep', 'one for the kind');
+  assert.equal((await s.runner.start('cli', { target: 'coder', task: 'fix it', kind: 'code-edit', difficulty: 'heavy' }).done).model, 'strong', 'one for the difficulty');
 });
 test('model(): the loaded model routing picks for a gateway request; agents are no models', () => {
   const s = setup();

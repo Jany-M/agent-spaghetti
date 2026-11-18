@@ -227,6 +227,17 @@ test('hermes run: its managed local model is woken through provider llamacpp (a 
   await run({ model: 'm' });
   assert.ok(env.calls.includes(`lines ${base} --model m`), 'a named model: no provider forced');
 });
+test('hermes profiles: each is one of its agents (model, provider); a task naming one runs `hermes -p <name>` with no model forced', async () => {
+  const { hermesModule } = await import('../../../integrations/hermes/index.ts');
+  const root = '%LOCALAPPDATA%/hermes', exe = 'C:/h/hermes.exe', base = 'chat --query-file - -Q --format stream-json';
+  const det = { integration: 'hermes', name: 'Hermes Agent', envId: 'windows', installs: [{ path: exe, via: 'path' as const }], levels: [], cost: 'free' as const, connectable: 'yes' as const, why: '' };
+  const env = fakeEnv({ files: { [`${root}/config.yaml`]: 'model:\n  default: big\n', [`${root}/profiles/researcher/config.yaml`]: 'model:\n  # note\n  default: "r/m:free"\n  provider: "openrouter"\n',
+    [`${root}/profiles/.deleted/config.yaml`]: 'model:\n  default: x\n' }, lines: { [`${exe} -p researcher ${base}`]: ['{"type":"result","exit_code":0,"text":"ok","tokens":{}}'] } });
+  const i = await hermesModule.inspect!(env, { detection: det, agents: [], backends: [] }, {} as never);
+  assert.deepEqual(i.agents, [{ id: 'hermes:researcher', integration: 'hermes', name: 'researcher', envId: 'windows', model: 'r/m:free', provider: 'openrouter' }], 'Hermes\' deleted-profiles bin is left out');
+  const out = []; for await (const e of hermesModule.run!(env, det, { target: 'hermes', task: 't', model: 'researcher' }, { signal: new AbortController().signal } as never)) out.push(e);
+  assert.deepEqual(out.at(-1), { type: 'done', result: 'ok' });
+});
 test('connectionPlan: never disconnects, always connects, unset asks once; tools that cannot connect are left alone', async () => {
   const { connectionPlan } = await import('../../../packages/core/src/connections.ts');
   const d = (integration: string, connected?: boolean, envId = 'windows') => ({ ...det, integration, envId, ...(connected === undefined ? {} : { connected }) });

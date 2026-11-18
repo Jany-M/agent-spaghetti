@@ -26,6 +26,10 @@ export function guardEnvironment(env: Environment, subject: string, grants: Gran
       if (!allowed('read', p)) return null;
       const r = await env.glob(p); if (r) resolved.add(r); return r;
     },
+    globAll: async p => {
+      if (!allowed('read', p)) return [];
+      const r = await env.globAll(p); r.forEach(x => resolved.add(x)); return r;
+    },
     readFile: async p => (resolved.has(p) || allowed('read', p) ? env.readFile(p) : null),
     writeFile: async (p, c) => { if (!allowed('write', p)) throw new Error(`not permitted: write ${p}`); return env.writeFile(p, c); },
     remove: async p => { if (!allowed('write', p)) throw new Error(`not permitted: write ${p}`); return env.remove(p); },

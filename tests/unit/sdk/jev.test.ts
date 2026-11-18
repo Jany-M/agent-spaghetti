@@ -43,8 +43,8 @@ test('the caller\'s own kind and difficulty win; invalid values are ignored', ()
   assert.deepEqual(classify('Summarize this', 0, { kind: 'review', difficulty: 'heavy' }), { kind: 'review', difficulty: 'heavy', by: 'caller', confidence: 1 });
   assert.deepEqual(classify('Summarize this', 0, { kind: 'nonsense', difficulty: 'huge' }), { kind: 'summarize', difficulty: 'light', by: 'rules', confidence: 1 });
 });
-test('plan is its own kind and always heavy: it goes to the strongest target (frontier kind), whatever its size', () => {
-  assert.deepEqual([classify('Plan the migration of the billing module').kind, classify('Plan the next sprint').difficulty], ['plan', 'heavy']);
+test('plan is its own kind; its difficulty is its size (routing still sends it to the strongest target: frontier kind)', () => {
+  assert.deepEqual([classify('Plan the migration of the billing module').kind, classify('Plan the next sprint').difficulty], ['plan', 'medium']);
   assert.equal(classify('Pianifica la nuova funzione di ricerca').kind, 'plan');
   assert.equal(classify('Review the plan for the new endpoint').kind, 'review', 'the action said first wins');
 });

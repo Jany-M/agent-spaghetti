@@ -4,7 +4,7 @@ import type { Environment, EnvKind, ExecResult, HttpResult, Inventory } from './
 export interface FakeSpec {
   id?: string; kind?: EnvKind; hosts?: string[];
   http?: Record<string, HttpResult | null>;   // "GET <url>" or "<url>" → response
-  files?: Record<string, string>;             // path or glob pattern → content (glob() returns the key)
+  files?: Record<string, string>;             // path or glob pattern → content (glob() returns the key; globAll() the paths that match)
   bins?: Record<string, string>;              // name → resolved path
   exec?: Record<string, ExecResult>;          // "<cmd> <args joined by space>" → result
   lines?: Record<string, string[] | Error>;   // execLines ("<cmd> <args>") and httpLines ("<METHOD> <url>"): lines, or the error thrown at the end
@@ -31,6 +31,8 @@ export function fakeEnv(s: FakeSpec = {}): Environment & { calls: string[]; inpu
     async readFile(p) { return s.files?.[p] ?? null; },
     async which(b) { return s.bins?.[b] ?? null; },
     async glob(p) { return s.files && p in s.files ? p : null; },
+    async globAll(p) { const re = new RegExp(`^${p.split('*').map(x => x.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('[^/]*')}$`, 'i');
+      return Object.keys(s.files ?? {}).filter(k => re.test(k)); },   // the files whose path matches ('*' inside one segment)
     async hostCandidates() { return s.hosts ?? ['127.0.0.1']; },
     async inventory() { return fakeInventory(s.inventory); },
   };

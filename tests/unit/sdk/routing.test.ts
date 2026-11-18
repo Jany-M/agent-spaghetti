@@ -2,7 +2,7 @@
 // ranking for one task (fit, cost, stretch, history, queue; skips with why).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { modelSize, offloadText, route, savings, summarizeRuns, tierOf, withCosts, type Ranked, type RunRow, type Target } from '@agent-spaghetti/sdk';
+import { modelSize, offloadText, ownModel, route, savings, summarizeRuns, tierOf, withCosts, type Ranked, type RunRow, type Target } from '@agent-spaghetti/sdk';
 
 const T = (id: string, o: Partial<Target> = {}): Target => ({ id, name: id, kind: 'model', cost: 'free', envId: 'w', models: [], engine: 'openai', resumable: false, ...o });
 test('tiers: model size from its name (active size when stated), paid → heavy, agents → medium, the owner\'s entry wins', () => {
@@ -64,6 +64,12 @@ test('route: research needs the web (unpaid with web, then unpaid without, then 
   assert.equal(route({ kind: 'summarize', difficulty: 'light' }, own)[1].skip, 'would load its own local model while LMS has a model loaded (name it as the target to do that)');
   assert.equal(route({ kind: 'summarize', difficulty: 'light' }, [own[1]])[0].skip, undefined, 'nothing else loaded: it may load its own');
   assert.equal(route({ kind: 'summarize', difficulty: 'light' }, own, { prefer: ['summarize=self'] })[0].skip, undefined, 'your pick for the kind is your say-so');
+  assert.equal(route({ kind: 'review', difficulty: 'light' }, own, { models: ['self:review=its-reviewer'] })[0].skip, undefined, 'your model for it on this task: nothing local loads');
+});
+test('ownModel: the owner\'s model for an agent, by kind, then difficulty, then plain', () => {
+  const list = ['a=base', 'a:heavy=big', 'a:research=finder', 'b:medium=mid'];
+  assert.deepEqual([ownModel(list, 'a', 'research', 'heavy'), ownModel(list, 'a', 'plan', 'heavy'), ownModel(list, 'a', 'code-edit', 'light'), ownModel(list, 'b', 'code-edit', 'light'), ownModel(list, 'b', 'code-edit', 'medium')],
+    ['finder', 'big', 'base', undefined, 'mid']);
 });
 test('offloadText and savings: the kinds a tool hands off unasked; what free targets did', () => {
   assert.match(offloadText(['summarize', 'research']), /^Without being asked, hand these kinds of task to `delegate` with target `auto` instead of doing them yourself: summarize, research\./);

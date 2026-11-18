@@ -37,6 +37,7 @@ export interface Environment {
   remove(path: string): Promise<void>;                       // file or folder, recursive; missing is fine; `connect` only (`write`)
   which(bin: string): Promise<string | null>;            // absolute path on PATH
   glob(pattern: string): Promise<string | null>;         // first match; expands ~, %VAR% (windows), $VAR; '*' inside one segment
+  globAll(pattern: string): Promise<string[]>;           // every match, same rules
   hostCandidates(): Promise<string[]>;                   // where this env may reach local servers; re-resolved per call
   inventory(envNames: string[]): Promise<Inventory>;
 }

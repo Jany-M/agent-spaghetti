@@ -22,20 +22,23 @@ export function expandPath(p: string, env: NodeJS.ProcessEnv = process.env, home
     .replace(/%([A-Za-z0-9_]+)%/g, (m, n) => env[n] ?? m)
     .replace(/\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?/g, (m, n) => env[n] ?? m);
 }
-/** First existing path matching a pattern; '*' is allowed inside a single segment; the newest version wins (`app-0.1.12` before `app-0.1.9`). */
-export async function globFirst(pattern: string): Promise<string | null> {
-  const parts = pattern.replaceAll('\\', '/').split('/');
-  const walk = async (base: string, i: number): Promise<string | null> => {
-    if (i === parts.length) return (await exists(base)) ? base : null;
+/** Existing paths matching a pattern; '*' is allowed inside a single segment; the newest version first (`app-0.1.12` before `app-0.1.9`); `first` stops at one. */
+export async function globAll(pattern: string, first = false): Promise<string[]> {
+  const parts = pattern.replaceAll('\\', '/').split('/'), out: string[] = [];
+  const walk = async (base: string, i: number): Promise<void> => {
+    if (first && out.length) return;
+    if (i === parts.length) { if (await exists(base)) out.push(base); return; }
     const seg = parts[i];
     if (!seg.includes('*')) return walk(i === 0 ? (seg === '' ? '/' : /^[A-Za-z]:$/.test(seg) ? seg + '/' : seg) : join(base, seg), i + 1);
     const re = new RegExp('^' + seg.split('*').map(s => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$', 'i');
     const names = (await readdir(base).catch(() => [] as string[])).filter(n => re.test(n)).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
-    for (const n of names) { const r = await walk(join(base, n), i + 1); if (r) return r; }
-    return null;
+    for (const n of names) await walk(join(base, n), i + 1);
   };
-  return walk('', 0);
+  await walk('', 0);
+  return out;
 }
+/** The first of them. */
+export const globFirst = async (pattern: string): Promise<string | null> => (await globAll(pattern, true))[0] ?? null;
 export async function whichBin(bin: string, env: NodeJS.ProcessEnv = process.env): Promise<string | null> {
   // Windows runs only files with a PATHEXT extension: npm's extensionless sh shim next to a .cmd one is never the program (live 2026-11-04)
   const exts = process.platform === 'win32' && !/\.[a-z0-9]+$/i.test(bin) ? (env.PATHEXT ?? '.EXE;.CMD;.BAT').toLowerCase().split(';').filter(Boolean) : [''];
@@ -60,6 +63,7 @@ export function localEnvironment(o: { id?: string; kind?: EnvKind; extraHosts?: 
     remove: p => rm(expandPath(p), { recursive: true, force: true }),
     which: b => whichBin(b),
     glob: p => globFirst(expandPath(p)),
+    globAll: p => globAll(expandPath(p)),
     hostCandidates: () => hostCandidates(kind, o.extraHosts ?? []),
     inventory: names => collectorFor(kind)(env, names),
   };
