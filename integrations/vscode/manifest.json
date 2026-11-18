@@ -81,7 +81,8 @@
             "chat.agentHost.byokModels.enabled": true
           }
         }
-      }
+      },
+      "cwd": "Current working directory: (.+)"
     }
   }
 }

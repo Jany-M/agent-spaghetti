@@ -75,6 +75,7 @@
           "headers": { "type": "object", "additionalProperties": { "type": "string" }, "description": "sent with every request (probe and run); {env:NAME} is read from the environment at request time (NAME must be in detect.env)" } } },
         "openaiClient": { "type": "object", "additionalProperties": false, "required": ["setup"], "description": "the tool can use a custom OpenAI-compatible endpoint: the model gateway",
           "properties": { "setup": { "type": "string", "description": "steps for the user; {url} and {key} are filled in; the tool asks for model auto and Agent Spaghetti picks (Tools → Model)" },
+            "cwd": { "type": "string", "description": "regex with one group that finds the tool's working folder in its system message (the first message of a chat request): where a task handed on from its chat runs" },
             "auto": { "type": "object", "additionalProperties": false, "required": ["config", "entry"], "description": "connect sets the gateway up by itself (gateway on): our entry in the tool's JSON list of model providers, settings it needs",
               "properties": { "config": { "type": "string", "description": "the JSON file holding a list of model providers" },
                 "entry": { "type": "object", "required": ["name"], "description": "our provider entry, found again by name; {url} and {key} are filled in" },

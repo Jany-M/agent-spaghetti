@@ -65,6 +65,7 @@ export interface Manifest {
     openai?: { base: string; headers?: Record<string, string> };   // headers: {env:NAME} read at request time
     openaiClient?: {                                                 // takes a custom OpenAI endpoint (the gateway): steps with {url} {key}; the tool asks for model `auto`
       setup: string;
+      cwd?: string;                                                  // regex (one group) finding the tool's working folder in its system message: where a task handed on from its chat runs
       // connect sets it up by itself: our entry (by `name`; {url} {key} filled in) in the tool's JSON list of model providers,
       // and settings it needs switched on in a JSON settings file (added only where the user has not set them)
       auto?: { config: string; entry: Record<string, unknown> & { name: string }; settings?: { file: string; values: Record<string, unknown> } };

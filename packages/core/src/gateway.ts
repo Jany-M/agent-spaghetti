@@ -3,7 +3,7 @@
 // a loaded model's id, else its route in `gateway.routes`, else `auto`: the loaded model routing picks for what the user last said). Every request is a run: the same permission check and
 // question as a hand-off, the same server queue, the same record. Only `model` is rewritten; prompts are never stored.
 import { createHash, randomBytes } from 'node:crypto';
-import type { Target } from '@agent-spaghetti/sdk';
+import type { Integration, Target } from '@agent-spaghetti/sdk';
 import { AUTO, classify, parseDirective, parseHop, parseJson, rankTargets, splitMessage } from '@agent-spaghetti/sdk';
 import { http } from './http.ts';
 import { openaiForward } from './engine/openai.ts';
@@ -37,6 +37,13 @@ export function resolveRoute(routes: string[], source: string, requested: string
   return { target: t.id, model: u.model ?? t.models[0] };
 }
 
+/** The text of a message's content (a string, or parts with text). */
+const textOf = (content: unknown): string => (typeof content === 'string' ? content : Array.isArray(content) ? content.map(p => (typeof p === 'string' ? p : (p as { text?: string })?.text ?? '')).join('\n') : '');
+/** A tool's failure in a line: the `message` of each JSON error line it printed (its CLIs do), else the text itself. */
+export function errorText(error: string): string {
+  const msgs = [...error.matchAll(/"message"\s*:\s*"((?:[^"\\]|\\.)*)"/g)].map(m => { try { return JSON.parse(`"${m[1]}"`) as string; } catch { return m[1]; } });
+  return (msgs.length ? [...new Set(msgs)].join('; ') : error).slice(0, 600);
+}
 /** What the user last said in a request (chat messages, else the prompt): what routing classifies. */
 export function lastUserText(body: Record<string, unknown>): string {
   const last = Array.isArray(body.messages) ? (body.messages as Array<{ role?: string; content?: unknown }>).findLast(m => m.role === 'user')?.content : body.prompt ?? body.input;
@@ -51,7 +58,7 @@ export function cwdOf(files: string[]): string | undefined {
 }
 
 export class Gateway {
-  private d: { settings: Settings; store: Store; bus: Bus; runner: Runner; best?(source: string, text: string): Target | undefined };   // best: routing's model for a request (core/dispatcher.ts)
+  private d: { settings: Settings; store: Store; bus: Bus; runner: Runner; integrations?(): Integration[]; best?(source: string, text: string): Target | undefined };   // best: routing's model for a request (core/dispatcher.ts)
   private server: Server | null = null;
   private port = 0;
   private readonly session = `gateway-${Date.now()}`;      // "Allow for this job" = until the daemon restarts
@@ -103,13 +110,14 @@ export class Gateway {
   }
   /** A message that names tools (`cline <task>`, `a <task> then b`) is handed to them, and their answer comes back as the model's reply: no local model decides. */
   private async handOff(body: Record<string, unknown>, c: CallCtx, d: NonNullable<ReturnType<typeof parseDirective>>, context: string, files: string[], asked: string): Promise<unknown> {
-    const what = classify(d.task);
-    const { id, done } = await this.d.runner.begin(c.who, { target: d.target, model: d.model, task: d.task, context: context || undefined, files: files.length ? files : undefined, then: d.then, thenTasks: d.thenTasks, cwd: cwdOf(files), kind: what.kind, difficulty: what.difficulty, classification: what,
+    const what = classify(d.task), pattern = this.d.integrations?.().find(i => i.manifest.id === c.who)?.manifest.speaks?.openaiClient?.cwd;
+    const cwd = (pattern && new RegExp(pattern, 'm').exec(textOf(Array.isArray(body.messages) ? (body.messages as Array<{ role?: string; content?: unknown }>).find(m => m.role === 'system')?.content : ''))?.[1]?.trim()) || cwdOf(files);
+    const { id, done } = await this.d.runner.begin(c.who, { target: d.target, model: d.model, task: d.task, context: context || undefined, files: files.length ? files : undefined, then: d.then, thenTasks: d.thenTasks, cwd, kind: what.kind, difficulty: what.difficulty, classification: what,
       reason: 'named in a chat message through the model gateway', returnTo: 'none' }, { asked }).catch(e => { throw fail(400, `Agent Spaghetti: ${(e as Error).message}`); });
     c.signal.addEventListener('abort', () => this.d.runner.cancel(id), { once: true });
     const row = await done, text = this.d.runner.result(row);
-    if (row.outcome !== 'done') throw fail(row.outcome === 'denied' || row.outcome === 'expired' ? 403 : 502, `Agent Spaghetti: ${row.error ?? row.outcome}`);
-    const out = { id: `chatcmpl-as-${row.id}`, created: Math.floor(Date.now() / 1000), model: `agent-spaghetti:${row.target}` }, content = text ?? '';
+    const failed = row.outcome !== 'done';   // a failure comes back as the reply: an HTTP error would make the tool send the same request again, over and over
+    const out = { id: `chatcmpl-as-${row.id}`, created: Math.floor(Date.now() / 1000), model: `agent-spaghetti:${row.target}` }, content = failed ? `${row.target} did not answer: ${errorText(row.error ?? row.outcome)}` : text ?? '';
     if (!body.stream) return { ...out, object: 'chat.completion', choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
       usage: { prompt_tokens: row.inputTokens ?? 0, completion_tokens: row.outputTokens ?? 0, total_tokens: (row.inputTokens ?? 0) + (row.outputTokens ?? 0) } };
     c.res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
@@ -120,7 +128,7 @@ export class Gateway {
   private async forward(path: string, body: Record<string, unknown>, c: CallCtx): Promise<unknown> {
     const bus = this.d.bus, messages = Array.isArray(body.messages) ? (body.messages as Array<{ role?: string; content?: unknown }>) : [];
     const raw = lastUserText(body), { text: said, context, files } = splitMessage(raw);
-    bus.capture('gateway', 'request', { from: c.who, path, model: body.model, stream: body.stream, tools: Array.isArray(body.tools) ? body.tools.length : 0, roles: messages.map(m => m.role).join(','), lastUser: raw, system: messages.find(m => m.role === 'system') && JSON.stringify(messages.find(m => m.role === 'system')?.content).slice(0, 6000) });
+    bus.capture('gateway', 'request', { from: c.who, path, model: body.model, stream: body.stream, tools: Array.isArray(body.tools) ? body.tools.length : 0, roles: messages.map(m => m.role).join(','), lastUser: raw });
     const directive = path === PATHS[0] ? parseDirective(said, this.d.runner.targets().filter(t => t.id !== c.who)) : null;
     bus.capture('gateway', 'read', { text: said, context: context.length, files, directive });
     if (directive) return this.handOff(body, c, directive, context, files, said);
