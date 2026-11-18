@@ -226,6 +226,7 @@ test('cline: JSON mode, plan mode unless edits with a folder, the task as the pr
   const { clineArgs, clineEvents } = await import('../../../integrations/cline/index.ts');
   assert.deepEqual(clineArgs({ target: 'cline', task: '-x task' }), ['--json', '--plan', '--', '-x task']);
   assert.deepEqual(clineArgs({ target: 'cline', task: 't', cwd: '/p', kind: 'code-edit', model: 'm' }), ['--json', '--cwd', '/p', '--model', 'm', '--', 't']);
+  assert.deepEqual(clineArgs({ target: 'cline', task: 't', model: 'openrouter/free' }), ['--json', '--plan', '-P', 'openrouter', '--model', 'openrouter/free', '--', 't'], 'the router id names its provider');
   const ag = (event: object) => JSON.stringify({ type: 'agent_event', event });
   assert.deepEqual(['noise', ag({ type: 'content_start', contentType: 'reasoning', text: 'hmm' }), ag({ type: 'content_start', contentType: 'text', text: 'Hi' }),
     JSON.stringify({ type: 'run_result', finishReason: 'completed', text: 'Hi', usage: { inputTokens: 5, outputTokens: 1, totalCost: 0 } })].flatMap(clineEvents),

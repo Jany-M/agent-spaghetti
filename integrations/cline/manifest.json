@@ -14,7 +14,12 @@
   "uses": {
     "config": "~/.cline/data/settings/providers.json",
     "model": "providers.{lastUsedProvider}.settings.model",
-    "provider": "providers.{lastUsedProvider}.settings.provider"
+    "provider": "providers.{lastUsedProvider}.settings.provider",
+    "keyed": {
+      "file": "~/.cline/data/settings/providers.json",
+      "key": "providers.openrouter.settings.apiKey",
+      "free": "openrouter/free"
+    }
   },
   "detect": {
     "installed": [

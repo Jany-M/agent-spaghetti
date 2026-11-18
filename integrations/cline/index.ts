@@ -8,7 +8,8 @@ import type { IntegrationModule, RunEvent, RunRequest } from '@agent-spaghetti/s
 import { mayEdit, parseJson, programOf } from '@agent-spaghetti/sdk';
 
 export function clineArgs(req: RunRequest): string[] {
-  return ['--json', ...(mayEdit(req) ? [] : ['--plan']), ...(req.cwd ? ['--cwd', req.cwd] : []), ...(req.model ? ['--model', req.model] : []), '--', req.task];
+  // OpenRouter's own router ids (`openrouter/free`, the free default when only a key is stored) need that provider named (`-P`, cline --help 2026-11-18)
+  return ['--json', ...(mayEdit(req) ? [] : ['--plan']), ...(req.cwd ? ['--cwd', req.cwd] : []), ...(req.model?.startsWith('openrouter/') ? ['-P', 'openrouter'] : []), ...(req.model ? ['--model', req.model] : []), '--', req.task];
 }
 /** One JSON line → run events. */
 export function clineEvents(line: string): RunEvent[] {

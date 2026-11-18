@@ -83,10 +83,10 @@ Status keeps itself current: running tools and model servers are re-checked ever
 
    | Tool | Free option |
    |---|---|
-   | Kilo, OpenCode | `openrouter/free` (OpenRouter's router; picks a free model that is up) if you have an OpenRouter key stored in the tool |
+   | Kilo, OpenCode, Cline | `openrouter/free` (OpenRouter's router; picks a free model that is up) if you have an OpenRouter key stored in the tool |
    | Kilo | otherwise `kilo/kilo-auto/free` |
    | OpenCode | otherwise `opencode/big-pickle` |
-   | Cline | none documented (its free models rotate): stays as found |
+   | Cline | otherwise none documented (its free models rotate): stays as found |
 
 5. The tool's own default.
 

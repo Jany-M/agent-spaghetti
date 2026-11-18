@@ -68,7 +68,7 @@
     }
   },
   {
-    "name": "nothing set: no free option documented, cost as the manifest says",
+    "name": "nothing set, no key: no free option documented, cost as the manifest says",
     "env": {
       "files": {
         "~/.vscode/extensions/saoudrizwan.claude-dev-*": ""
@@ -76,6 +76,22 @@
     },
     "expect": {
       "cost": "unknown"
+    }
+  },
+  {
+    "name": "no model set but an OpenRouter key stored: the free router on that key",
+    "env": {
+      "files": {
+        "~/.vscode/extensions/saoudrizwan.claude-dev-*": "",
+        "~/.cline/data/settings/providers.json": "{\"providers\":{\"openrouter\":{\"settings\":{\"provider\":\"openrouter\",\"apiKey\":\"k\"}}}}"
+      }
+    },
+    "expect": {
+      "cost": "free",
+      "fallback": "openrouter/free",
+      "absent": [
+        "\"k\""
+      ]
     }
   },
   {
