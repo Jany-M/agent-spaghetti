@@ -13,7 +13,7 @@ import { Consent } from '../../packages/core/src/consent.ts';
 import { Settings } from '../../packages/core/src/settings.ts';
 import { Ledger } from '../../packages/core/src/ledger.ts';
 import { Runner } from '../../packages/core/src/runner.ts';
-import { Gateway, KEY_PREFIX, lastUserText, resolveRoute } from '../../packages/core/src/gateway.ts';
+import { Gateway, KEY_PREFIX, cwdOf, lastUserText, resolveRoute } from '../../packages/core/src/gateway.ts';
 
 const T = (id: string, cost: Target['cost'], models: string[]): Target => ({ id, name: id, kind: 'model', cost, envId: 'w', models, engine: 'openai', resumable: false });
 test('resolveRoute: target:model, a loaded model id, the tool\'s route, auto = best-ranked; clear errors', () => {
@@ -184,7 +184,7 @@ test('a chat message that names a tool goes to that tool (and `then` hops), and 
   try {
     const r = await (await call({ model: 'auto', messages: msg('<notes>keep it short</notes>\n<tagged_files>\n* /home/u/README.md (3 lines)\n</tagged_files>\n<userRequest>alpha What does this file say? then alpha:other check</userRequest>') })).json();
     assert.deepEqual([r.choices[0].message.content, r.choices[0].finish_reason, r.model, r.usage.total_tokens], ['It says hello.', 'stop', 'agent-spaghetti:alpha', 7]);
-    assert.deepEqual([started[0].who, started[0].target, started[0].task, started[0].context, started[0].files, started[0].then, started[0].returnTo], ['vscode', 'alpha', 'What does this file say?', '<notes>keep it short</notes>', ['/home/u/README.md'], ['alpha:other'], 'none']);
+    assert.deepEqual([started[0].who, started[0].target, started[0].task, started[0].context, started[0].files, started[0].then, started[0].thenTasks, started[0].cwd, started[0].returnTo], ['vscode', 'alpha', 'What does this file say?', '<notes>keep it short</notes>', ['/home/u/README.md'], ['alpha:other'], ['check'], '/home/u', 'none']);
     const s = await (await call({ model: 'auto', stream: true, messages: msg('alpha hi') })).text();
     assert.ok(s.includes('"content":"It says hello."') && s.includes('"finish_reason":"stop"') && s.trim().endsWith('[DONE]'));
     assert.equal(store.eventsSince(0).filter(e => e.type === 'debug.capture').length, 0, 'off: nothing is recorded');
@@ -194,4 +194,8 @@ test('a chat message that names a tool goes to that tool (and `then` hops), and 
     assert.deepEqual(cap.map(e => e.data.what), ['request', 'read']);
     assert.deepEqual([cap[0].data.lastUser, (cap[1].data.directive as { target: string }).target], ['alpha again', 'alpha']);
   } finally { await gateway.close(); }
+});
+
+test('cwdOf: the folder attached files share', () => {
+  assert.deepEqual([cwdOf([]), cwdOf(['e:\\p\\a\\x.md']), cwdOf(['e:\\p\\a\\x.md', 'E:\\p\\b\\y.md']), cwdOf(['/home/u/a/x', '/home/u/a/b/y']), cwdOf(['/x.md'])], [undefined, 'e:\\p\\a', 'e:\\p', '/home/u/a', '/']);
 });

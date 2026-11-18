@@ -142,7 +142,8 @@ export const AUTO = 'auto';
 export interface RunRequest {
   target: string; task: string; kind?: TaskKind; difficulty?: Difficulty; reason?: string; model?: string;
   cwd?: string; resultDir?: string; jobId?: string; parentRunId?: number; deadlineMs?: number;
-  context?: string; then?: string[]; returnTo?: 'caller' | 'none'; returnSession?: string;
+  context?: string; then?: string[]; thenTasks?: string[];   // thenTasks: each next hop's own instruction (else the first task again)
+  returnTo?: 'caller' | 'none'; returnSession?: string;
   files?: string[];                                         // what the user meant (attached, referenced, named): listed for agents, inlined for models
   session?: string;                                         // a session of the target to continue (engines that can resume)
   chainId?: number;                                         // set by the runner for hops after the first

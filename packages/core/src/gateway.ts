@@ -43,6 +43,13 @@ export function lastUserText(body: Record<string, unknown>): string {
   return typeof last === 'string' ? last : Array.isArray(last) ? last.map(p => (typeof p === 'string' ? p : (p as { text?: string })?.text ?? '')).join('\n') : '';
 }
 
+/** Where an agent should work for a message with attached files: the folder they share (the deepest folder that holds all of them). */
+export function cwdOf(files: string[]): string | undefined {
+  const dirs = files.map(f => f.split(/[\\/]/).slice(0, -1));
+  const common = dirs[0]?.filter((seg, i) => dirs.every(d => d[i]?.toLowerCase() === seg.toLowerCase()));
+  return common?.length ? `${common.join(files[0].includes('\\') ? '\\' : '/')}` || '/' : undefined;
+}
+
 export class Gateway {
   private d: { settings: Settings; store: Store; bus: Bus; runner: Runner; best?(source: string, text: string): Target | undefined };   // best: routing's model for a request (core/dispatcher.ts)
   private server: Server | null = null;
@@ -97,7 +104,7 @@ export class Gateway {
   /** A message that names tools (`cline <task>`, `a <task> then b`) is handed to them, and their answer comes back as the model's reply: no local model decides. */
   private async handOff(body: Record<string, unknown>, c: CallCtx, d: NonNullable<ReturnType<typeof parseDirective>>, context: string, files: string[], asked: string): Promise<unknown> {
     const what = classify(d.task);
-    const { id, done } = await this.d.runner.begin(c.who, { target: d.target, model: d.model, task: d.task, context: context || undefined, files: files.length ? files : undefined, then: d.then, kind: what.kind, difficulty: what.difficulty, classification: what,
+    const { id, done } = await this.d.runner.begin(c.who, { target: d.target, model: d.model, task: d.task, context: context || undefined, files: files.length ? files : undefined, then: d.then, thenTasks: d.thenTasks, cwd: cwdOf(files), kind: what.kind, difficulty: what.difficulty, classification: what,
       reason: 'named in a chat message through the model gateway', returnTo: 'none' }, { asked }).catch(e => { throw fail(400, `Agent Spaghetti: ${(e as Error).message}`); });
     c.signal.addEventListener('abort', () => this.d.runner.cancel(id), { once: true });
     const row = await done, text = this.d.runner.result(row);
@@ -113,7 +120,7 @@ export class Gateway {
   private async forward(path: string, body: Record<string, unknown>, c: CallCtx): Promise<unknown> {
     const bus = this.d.bus, messages = Array.isArray(body.messages) ? (body.messages as Array<{ role?: string; content?: unknown }>) : [];
     const raw = lastUserText(body), { text: said, context, files } = splitMessage(raw);
-    bus.capture('gateway', 'request', { from: c.who, path, model: body.model, stream: body.stream, tools: Array.isArray(body.tools) ? body.tools.length : 0, roles: messages.map(m => m.role).join(','), lastUser: raw });
+    bus.capture('gateway', 'request', { from: c.who, path, model: body.model, stream: body.stream, tools: Array.isArray(body.tools) ? body.tools.length : 0, roles: messages.map(m => m.role).join(','), lastUser: raw, system: messages.find(m => m.role === 'system') && JSON.stringify(messages.find(m => m.role === 'system')?.content).slice(0, 6000) });
     const directive = path === PATHS[0] ? parseDirective(said, this.d.runner.targets().filter(t => t.id !== c.who)) : null;
     bus.capture('gateway', 'read', { text: said, context: context.length, files, directive });
     if (directive) return this.handOff(body, c, directive, context, files, said);

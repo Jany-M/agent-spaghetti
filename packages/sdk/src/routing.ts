@@ -23,18 +23,16 @@ export function splitMessage(raw: string): { text: string; context: string; file
   }
   return { text: (named ? named[2] : outside).trim(), context: rest.join('\n').trim(), files };
 }
-/** A message that names tools: `<tool>[:agent] <task>`, then `then <tool>[:agent]` for each next hop (each gets the previous result). A tool is named by its id
- *  or the first word of its name. Null when the message does not start with one. Words after a later hop's tool are not passed on: every hop gets the first task. */
-export function parseDirective(text: string, tools: Array<{ id: string; name: string }>): { target: string; model?: string; task: string; then: string[] } | null {
+/** A message that names tools: `<tool>[:agent] <task>`, then `then <tool>[:agent] <its task>` for each next hop (each gets the previous result, and its own
+ *  instruction when it has one, else the first task again). A tool is named by its id or the first word of its name. Null when the message does not start with one. */
+export function parseDirective(text: string, tools: Array<{ id: string; name: string }>): { target: string; model?: string; task: string; then: string[]; thenTasks: string[] } | null {
   const find = (word: string) => { const w = parseHop(word.toLowerCase().replace(/[,;.]+$/, '')); const t = tools.find(x => x.id === w.target || x.name.toLowerCase().split(/\s+/)[0] === w.target);
     return t ? { target: t.id, ...(w.model ? { model: parseHop(word.replace(/[,;.]+$/, '')).model } : {}) } : null; };
   const head = /^\s*([^\s,:;]+(?::[^\s,;]+)?)[,:;]?\s+([\s\S]+)$/.exec(text), first = head && find(head[1]);
   if (!head || !first) return null;
-  const hops: string[] = [], hop = /\s+then\s+([^\s,;]+)/gi;
-  let cut = head[2].length, m: RegExpExecArray | null;
-  while ((m = hop.exec(head[2]))) { const t = find(m[1]); if (!t) continue; cut = Math.min(cut, m.index); hops.push(t.model ? `${t.target}:${t.model}` : t.target); }
-  const task = head[2].slice(0, cut).trim();
-  return task ? { ...first, task, then: hops } : null;
+  const rest = head[2], hops = [...rest.matchAll(/\s+then\s+([^\s,;]+)/gi)].flatMap(m => { const t = find(m[1]); return t ? [{ at: m.index!, end: m.index! + m[0].length, hop: t.model ? `${t.target}:${t.model}` : t.target }] : []; });
+  const task = rest.slice(0, hops[0]?.at ?? rest.length).trim();
+  return task ? { ...first, task, then: hops.map(h => h.hop), thenTasks: hops.map((h, i) => rest.slice(h.end, hops[i + 1]?.at ?? rest.length).replace(/^[\s,;:]+|[\s,;:]+$/g, '')) } : null;
 }
 const COST_RANK: Record<Cost, number> = { free: 0, unknown: 1, metered: 2 };
 export interface RankInfo { queued?(id: string): number }   // requests waiting at the target (its model server's queue)

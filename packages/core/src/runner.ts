@@ -186,7 +186,7 @@ export class Runner {
     const [hop, ...rest] = req.then ?? [];
     if (row.outcome === 'done' && hop) {
       try {
-        await this.begin(row.target, { ...req, ...parseHop(hop), session: undefined, chosen: undefined, context: this.d.ledger.result(row), then: rest, parentRunId: row.id }); return;
+        await this.begin(row.target, { ...req, ...parseHop(hop), session: undefined, chosen: undefined, context: this.d.ledger.result(row), then: rest, task: req.thenTasks?.[0] || req.task, thenTasks: req.thenTasks?.slice(1), parentRunId: row.id }); return;
       } catch (e) { this.d.ledger.update(row.id, { error: `next hop not started: ${(e as Error).message}` }); }
     }
     const c = this.chains.get(req.chainId!);
