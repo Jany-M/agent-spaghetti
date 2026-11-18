@@ -37,6 +37,7 @@ async function upstream() {
     let raw = ''; for await (const c of req) raw += c;
     const body = JSON.parse(raw); seen.push({ url: req.url!, body, auth: req.headers.authorization });
     if (body.fail) { res.writeHead(400, { 'content-type': 'application/json' }); res.end('{"error":{"message":"bad model"}}'); return; }
+    if (body.streamFail) { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.end(`data: ${JSON.stringify({ error: { message: 'exceeds the available context size' } })}\n\n`); return; }
     if (!body.stream) { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ choices: [{ message: { content: 'ok' } }], usage: { prompt_tokens: 2, completion_tokens: 1 } })); return; }
     res.writeHead(200, { 'content-type': 'text/event-stream' });
     for (const w of ['He', 'llo']) res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: w } }] })}\n\n`);
@@ -71,6 +72,10 @@ test('gateway: keys name the tool; models listed; streams pass through with only
   assert.ok(key.startsWith(KEY_PREFIX)); assert.ok(!JSON.stringify(store.getKv('gateway.keys')).includes(key), 'only the hash is kept');
   const call = (path: string, body?: object, k = key) => fetch(`http://127.0.0.1:${port}${path}`, { method: body ? 'POST' : 'GET', headers: { authorization: `Bearer ${k}`, 'content-type': 'application/json' }, body: body && JSON.stringify(body) });
   try {
+    snap.backends[0].contextLength = 64;                       // a model loaded with a tiny context: a clear 400 before the server's own
+    const big = await call('/v1/chat/completions', { model: 'auto', messages: [{ role: 'user', content: 'x'.repeat(400) }] });
+    assert.equal(big.status, 400); assert.match((await big.json()).error.message, /m1 is loaded with room for 64 tokens; this request needs about \d+\. Load it with a larger context/);
+    delete snap.backends[0].contextLength;
     const viaHeader = await fetch(`http://127.0.0.1:${port}/v1/models`, { headers: { authorization: 'Bearer stale-key-from-a-secret-store', 'x-agent-spaghetti-key': key } });
     assert.equal(viaHeader.status, 200, 'X-Agent-Spaghetti-Key wins over a bearer token');
     const bad = await call('/v1/models', undefined, 'nope');
@@ -93,6 +98,8 @@ test('gateway: keys name the tool; models listed; streams pass through with only
     const upErr = await call('/v1/chat/completions', { model: 'lms:m1', messages: [], fail: true });
     assert.deepEqual([upErr.status, await upErr.text()], [400, '{"error":{"message":"bad model"}}'], 'the server\'s own error passes through');
     assert.match(ledger.list({})[0].error!, /HTTP 400/);
+    await (await call('/v1/chat/completions', { model: 'lms:m1', stream: true, messages: [], streamFail: true })).text();
+    assert.deepEqual([ledger.list({})[0].outcome, ledger.list({})[0].error], ['error', 'exceeds the available context size'], 'an error inside a 200 stream fails the run');
 
     const paid = call('/v1/chat/completions', { model: 'paid:big', messages: [] });
     for (let i = 0; i < 100 && !consent.pending().length; i++) await new Promise(r => setTimeout(r, 5));

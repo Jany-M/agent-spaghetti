@@ -64,10 +64,11 @@ export async function* openaiForward(t: OpenAiTarget, path: string, body: Record
       return;
     }
     o.write(r.status, type);
-    const dec = new TextDecoder(); let buf = '', answer = '';
+    const dec = new TextDecoder(); let buf = '', answer = '', failed = '';
     const line = function* (l: string): Generator<RunEvent> {
-      const j = l.startsWith('data:') ? parseJsonLoose(l.slice(5).trim()) as { choices?: Array<{ delta?: { content?: string } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } } | undefined : undefined;
+      const j = l.startsWith('data:') ? parseJsonLoose(l.slice(5).trim()) as { choices?: Array<{ delta?: { content?: string } }>; usage?: { prompt_tokens?: number; completion_tokens?: number }; error?: { message?: string } | string } | undefined : undefined;
       answer += j?.choices?.[0]?.delta?.content ?? '';
+      if (j?.error) failed = typeof j.error === 'string' ? j.error : j.error.message ?? 'the server sent an error';   // an error inside a 200 stream
       if (j?.usage) yield { type: 'usage', inputTokens: j.usage.prompt_tokens, outputTokens: j.usage.completion_tokens, costUsd: 0 };
       if (ownUsage && j?.usage && !j.choices?.length) return;      // the usage chunk we asked for: not the client's
       o.write(r.status, type, l + '\n');
@@ -77,6 +78,6 @@ export async function* openaiForward(t: OpenAiTarget, path: string, body: Record
       let i; while ((i = buf.indexOf('\n')) >= 0) { yield* line(buf.slice(0, i)); buf = buf.slice(i + 1); }
     }
     if (buf) yield* line(buf);
-    yield { type: 'done', result: answer };
+    yield failed ? { type: 'error', message: failed } : { type: 'done', result: answer };
   } finally { release(); report(); }
 }

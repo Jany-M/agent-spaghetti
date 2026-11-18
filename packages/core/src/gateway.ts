@@ -98,6 +98,9 @@ export class Gateway {
     const r = resolveRoute(this.d.settings.get('gateway.routes'), c.who, String(body.model ?? AUTO), this.d.runner.targets(), this.d.best?.(c.who, said));
     if ('error' in r) throw fail(404, r.error);
     const t = this.d.runner.targets().find(x => x.id === r.target)!;
+    // a request bigger than the model's loaded context fails at the server with a message about tokens; say what to do instead
+    const room = this.d.runner.contextOf(r.target, r.model), need = Math.round(JSON.stringify(body).length / 4);
+    if (room && need > room) throw fail(400, `Agent Spaghetti: ${r.model} is loaded with room for ${room} tokens; this request needs about ${need}. Load it with a larger context (e.g. 32768 in LM Studio's load settings), then try again.`);
     let started = false;
     const write = (status: number, type: string, chunk?: string) => {
       if (!started) { c.res.writeHead(status, { 'content-type': type }); started = true; }

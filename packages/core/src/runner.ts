@@ -243,6 +243,8 @@ export class Runner {
     return { ...req, cwd, files, task: [withContext({ ...req, files: undefined }), parts.length && `## Files\n${parts.join('\n\n')}`].filter(Boolean).join('\n\n') };
   }
   /** A model target's server as the OpenAI engine needs it (the run engine and the gateway's pass-through), and its queue reports. */
+  /** How many tokens a loaded model has room for, as its server reported it (unknown: undefined). */
+  contextOf(target: string, model: string): number | undefined { return this.d.snapshot()?.backends.find(b => b.integration === target && b.model === model)?.contextLength; }
   server(t: Target, model = t.models[0]) {
     const host = this.d.host(), i = this.d.integrations().find(x => x.manifest.id === t.id);
     const b = this.d.snapshot()?.backends.find(x => x.integration === t.id && x.model === model);
