@@ -40,6 +40,45 @@
     }
   },
   {
+    "name": "set to a free OpenRouter model: free, shown",
+    "env": {
+      "files": {
+        "~/.vscode/extensions/saoudrizwan.claude-dev-*": "",
+        "~/.cline/data/settings/providers.json": "{\"lastUsedProvider\":\"or\",\"providers\":{\"or\":{\"settings\":{\"provider\":\"openrouter\",\"apiKey\":\"k\",\"model\":\"vendor/m-1:free\"}}}}"
+      }
+    },
+    "expect": {
+      "cost": "free",
+      "why": "set to openrouter · vendor/m-1:free",
+      "absent": [
+        "\"k\""
+      ]
+    }
+  },
+  {
+    "name": "set to a model that is not free: unknown (asks first)",
+    "env": {
+      "files": {
+        "~/.vscode/extensions/saoudrizwan.claude-dev-*": "",
+        "~/.cline/data/settings/providers.json": "{\"lastUsedProvider\":\"p\",\"providers\":{\"p\":{\"settings\":{\"provider\":\"paid\",\"model\":\"big\"}}}}"
+      }
+    },
+    "expect": {
+      "cost": "unknown"
+    }
+  },
+  {
+    "name": "nothing set: no free option documented, cost as the manifest says",
+    "env": {
+      "files": {
+        "~/.vscode/extensions/saoudrizwan.claude-dev-*": ""
+      }
+    },
+    "expect": {
+      "cost": "unknown"
+    }
+  },
+  {
     "name": "absent",
     "env": {},
     "expect": null

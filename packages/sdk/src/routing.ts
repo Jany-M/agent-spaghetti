@@ -69,9 +69,9 @@ export function tierOf(t: Pick<Target, 'id' | 'kind' | 'cost' | 'models'>, tiers
   const b = model ? modelSize(model) : null;
   return b === null ? 'medium' : b <= R.lightMaxB ? 'light' : b <= R.mediumMaxB ? 'medium' : 'heavy';
 }
-/** A model id that names a provider's free variant: OpenRouter's `:free` suffix (openrouter.ai/docs, model variants), a `/free` route
+/** A model id that names a provider's free variant: OpenRouter's `:free` suffix (openrouter.ai/docs, model variants), a `/free` route or `-free` name
  *  such as an agent's `<vendor>-auto/free` or OpenRouter's `openrouter/free` router (checked 2026-11-18). */
-export const freeModel = (id = '') => /(:|\/)free$/i.test(id);
+export const freeModel = (id = '') => /(:|\/|-)free$/i.test(id);
 /** One of a tool's agents is used when the owner's setting agents.use says so (`<agent id>=on|off`, e.g. `<tool>:<agent>=on`), else
  *  unless its tool marks it off. */
 export const agentOn = (a: Pick<AgentInfo, 'id' | 'off'>, use: string[] = []) => {

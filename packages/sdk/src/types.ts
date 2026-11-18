@@ -55,6 +55,8 @@ export interface Manifest {
     version?: { from: 'installed' } | { args: string[]; regex?: string } | { file: string; json: string } | { json: string };
     http?: { port?: number; path: string; url?: string };   // url: a hosted API (probed once its env vars are set; not by the live poll)
   };
+  uses?: { config: string; model: string; provider?: string; free?: string };   // the model the tool is set to use: its config file (JSON/JSONC), dotted paths
+                                                   // (`{key}` = that key's value at the file's root); free: what a task passes when none is set
   models?: { path?: string; list: string; id: string; filter?: Array<{ field: string; in: Array<string | boolean> }>; context?: string[];
     order?: number };     // which local model server is used when several have a model loaded (lowest first; one at a time)
   speaks?: {
@@ -86,6 +88,8 @@ export interface Detection {
   levels: Level[]; cost: Cost; connectable: 'yes' | 'needs-setup' | 'no'; why: string;
   connected?: boolean;   // clients only: agent-spaghetti's MCP server is in the tool (undefined = cannot connect here)
   unready?: string;      // agents: why it cannot take tasks now (e.g. the model server it uses is down); not a target until a scan finds it ready
+  uses?: string;         // agents: the model it is set to use (`<provider> · <model>`), read from its own config (manifest `uses`)
+  fallback?: string;     // agents: the free model a task passes when none is set (manifest `uses.free`)
   loads?: string;        // agents: a task would load this local model of its own, not loaded now (routing: never beside another loaded model)
 }
 export interface AgentInfo { id: string; integration: string; name: string; envId: string; provider?: string; model?: string; endpoint?: string; isDefault?: boolean;
@@ -162,6 +166,7 @@ export type Delivery = 'inline' | 'resumed' | 'injected' | 'unread' | 'read';
 export interface Target { id: string; name: string; kind: 'model' | 'agent'; cost: Cost; envId: string; models: string[]; engine: 'openai' | 'acp' | 'module' | 'chat'; resumable: boolean;
   costs?: Record<string, Cost>;   // agents (in models) whose cost is not the tool's
   web?: true;            // it can look things up online (manifest `abilities`)
+  fallback?: string;     // Detection.fallback
   loads?: string }       // Detection.loads
 export interface Ctx { signal: AbortSignal; inventory: Inventory; pollMs?: number; runId?: number }   // runId: set for run(), so nested delegations link to it
 export interface Switch { id: string; label: string; on: boolean; envId: string; integration: string }

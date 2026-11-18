@@ -5,7 +5,7 @@ import { inspect } from './inspect.ts';
 
 export interface FixtureCase {
   name: string; env: FakeSpec;
-  expect: null | { version?: string; endpoint?: string; why?: string; connectable?: string; connected?: boolean; levels?: string[]; installs?: number;
+  expect: null | { version?: string; endpoint?: string; why?: string; connectable?: string; connected?: boolean; cost?: string; fallback?: string; levels?: string[]; installs?: number;
     backends?: Array<[string, number | null]>; agents?: Array<[string, string | null, string | null]>; endpoints?: Array<string | null>; absent?: string[] };
 }
 export async function runFixture(i: Integration, c: FixtureCase): Promise<string[]> {
@@ -20,6 +20,8 @@ export async function runFixture(i: Integration, c: FixtureCase): Promise<string
   if (e.endpoint !== undefined) eq('endpoint', d.endpoint, e.endpoint);
   if (e.connectable !== undefined) eq('connectable', d.connectable, e.connectable);
   if (e.connected !== undefined) eq('connected', d.connected, e.connected);
+  if (e.cost !== undefined) eq('cost', d.cost, e.cost);
+  if (e.fallback !== undefined) eq('fallback', d.fallback ?? null, e.fallback);
   if (e.levels) eq('levels', d.levels, e.levels);
   if (e.installs !== undefined) eq('installs', d.installs.length, e.installs);
   if (e.why && !new RegExp(e.why, 'i').test(d.why)) diffs.push(`why: "${d.why}" does not match /${e.why}/`);

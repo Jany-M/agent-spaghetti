@@ -39,6 +39,16 @@
           "url": { "type": "string", "pattern": "^https://", "description": "a hosted API: probed at this address (with speaks.openai.headers) once its detect.env variables are set; never by the live poll" } } }
       }
     },
+    "uses": {
+      "type": "object", "additionalProperties": false, "required": ["config", "model"],
+      "description": "the model the tool is set to use, read from its own config file (JSON or JSONC); free: the free model a task passes when none is set",
+      "properties": {
+        "config": { "type": "string" },
+        "model": { "type": "string", "description": "dotted path; {key} is the value of that key at the file's root" },
+        "provider": { "type": "string" },
+        "free": { "type": "string" }
+      }
+    },
     "models": {
       "type": "object", "additionalProperties": false, "required": ["list", "id"],
       "properties": {

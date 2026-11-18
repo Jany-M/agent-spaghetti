@@ -2,7 +2,7 @@
 // Endpoints: env override → ports the tool's processes listen on → manifest default, on every host candidate.
 import type { BackendInfo, Ctx, Detection, Environment, Install, Inspection, Integration, Inventory, Manifest } from '@agent-spaghetti/sdk';
 import { extrasThere } from '../connect.ts';
-import { fillEnv, firstNumber, programOf, levelsOf, parseJson, parseJsonc, pick, pluginDir, samePath, wildcard, type Engines } from '@agent-spaghetti/sdk';
+import { fillEnv, firstNumber, freeModel, programOf, levelsOf, parseJson, parseJsonc, pick, pluginDir, samePath, wildcard, type Engines } from '@agent-spaghetti/sdk';
 
 type Detect = NonNullable<Manifest['detect']>;
 export const ENGINES: Engines = { openai: true, acp: false };    // openai: engine/openai.ts (Phase 3); acp arrives in Phase 5
@@ -120,6 +120,17 @@ export async function probeLive(env: Environment, m: Manifest, inv: Inventory): 
   return { running: !!hit || procs.length > 0, endpoint: hit?.endpoint, backends: m.models && hit ? await listModels(env, m, hit) : [] };
 }
 
+/** What a tool is set to use, from its own config: a free model → free; another → unknown (it may spend an account: asks first, say
+ *  `free` in Tools if it does not); nothing set → the manifest's free default, which a task then passes. */
+async function usesOf(env: Environment, u: NonNullable<Manifest['uses']>, d: Detection): Promise<Partial<Detection>> {
+  const root = parseJsonc(await env.readFile(u.config).catch(() => null)) ?? {};
+  const get = (path: string) => { const v = pick(root, path.replace(/\{([^}]+)\}/g, (_, k) => String(pick(root, k) ?? ''))); return typeof v === 'string' && v ? v : undefined; };
+  const model = get(u.model), provider = u.provider ? get(u.provider) : undefined;
+  if (model) return { uses: [provider, model].filter(Boolean).join(' · '), cost: freeModel(model) ? 'free' : 'unknown', why: `${d.why} · set to ${[provider, model].filter(Boolean).join(' · ')}` };
+  if (u.free) return { fallback: u.free, cost: 'free', why: `${d.why} · no model set: free ${u.free}` };
+  return {};
+}
+
 export async function inspect(i: Integration, env: Environment, ctx: Ctx): Promise<Inspection | null> {
   const m = i.manifest;
   if (m.platforms && !m.platforms.includes(platformOf(env.kind))) return null;
@@ -136,6 +147,7 @@ export async function inspect(i: Integration, env: Environment, ctx: Ctx): Promi
     version: await readVersion(env, d.version, installs, hit?.body), levels: levelsOf(i, ENGINES), cost: m.cost ?? 'unknown',
     ...explain(m, installs, hit, backends, ctx.inventory, connected), ...(connected === undefined ? {} : { connected }),
   };
+  if (m.uses) Object.assign(detection, await usesOf(env, m.uses, detection));
   const base: Inspection = { detection, agents: [], backends };
   return i.module?.inspect ? i.module.inspect(env, base, ctx) : base;
 }

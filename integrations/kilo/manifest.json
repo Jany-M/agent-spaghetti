@@ -3,12 +3,19 @@
   "manifest": 1,
   "id": "kilo",
   "name": "Kilo",
-  "abilities": ["web"],
+  "abilities": [
+    "web"
+  ],
   "roles": [
     "agent",
     "client"
   ],
   "cost": "unknown",
+  "uses": {
+    "config": "~/.config/kilo/kilo.jsonc",
+    "model": "model",
+    "free": "kilo/kilo-auto/free"
+  },
   "detect": {
     "installed": [
       "Kilo"

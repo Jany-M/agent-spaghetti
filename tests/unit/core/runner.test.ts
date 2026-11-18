@@ -92,6 +92,14 @@ test('runner: one agent of a free tool on a paid provider asks first, like a pai
   assert.equal((await done).outcome, 'denied');
   assert.equal((await s.runner.start('cursor', { target: 'paid-agent', task: 'y' }).done).outcome, 'done', 'the tool itself: free, no question');
 });
+test('runner: a tool with no model set in its config is given its free default; a named or owner-set model wins', async () => {
+  const s = setup({ ...snap, detections: [{ ...det('paid-agent', 'free'), fallback: 'v/free' }] });
+  const model = (req: object) => s.runner.start('cursor', { target: 'paid-agent', task: 'y', ...req }).done.then(r => r.model);
+  assert.equal(await model({}), 'v/free');
+  assert.equal(await model({ model: 'mine' }), 'mine');
+  s.settings.setText('delegate.models', 'paid-agent=owner');
+  assert.equal(await model({}), 'owner');
+});
 test('runner: a tool whose own default would load a local model of its own gives the task to its first free agent', async () => {
   const s = setup({ ...snap, detections: [{ ...det('paid-agent', 'free'), loads: 'its own local model' }],
     agents: [{ id: 'paid-agent:pro', integration: 'paid-agent', name: 'Pro', envId: 'windows', cost: 'metered' }, { id: 'paid-agent:lite', integration: 'paid-agent', name: 'Lite', envId: 'windows' }] });

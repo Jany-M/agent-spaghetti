@@ -47,6 +47,52 @@
     }
   },
   {
+    "name": "model set in its config (comments allowed): free one is free",
+    "env": {
+      "bins": {
+        "opencode": "C:/Users/u/bin/opencode.exe"
+      },
+      "files": {
+        "~/.config/opencode/opencode.json": "// c\n{\"model\":\"openrouter/vendor/m:free\"}"
+      }
+    },
+    "expect": {
+      "cost": "free",
+      "fallback": null,
+      "why": "set to openrouter/vendor/m:free"
+    }
+  },
+  {
+    "name": "model set that is not free: unknown (asks first)",
+    "env": {
+      "bins": {
+        "opencode": "C:/Users/u/bin/opencode.exe"
+      },
+      "files": {
+        "~/.config/opencode/opencode.json": "{\"model\":\"openrouter/vendor/paid\"}"
+      }
+    },
+    "expect": {
+      "cost": "unknown",
+      "fallback": null
+    }
+  },
+  {
+    "name": "no model set: its free default is passed to tasks",
+    "env": {
+      "bins": {
+        "opencode": "C:/Users/u/bin/opencode.exe"
+      },
+      "files": {
+        "~/.config/opencode/opencode.json": "{}"
+      }
+    },
+    "expect": {
+      "cost": "free",
+      "fallback": "opencode/big-pickle"
+    }
+  },
+  {
     "name": "absent",
     "env": {},
     "expect": null

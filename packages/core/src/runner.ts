@@ -37,7 +37,7 @@ export function targets(d: Pick<RunnerDeps, 'host' | 'snapshot' | 'integrations'
     const i = byId.get(det.integration);
     if (!i || det.unready || out.some(t => t.id === det.integration)) continue;
     const models = snap.backends.filter(b => b.integration === det.integration && b.reachableFrom.includes(hostId)).map(b => b.model);
-    const extra = { ...(i.manifest.abilities?.includes('web') ? { web: true as const } : {}), ...(det.loads ? { loads: det.loads } : {}) };
+    const extra = { ...(i.manifest.abilities?.includes('web') ? { web: true as const } : {}), ...(det.loads ? { loads: det.loads } : {}), ...(det.fallback ? { fallback: det.fallback } : {}) };
     const sp = i.manifest.speaks, engine = sp?.acp ? 'acp' : i.module?.run ? 'module' : sp?.chat ? 'chat' : null;   // a tool's best engine (ADR 0010 §2)
     if (sp?.openai && models.length) out.push({ id: det.integration, name: det.name, kind: 'model', cost: det.cost, envId: hostId, models, engine: 'openai', resumable: false });
     else if (engine && running.has(det.envId) && programOf(det, (sp?.acp ?? (engine === 'chat' ? sp?.chat : undefined))?.command[0] ?? i.manifest.detect?.bin?.[0]))
@@ -87,6 +87,7 @@ export class Runner {
     const own = t.kind === 'agent' && !req.model ? ownModel(this.d.settings.get('delegate.models'), t.id, kind, c.difficulty) : undefined;
     if (own && (!t.models.length || t.models.includes(own))) req = { ...req, model: own };   // one of its agents that is off: its own default
     else if (!req.model && t.loads) { const free = fallbackAgent(t); if (free) req = { ...req, model: free }; }   // its default would load a local model: one of its free agents
+    else if (!req.model && t.fallback) req = { ...req, model: t.fallback };                                       // no model set in the tool: its free default
     if (req.model && t.models.length && !t.models.includes(req.model))
       throw new Error(`${t.name} has no ${t.kind === 'model' ? 'loaded model' : 'agent'} ${req.model} (${t.kind === 'model' ? 'loaded' : 'agents'}: ${t.models.join(', ')})`);
     // An agent that delegates while it runs a delegated task works on that task (one such run: it is the parent).

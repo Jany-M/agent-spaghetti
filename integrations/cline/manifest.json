@@ -3,12 +3,19 @@
   "manifest": 1,
   "id": "cline",
   "name": "Cline",
-  "abilities": ["web"],
+  "abilities": [
+    "web"
+  ],
   "roles": [
     "agent",
     "client"
   ],
   "cost": "unknown",
+  "uses": {
+    "config": "~/.cline/data/settings/providers.json",
+    "model": "providers.{lastUsedProvider}.settings.model",
+    "provider": "providers.{lastUsedProvider}.settings.provider"
+  },
   "detect": {
     "installed": [
       "Cline"
