@@ -50,7 +50,8 @@ export const OPS = {
     mcp: { name: 'targets', description: 'List the local models and agents `delegate` can use now, with their cost class (free / metered).', input: { type: 'object', additionalProperties: false, properties: {} } } },
   runs:         { method: 'GET',  path: '/v1/runs', gui: 'runs',         usage: 'runs [<id> | --unread [<caller>]]', summary: 'The run record; with an id: its hand-off chain and result',
     mcp: { name: 'run_status', description: 'The result of a run you handed off: with its id it waits until the run ends (call it again if it says still running); without an id: results of your hand-offs that finished after you stopped waiting (each given once).',
-      input: { type: 'object', additionalProperties: false, properties: { id: { type: 'integer' } } } } },
+      input: { type: 'object', additionalProperties: false, properties: { id: { type: 'integer' },
+        grade: { type: 'string', enum: ['good', 'poor'], description: 'With an id, after you read its result: poor if it was wrong or useless, good if it helped (Agent Spaghetti learns which tools do a kind of task well)' } } } } },
   routing:      { method: 'GET',  path: '/v1/routing', gui: 'routing',   usage: 'routing [--difficulty light|medium|heavy]', summary: 'The targets each kind of task would go to, best first, and why' },
   cancel:       { method: 'POST', path: '/v1/cancel', gui: 'runs',       usage: 'cancel <id>',              summary: 'Stop a running delegation' },
   label:        { method: 'POST', path: '/v1/label',   gui: 'runs',      usage: 'label <id> [<kind>] [light|medium|heavy]', summary: 'Correct what kind of task a run was, or how hard (the ranking counts it under the corrected kind)' },
@@ -94,7 +95,7 @@ export interface OpIO {
   gateway: { in: {}; out: GatewayStatus };
   gatewayClient: { in: { integration: string; model?: string; key?: 'create' | 'revoke'; test?: boolean }; out: { model: string; key?: string; setup?: string; test?: { ok: boolean; lines: string[] } } };
   handback: { in: { run_id: number; result: string; status?: 'done' | 'failed'; source?: string }; out: { ok: true } };
-  runs: { in: { id?: number; since?: number; limit?: number; watch?: boolean; unread?: boolean; source?: string };   // watch + source: the chain's caller polling
+  runs: { in: { id?: number; since?: number; limit?: number; watch?: boolean; unread?: boolean; source?: string; grade?: 'good' | 'poor' };   // watch + source: the chain's caller polling
     out: { runs: RunRow[]; result?: string; final?: RunView; unread?: RunView[] } };   // final: the chain's view (id = chain); unread: given once
   routing: { in: { difficulty?: Difficulty }; out: { difficulty: Difficulty; kinds: Array<{ kind: TaskKind; ranked: Ranked[] }> } };
   cancel: { in: { id: number }; out: { cancelled: boolean } };

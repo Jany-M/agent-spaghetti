@@ -24,7 +24,8 @@
   },
   "models": {
     "list": "data",
-    "id": "id"
+    "id": "id",
+    "order": 2
   },
   "speaks": {
     "openai": {

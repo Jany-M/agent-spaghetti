@@ -47,7 +47,8 @@
         "id": { "type": "string" },
         "filter": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["field", "in"],
           "properties": { "field": { "type": "string" }, "in": { "type": "array" } } } },
-        "context": { "type": "array", "items": { "type": "string" } }
+        "context": { "type": "array", "items": { "type": "string" } },
+        "order": { "type": "integer", "minimum": 1, "description": "which local model server is used when several have a model loaded: lowest first, one at a time" }
       }
     },
     "speaks": {

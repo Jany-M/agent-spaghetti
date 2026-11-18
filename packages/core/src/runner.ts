@@ -44,7 +44,10 @@ export function targets(d: Pick<RunnerDeps, 'host' | 'snapshot' | 'integrations'
       out.push({ id: det.integration, name: det.name, kind: 'agent', cost: det.cost, envId: det.envId, engine, resumable: engine === 'acp' || (engine === 'module' && !!i.module?.resumes), ...extra,
         models: snap.agents.filter(a => a.integration === det.integration && a.envId === det.envId).map(a => a.id.slice(det.integration.length + 1)) });
   }
-  return out;
+  // one local model server at a time (two loaded models ran the owner's machine out of memory): the first by its manifest's
+  // `models.order` among the free ones with a model loaded; a paid (remote) model server is not held back
+  const order = (t: Target) => byId.get(t.id)?.manifest.models?.order ?? 99, local = out.filter(t => t.kind === 'model' && t.cost === 'free').sort((a, b) => order(a) - order(b));
+  return out.filter(t => t.kind !== 'model' || t.cost !== 'free' || t === local[0]);
 }
 
 const SCOPES = (jobId?: string): ConsentScope[] => (jobId ? ['once', 'job', 'always'] : ['once', 'always']);
@@ -111,8 +114,11 @@ export class Runner {
   targets(): Target[] { return targets(this.d); }
   /** start(), after the dispatcher picked a target when the request names `auto` or one that is not available. */
   async begin(source: string, req: RunRequest, o: StartOpts = {}) {
-    const known = this.targets().some(t => t.id === req.target);
-    return this.start(source, known || !this.d.route ? req : await this.d.route(source, req), o);
+    const named = this.targets().find(t => t.id === req.target);
+    // a free agent busy with another task does one at a time: the next one in line takes this one, even when it was named
+    const busy = named?.kind === 'agent' && named.cost !== 'metered' && [...this.running.values()].some(r => r.target === named.id);
+    if (busy && this.d.route) return this.start(source, await this.d.route(source, { ...req, target: AUTO }, [named.id]).catch(() => req), o);
+    return this.start(source, named || !this.d.route ? req : await this.d.route(source, req), o);
   }
   cancel(id: number, why = 'cancelled'): boolean { const r = this.running.get(id); r?.ac.abort(new Error(why)); return !!r; }
   /** Runs in progress and when each last showed progress (the dispatcher's watchdog). */

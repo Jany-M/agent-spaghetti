@@ -141,6 +141,10 @@ export function mcpHandler(client: HubClient, o: BridgeOpts, send: Send) {
     if (errors.length) return text(`invalid arguments: ${errors.join('; ')}`, true);
     try {
       if (tool.op === 'delegate') return await delegate(args, p._meta?.progressToken, x, p.requestState ? open(p.requestState) ?? {} : {});
+      if (tool.op === 'runs' && args.grade && args.id !== undefined) {   // the caller's word on a result: a grade the ranking learns from
+        await client.call('runs', { id: args.id, grade: args.grade, source: await source() });
+        return text(`Noted: run ${args.id} was ${args.grade}.`);
+      }
       if (tool.op === 'runs') return await status(args.id, p._meta?.progressToken, x);
       return text(JSON.stringify(await client.call(tool.op, { ...args, source: await source() } as never), null, 2));   // the caller, for ops that check it (report)
     } catch (e) {

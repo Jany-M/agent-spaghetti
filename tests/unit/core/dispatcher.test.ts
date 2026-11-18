@@ -120,3 +120,14 @@ test('model(): the loaded model routing picks for a gateway request; agents are 
   const s = setup();
   assert.equal(s.dispatcher.model('ide', 'Summarize this'), undefined, 'only agents here');
 });
+test('a named free agent busy with another task: the next one in line takes the new one; a busy paid one is not passed over', async () => {
+  const s = setup();
+  const first = s.runner.start('cursor', { target: 'coder', task: 'hang here', kind: 'summarize' });
+  for (let i = 0; i < 50 && !s.runner.active().length; i++) await new Promise(r => setTimeout(r, 5));
+  const second = await s.runner.begin('vscode', { target: 'coder', task: 'summarize this', kind: 'summarize' });
+  const row = await second.done;
+  assert.notEqual(row.target, 'coder', 'coder is busy: not waited on');
+  assert.ok(['helper', 'brain'].includes(row.target));
+  s.runner.cancel(first.id); await first.done;
+  assert.equal((await (await s.runner.begin('vscode', { target: 'coder', task: 'summarize that', kind: 'summarize' })).done).target, 'coder', 'free again: named, it takes it');
+});

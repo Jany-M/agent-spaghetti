@@ -58,7 +58,8 @@
     "context": [
       "loaded_context_length",
       "max_context_length"
-    ]
+    ],
+    "order": 1
   },
   "speaks": {
     "openai": {

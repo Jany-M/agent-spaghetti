@@ -60,41 +60,56 @@ Status keeps itself current: running tools and model servers are re-checked ever
 - **Kind and difficulty:** a tool may say what sort of work a task is and how demanding (`kind`, `difficulty`); when it doesn't, Agent Spaghetti sets both from built-in rules (English and Italian) and shows them in Runs and Live, with how sure it is.
 - **Saving paid usage automatically:** your connected tools hand some kinds of task to a free tool on their own, without you asking (by default summarize, research, docs, tests and review; change the list in **Routing**, or untick everything to hand off only when you ask). They keep small tasks, planning and decisions for themselves. Restart a tool after changing the list. The popover header shows how many tasks free tools did this week.
 - **What a tool costs:** free tools run at once; paid ones, and ones Agent Spaghetti is not sure about, ask you first. If it gets a tool wrong (say, an agent you run on a local model), set **Cost** in that tool's row in **Tools**.
-- **`auto`** lets Agent Spaghetti pick the target for the task's kind and difficulty: free before paid, a target big enough for it (model size from its name; a free one a size smaller may try first), then how that target's past runs of that kind went (finished, failed, your Good/Bad/Redo). Research that brings no files of its own goes first to a tool that can search the web; planning goes to the strongest target, never to a small free one first; and a tool that would have to load its own local model is not picked while another local model is loaded (name it yourself to do that). If the target it chose fails or answers nothing, the next one tries, once per chain (a paid one asks first). **Routing** shows the order for each kind of task and why; there you can make a target **First** or **Never** for a kind and switch learning, stretching and escalation off. A dispatcher model (Settings → `dispatcher.model`, off by default) can pick among the ranked targets instead; with one set, a hand-off that stops progressing is passed to another target once.
+- **Grading:** a tool that got a poor result can say so (`run_status` with the run id and `grade: poor`), like Bad in Runs: later tasks of that kind go elsewhere.
+- **`auto`** lets Agent Spaghetti pick the target for the task's kind and difficulty: free before paid, a target big enough for it (model size from its name; a free one a size smaller may try first), then how that target's past runs of that kind went (finished, failed, your Good/Bad/Redo). Research that brings no files of its own goes first to a tool that can search the web; planning goes to the strongest target, never to a small free one first; a tool that would have to load its own local model is not picked while another local model is loaded (name it yourself to do that), and a free agent that is busy with another task is passed over for the next one in line, even when you named it (paid ones can take several at once). Only one local model server is used at a time: LM Studio first, then a llama.cpp server, then Ollama (the first with a model loaded). If the target it chose fails or answers nothing, the next one tries, once per chain (a paid one asks first). **Routing** shows the order for each kind of task and why; there you can make a target **First** or **Never** for a kind and switch learning, stretching and escalation off. A dispatcher model (Settings → `dispatcher.model`, off by default) can pick among the ranked targets instead; with one set, a hand-off that stops progressing is passed to another target once.
 - Targets take tasks through the standard each tool offers: the model API (LM Studio, Ollama, …), ACP (OpenCode), their own CLI (Claude Code, Cline, Codex, Hermes, Kilo, OpenClaw) or their chat (VS Code). ACP and CLI targets need the tool's CLI: the Kilo, Cline and Codex apps bundle one (Cline uses the provider and model set in Cline); the OpenCode app doesn't (`npm i -g opencode-ai`). Hermes with its own local model needs the Hermes app open (it runs that model's server). **Tools** shows which ones can take tasks now.
 - **An agent's model:** a task can name one (`--model`); otherwise the agent uses its own default, or the one you set per agent in Settings → `delegate.models` (`<target>=<model>`, e.g. `kilo=kilo/kilo-auto/free`). An agent that runs a model on this machine (Hermes with a local server) counts as free.
 - **Runs** shows each hand-off chain, where its result went and the result; rate it or cancel it there. **N waiting** lists results whose caller has not collected them yet (it asks with `run_status`); open one to read it or **Dismiss** it.
 - **Flow** (Home): a live picture of your tools around Agent Spaghetti. A tool lights up while it works and says what it is doing and for whom ("researching for Claude"), with moving lines showing where the work goes. **Open bigger** shows it in its own window.
 - In **Runs**, open a run to grade it (Good / Bad / Redo) or to correct what kind of task it was, so later tasks of that kind go to the right tool.
-- **Live** (popover header, or tray menu → Live activity): a small window that stays on top while you work and shows each step as it happens, newest on top: who handed what to whom, Agent Spaghetti's choices, questions, the task as sent and the answer as it streams. Click a line to read it in full, `#n` to follow one run. Opened later, it still shows the latest steps (kept in memory only, never saved).
+- **Live** (popover header, or tray menu → Live activity): a small window that stays on top while you work and shows each step as it happens, newest on top: who handed what to whom, Agent Spaghetti's choices, questions, the task as sent and the answer as it streams. Click a line to read it in full, `#n` to follow one run, **Stop #n** to end a run that hangs. Each run's question and answer are kept with its result in the data folder, so they show again after a restart.
 - Third-party integrations (JSON files in the data folder's `integrations/`) do nothing until you allow each action (Tools → More).
 
 ## Choose the LLM per tool (model gateway)
 
 Tools that accept a custom OpenAI-compatible endpoint (VS Code chat, OpenCode, Kilo, Cline) can use Agent Spaghetti's model gateway, so you pick each tool's LLM in one place, local or online (`auto` = the loaded model routing picks for what you asked).
 
-1. Settings → `gateway.port` (e.g. `4141`): the gateway listens on `127.0.0.1` only.
-2. Tools → the tool → **Use the gateway**: a key for that tool, shown once, with the exact steps for it. The tool asks for model `auto`.
-3. Tools → the tool → **Model**: `auto` (the best free model loaded) or a specific one. Change it here any time; the tool needs no change.
+- The gateway is on by default at `http://127.0.0.1:4141/v1` (Settings → `gateway.port`; `0` turns it off). It listens on this machine only.
+- **VS Code** is set up by itself when you connect it: an **Agent Spaghetti** model appears in its chat model list, and the **agent-spaghetti** agent uses it, so handing work off from VS Code needs no Copilot credits. Tools → VS Code shows **gateway ready**; **Test gateway** sends one short request. The local model must have room for VS Code's requests: load it with a context of at least 32768 tokens.
+- **Other tools:** Tools → the tool → **Use the gateway** gives a key, shown once, with the exact steps for that tool.
+- Tools → the tool → **Model**: `auto` (the best free model loaded) or a specific one. Change it here any time; the tool needs no change.
 
-Local models answer at once; a paid one (a hosted API added as your own integration) asks you first, as hand-offs do. Every request is in **Runs** (no prompt text is stored). 
+Local models answer at once; a paid one (a hosted API added as your own integration) asks you first, as hand-offs do. Every request is in **Runs**, with what you asked and the answer kept in the data folder.
 
 ## Tested with
 
-| Tool | Can be given tasks | Can hand tasks off |
-|---|---|---|
-| LM Studio | yes (the model you loaded) | - |
-| Ollama, llama.cpp server | yes (the model you loaded) | - |
-| Claude Code (CLI) | yes | yes |
-| Codex | yes | yes |
-| Kilo | yes | yes |
-| Cline | yes | yes |
-| OpenCode | yes | yes |
-| Hermes Agent | yes | yes |
-| VS Code (Copilot chat) | yes | yes |
-| Cursor | - | yes |
-| Claude Desktop | - | yes |
-| MemPalace, Paperclip | found and shown; no tasks yet | - |
+| Tool | Can be given tasks | Can hand tasks off | Status |
+|---|---|---|---|
+| LM Studio | yes (the model you loaded) | - | works; no web research through it |
+| Ollama, llama.cpp server | yes (the model you loaded) | - | works (one local server is used at a time) |
+| Claude Code (CLI) | yes | yes | works (offloads on its own) |
+| Codex | yes | yes | works (paid: asks first) |
+| Kilo | yes | yes | works, also web research |
+| Cline | yes | yes | works, also web research |
+| OpenCode | yes | yes | works, also web research |
+| Hermes Agent | yes | yes | works; slow to start its own large local model, avoid beside another loaded model |
+| Cursor | - | yes | works (tested: a summary handed to Cline) |
+| VS Code (Copilot chat) | yes | yes | in progress: see below |
+| Claude Desktop | - | yes | not tested yet |
+| MemPalace, Paperclip | found and shown; no tasks yet | - | - |
+
+**VS Code status** (agent-spaghetti agent with the Agent Spaghetti model):
+
+| What | Status |
+|---|---|
+| Set up by itself, model listed, gateway key accepted | works |
+| Naming a tool (`kilo …`, `cline …`, `opencode …`) | reaches the tool |
+| The tool gets your open folder and attached files | not yet: the tool may not find your files |
+| A small local model deciding to hand off | unreliable: it sometimes answers itself or ignores the named tool |
+| Chains (`kilo … then cline …`) and paid tools from VS Code | not yet |
+| Next | Agent Spaghetti reads the message itself and hands it off (no local model in between), with your folder and files |
+
+**Also to do:** Claude Desktop tests; a Metrics view (tokens saved on free tools, paid calls and their cost).
 
 ## Per-tool notes
 

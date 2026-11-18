@@ -130,7 +130,7 @@ export function route(c: { kind: TaskKind; difficulty: Difficulty; edits?: boole
 export const offloadText = (kinds: string[]): string => (kinds.length ? `Without being asked, hand these kinds of task to \`delegate\` with target \`auto\` `
   + `instead of doing them yourself: ${kinds.join(', ')}. Agent Spaghetti runs them on a free tool or model and returns the result, which saves the user's paid usage. `
   + 'Do it when the work is bigger than the hand-off (several files to read, a long answer, searching): a small task costs more to hand off than to do. '
-  + 'Keep planning, decisions and anything that needs this conversation. Set `kind`, write the task so it stands alone, and if the result is missing or poor, do the task yourself.' : '');
+  + 'Keep planning, decisions and anything that needs this conversation. Set `kind`, write the task so it stands alone, and if the result is missing or poor, do the task yourself and grade it poor (`run_status` with its id and `grade`), so it goes elsewhere next time.' : '');
 /** For one prompt, as a tool's prompt hook adds it (stated as a fact about the user's setup, not an order): the hand-off hint when
  *  the prompt is one of the offload kinds and long enough to be worth it; else null. */
 export function offloadHint(prompt: string, kinds: string[]): string | null {

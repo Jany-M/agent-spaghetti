@@ -54,7 +54,8 @@ export interface Manifest {
     version?: { from: 'installed' } | { args: string[]; regex?: string } | { file: string; json: string } | { json: string };
     http?: { port?: number; path: string; url?: string };   // url: a hosted API (probed once its env vars are set; not by the live poll)
   };
-  models?: { path?: string; list: string; id: string; filter?: Array<{ field: string; in: Array<string | boolean> }>; context?: string[] };
+  models?: { path?: string; list: string; id: string; filter?: Array<{ field: string; in: Array<string | boolean> }>; context?: string[];
+    order?: number };     // which local model server is used when several have a model loaded (lowest first; one at a time)
   speaks?: {
     openai?: { base: string; headers?: Record<string, string> };   // headers: {env:NAME} read at request time
     openaiClient?: {                                                 // takes a custom OpenAI endpoint (the gateway): steps with {url} {key}; the tool asks for model `auto`

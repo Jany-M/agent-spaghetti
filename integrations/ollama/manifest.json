@@ -35,7 +35,8 @@
     "id": "model",
     "context": [
       "context_length"
-    ]
+    ],
+    "order": 3
   },
   "speaks": {
     "openai": {

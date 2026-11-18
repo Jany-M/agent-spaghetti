@@ -72,6 +72,11 @@ test('targets: loaded models the host reaches; agents with run() where their pro
   assert.deepEqual(t(wsl), [['lmstudio', 'model', 'free', 'windows', 'm'], ['paid-agent', 'agent', 'metered', 'wsl:T', 'main']], 'an app without its program cannot run tasks');
   assert.deepEqual(t({ ...wsl, envs: snap.envs }), [['lmstudio', 'model', 'free', 'windows', 'm']], 'stopped env: no target');
   assert.deepEqual(t({ ...snap, detections: snap.detections.map(d => (d.integration === 'paid-agent' ? { ...d, unready: 'its model server is down' } : d)) }).map(x => x[0]), ['lmstudio'], 'not ready: no target');
+  const llama = BUILTINS.find(i => i.manifest.id === 'llamacpp')!, two: Snapshot = { ...snap, detections: [det('llamacpp', 'free'), det('lmstudio', 'free')],
+    backends: [{ ...snap.backends[0], id: 'c', integration: 'llamacpp', model: 'g' }, snap.backends[0]] };
+  const local = (ints: Integration[], sn: Snapshot) => targets({ host: () => s.host, snapshot: () => sn, integrations: () => ints }).map(x => x.id);
+  assert.deepEqual(local([llama, lms], two), ['lmstudio'], 'two local model servers with a model loaded: one is used (models.order: LM Studio first)');
+  assert.deepEqual(local([llama, lms], { ...two, backends: [two.backends[0]] }), ['llamacpp'], 'the next one when the first has no model loaded');
 });
 test('runner: free model runs at once; result file + sha; the prompt never reaches the database', async () => {
   const s = setup();
@@ -95,6 +100,10 @@ test('runner: paid target asks; once / job / always; deny and expiry are recorde
   const events = routesFor({ store: s.store, bus: new Bus(s.store), ledger: s.ledger, runner: s.runner } as never).find(o => o.path === '/v1/events')!;
   const back = (await events.handle({ traces: true }, null as never) as Array<{ id: number; type: string; data: { stage: string; text: string; runId: number } }>).filter(e => e.type === 'trace.detail');
   assert.deepEqual(back.map(e => [e.data.stage, e.data.text, e.data.runId, e.id < 0]), [['request', 'do it', row.id, true], ['output', 'final answer', row.id, true]], 'a new bus (a restart): question and answer come back from the files');
+  const runsOp = routesFor({ store: s.store, bus: s.bus, ledger: s.ledger, runner: s.runner } as never).find(o => o.path === '/v1/runs')!;
+  await runsOp.handle({ id: row.id, grade: 'poor', source: 'cursor' }, null as never);
+  assert.equal(s.ledger.get(row.id)!.verdict, 'down', 'the caller grades a poor result: the ranking learns from it');
+  await assert.rejects(async () => runsOp.handle({ id: row.id, grade: 'good', source: 'someone-else' }, null as never), /only the caller of run/);
   assert.equal(s.settings.grants().length, 0, 'once leaves no grant');
   assert.ok(s.store.eventsSince(0).some(e => e.type === 'run.event' && e.data.tool === 'Read'));
   r = s.runner.start('cursor', { target: 'paid-agent', task: 'x', jobId: 'j1' });

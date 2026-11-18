@@ -153,6 +153,11 @@ export const handlers: Handlers = {
     if (i.id === undefined || i.id === null || String(i.id) === '') return { runs: s.ledger.list({ since: num(i.since, 0), limit: num(i.limit, 50) }) };
     const run = s.ledger.get(num(i.id, 0));
     if (!run) throw new Error(`no run ${i.id}`);
+    if (i.grade) {                                             // the chain's caller grades what it got: the run that made the result
+      if (i.source !== s.ledger.get(run.chainId)?.source) throw new Error(`only the caller of run ${run.chainId} can grade it`);
+      const last = s.ledger.chain(run.id).at(-1)!;
+      s.ledger.update(last.id, { verdict: i.grade === 'good' ? 'up' : 'down' });
+    }
     const caller = i.watch && i.source === s.ledger.get(run.chainId)?.source;   // the chain's caller is polling: it gets the result inline
     if (caller) s.runner.watch(run.chainId);
     const final = chainView(s, run.chainId);
