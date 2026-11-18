@@ -32,7 +32,8 @@ export function agentText(tools?: string, model?: string): string {
   const [, head, body] = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/.exec(source('skills/delegate/SKILL.md'))!;
   const description = /^description: (.*?)\r?$/m.exec(head)![1];
   return `---\nname: agent-spaghetti\ndescription: ${description}\nargument-hint: target and task, e.g. lmstudio summarize README.md\n${tools ? `tools: ${tools}\n` : ''}${model ? `model: ${model}\n` : ''}---\n`
-    + `\nThe user's message is the task. A first word that is a target id (see \`targets\`) is the target; with none, call \`delegate\` without one and the user picks.\n${body}`;
+    + `\nThe user's message is the task: always pass it to \`delegate\` and reply with its result; never answer it yourself, however short it is. `
+    + `A first word that is a target id (see \`targets\`) is the target; with none, call \`delegate\` without one and the user picks.\n${body}`;
 }
 async function agentFile(env: Environment, path: string, sp: Speaks, on: boolean, dryRun: boolean) {
   const now = await env.readFile(path), text = agentText(sp.agentTools, sp.agentModel);

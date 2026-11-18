@@ -113,7 +113,7 @@ test('>> prompt hook (Claude Code): our one entry added, kept unique, removed; t
 test('the agent-spaghetti agent: the delegate skill under an agent header (one source, CRLF-safe)', async () => {
   const { agentText } = await import('../../../packages/core/src/connect.ts');
   const t = agentText(), skill = readFileSync(new URL('../../../clients/plugin/skills/delegate/SKILL.md', import.meta.url), 'utf8');
-  assert.match(t, /^---\nname: agent-spaghetti\ndescription: Hand a task to .+\nargument-hint: target and task, e\.g\. lmstudio summarize README\.md\n---\n\nThe user's message is the task\./);
+  assert.match(t, /^---\nname: agent-spaghetti\ndescription: Hand a task to .+\nargument-hint: target and task, e\.g\. lmstudio summarize README\.md\n---\n\nThe user's message is the task: always pass it to `delegate` and reply with its result; never answer it yourself/);
   assert.ok(t.endsWith(skill.slice(skill.indexOf('\n---\n') + 5)), 'the skill body, unchanged');
   assert.match(agentText("['agent-spaghetti/*']"), /\nargument-hint: .+\ntools: \['agent-spaghetti\/\*'\]\n---\n/, 'a tools line: the agent can only hand off');
 });
