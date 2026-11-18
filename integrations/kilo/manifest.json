@@ -14,7 +14,12 @@
   "uses": {
     "config": "~/.config/kilo/kilo.jsonc",
     "model": "model",
-    "free": "kilo/kilo-auto/free"
+    "free": "kilo/kilo-auto/free",
+    "keyed": {
+      "file": "~/.local/share/kilo/auth.json",
+      "key": "openrouter.key",
+      "free": "openrouter/openrouter/free"
+    }
   },
   "detect": {
     "installed": [

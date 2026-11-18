@@ -46,7 +46,10 @@
         "config": { "type": "string" },
         "model": { "type": "string", "description": "dotted path; {key} is the value of that key at the file's root" },
         "provider": { "type": "string" },
-        "free": { "type": "string" }
+        "free": { "type": "string" },
+        "keyed": { "type": "object", "additionalProperties": false, "required": ["file", "key", "free"],
+          "description": "when a key is stored in file at key (only that it exists is checked) and no model is set: this free model instead of free",
+          "properties": { "file": { "type": "string" }, "key": { "type": "string" }, "free": { "type": "string" } } }
       }
     },
     "models": {

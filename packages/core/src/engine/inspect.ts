@@ -121,13 +121,15 @@ export async function probeLive(env: Environment, m: Manifest, inv: Inventory): 
 }
 
 /** What a tool is set to use, from its own config: a free model → free; another → unknown (it may spend an account: asks first, say
- *  `free` in Tools if it does not); nothing set → the manifest's free default, which a task then passes. */
+ *  `free` in Tools if it does not); nothing set → the manifest's free default (on the owner's own key when one is stored), which a task then passes. */
 async function usesOf(env: Environment, u: NonNullable<Manifest['uses']>, d: Detection): Promise<Partial<Detection>> {
   const root = parseJsonc(await env.readFile(u.config).catch(() => null)) ?? {};
   const get = (path: string) => { const v = pick(root, path.replace(/\{([^}]+)\}/g, (_, k) => String(pick(root, k) ?? ''))); return typeof v === 'string' && v ? v : undefined; };
   const model = get(u.model), provider = u.provider ? get(u.provider) : undefined;
   if (model) return { uses: [provider, model].filter(Boolean).join(' · '), cost: freeModel(model) ? 'free' : 'unknown', why: `${d.why} · set to ${[provider, model].filter(Boolean).join(' · ')}` };
-  if (u.free) return { fallback: u.free, cost: 'free', why: `${d.why} · no model set: free ${u.free}` };
+  const keyed = u.keyed && !!pick(parseJsonc(await env.readFile(u.keyed.file).catch(() => null)), u.keyed.key) ? u.keyed.free : undefined;   // existence only
+  const free = keyed ?? u.free;
+  if (free) return { fallback: free, cost: 'free', why: `${d.why} · no model set: free ${free}${keyed ? ' (your key)' : ''}` };
   return {};
 }
 

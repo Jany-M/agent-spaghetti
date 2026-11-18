@@ -55,8 +55,8 @@ export interface Manifest {
     version?: { from: 'installed' } | { args: string[]; regex?: string } | { file: string; json: string } | { json: string };
     http?: { port?: number; path: string; url?: string };   // url: a hosted API (probed once its env vars are set; not by the live poll)
   };
-  uses?: { config: string; model: string; provider?: string; free?: string };   // the model the tool is set to use: its config file (JSON/JSONC), dotted paths
-                                                   // (`{key}` = that key's value at the file's root); free: what a task passes when none is set
+  uses?: { config: string; model: string; provider?: string; free?: string; keyed?: { file: string; key: string; free: string } };   // the model the tool is set to use: its config file (JSON/JSONC), dotted paths
+                                                   // (`{key}` = that key's value at the file's root); free: what a task passes when none is set; keyed: ...unless a key is stored in `file` at `key` (only that it exists is checked), then this free model on that account
   models?: { path?: string; list: string; id: string; filter?: Array<{ field: string; in: Array<string | boolean> }>; context?: string[];
     order?: number };     // which local model server is used when several have a model loaded (lowest first; one at a time)
   speaks?: {

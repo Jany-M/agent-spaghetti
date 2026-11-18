@@ -14,7 +14,12 @@
   "uses": {
     "config": "~/.config/opencode/opencode.json",
     "model": "model",
-    "free": "opencode/big-pickle"
+    "free": "opencode/big-pickle",
+    "keyed": {
+      "file": "~/.local/share/opencode/auth.json",
+      "key": "openrouter.key",
+      "free": "openrouter/openrouter/free"
+    }
   },
   "detect": {
     "installed": [

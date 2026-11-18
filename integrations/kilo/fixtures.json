@@ -97,6 +97,25 @@
     }
   },
   {
+    "name": "no model set but an OpenRouter key stored: the free router on that key",
+    "env": {
+      "bins": {
+        "kilo": "C:/Users/u/bin/kilo.exe"
+      },
+      "files": {
+        "~/.config/kilo/kilo.jsonc": "{}",
+        "~/.local/share/kilo/auth.json": "{\"openrouter\":{\"type\":\"api\",\"key\":\"k\"}}"
+      }
+    },
+    "expect": {
+      "cost": "free",
+      "fallback": "openrouter/openrouter/free",
+      "absent": [
+        "\"k\""
+      ]
+    }
+  },
+  {
     "name": "absent",
     "env": {},
     "expect": null

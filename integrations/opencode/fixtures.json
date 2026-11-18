@@ -93,6 +93,25 @@
     }
   },
   {
+    "name": "no model set but an OpenRouter key stored: the free router on that key",
+    "env": {
+      "bins": {
+        "opencode": "C:/Users/u/bin/opencode.exe"
+      },
+      "files": {
+        "~/.config/opencode/opencode.json": "{}",
+        "~/.local/share/opencode/auth.json": "{\"openrouter\":{\"type\":\"api\",\"key\":\"k\"}}"
+      }
+    },
+    "expect": {
+      "cost": "free",
+      "fallback": "openrouter/openrouter/free",
+      "absent": [
+        "\"k\""
+      ]
+    }
+  },
+  {
     "name": "absent",
     "env": {},
     "expect": null
