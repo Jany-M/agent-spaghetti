@@ -36,8 +36,14 @@ export function liveRows(events: StoredEvent[], o: { all?: boolean; run?: number
   return rows;
 }
 
-export interface LiveProps { rows: LiveRow[]; all: boolean; run: number | null; paused: boolean; open: Set<number>;
-  onAll(all: boolean): void; onRun(run: number | null): void; onPause(): void; onClear(): void; onToggle(key: number): void; onClose(): void }
+/** Runs started and not finished in these events: they can be stopped from the pane. */
+export const runningRuns = (events: StoredEvent[]): Set<number> => {
+  const on = new Set<number>();
+  for (const e of events) if (e.type === 'run.started') on.add(Number(e.data.id)); else if (e.type === 'run.finished') on.delete(Number(e.data.id));
+  return on;
+};
+export interface LiveProps { rows: LiveRow[]; all: boolean; run: number | null; paused: boolean; open: Set<number>; running: Set<number>;
+  onAll(all: boolean): void; onRun(run: number | null): void; onPause(): void; onClear(): void; onToggle(key: number): void; onStop(run: number): void; onClose(): void }
 export function LiveList(p: LiveProps) {
   return h('div', { className: 'live' },
     h('header', { className: 'bar' },
@@ -49,6 +55,8 @@ export function LiveList(p: LiveProps) {
       h('button', { onClick: p.onPause, 'aria-pressed': p.paused }, p.paused ? 'Resume' : 'Pause'),
       h('button', { onClick: p.onClear }, 'Clear'),
       h('button', { 'aria-label': 'Close', title: 'Close (tray menu → Live activity opens it again)', onClick: p.onClose }, '×')),
+    p.running.size ? h('div', { className: 'running' }, 'Running: ', ...[...p.running].map(id => h('button', { key: id, className: 'stop',
+      title: `Stop run ${id}: the tool is stopped and the caller is told it was cancelled`, onClick: () => p.onStop(id) }, `Stop #${id}`))) : null,
     p.rows.length ? h('div', { className: 'feed mono', role: 'log', 'aria-live': 'polite' }, ...[...p.rows].reverse().map(r => h('div', { key: r.key, className: `entry tone-${r.tone}` },
       h('div', { className: 'line' },
         r.run !== null && p.run === null ? h('button', { className: 'tag', title: `Only run ${r.run}`, onClick: () => p.onRun(r.run) }, `#${r.run}`) : null,
@@ -65,7 +73,8 @@ export function LiveView({ bridge }: { bridge: Bridge }) {
   const [open, setOpen] = useState<Set<number>>(new Set());
   const rows = liveRows(frozen ?? events, { all, run });
   useToolColors(bridge);
-  return h(LiveList, { rows, all, run, paused: frozen !== null, open,
+  return h(LiveList, { rows, all, run, paused: frozen !== null, open, running: runningRuns(events),
+    onStop: id => void bridge.call('cancel', { id }).catch(() => {}),
     onAll: setAll, onRun: setRun, onPause: () => setFrozen(f => (f ? null : events)), onClear: () => { setEvents([]); setFrozen(null); setOpen(new Set()); },
     onToggle: k => setOpen(s => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; }),
     onClose: () => window.close() });

@@ -175,7 +175,7 @@ export const handlers: Handlers = {
   },
   handback: (i, s) => { s.runner.report(num(i.run_id, 0), need(i.source, 'source'), String(i.result ?? ''), i.status === 'failed'); return { ok: true }; },
   routing: (i, s) => {
-    const difficulty = i.difficulty ?? 'medium';
+    const difficulty = i.difficulty || 'medium';                // no difficulty asked (an empty query value): medium
     if (!DIFFICULTIES.includes(difficulty)) throw new Error(`difficulty must be one of ${DIFFICULTIES.join(', ')}`);
     // edit kinds as they usually come: with the caller's folder
     return { difficulty, kinds: HANDOFF_KINDS.map(kind => ({ kind, ranked: s.dispatcher.ranking({ kind, difficulty, edits: EDIT_KINDS.has(kind) }) })) };

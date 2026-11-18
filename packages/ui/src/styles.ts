@@ -82,6 +82,8 @@ textarea { resize:vertical; }
 button.badge { border:0; cursor:pointer; }
 .tool .parts { display:flex; gap:6px; flex-wrap:wrap; margin:2px 0; } .tool .part { font-size:11px; color:var(--muted); border:1px solid var(--line); border-radius:6px; padding:0 6px; }
 .tool .part.used { color:var(--fg); border-color:var(--muted); }
+.live .running { display:flex; gap:6px; align-items:center; flex-wrap:wrap; padding:4px 8px; font-size:12px; color:var(--muted); }
+.live .stop { color:var(--a-fail); border-color:var(--a-fail); }
 /* the flow diagram, a small solar system: Agent Spaghetti the sun, the tools glassy planets in their colors (currentColor) on faint
    orbits over a dot grid; a working planet glows and its dot pulses, the sun's corona breathes while anything runs; lights travel
    along the lines the way the work goes (slower and dimmer while a result waits for its caller). SVG/CSS animation only, none when

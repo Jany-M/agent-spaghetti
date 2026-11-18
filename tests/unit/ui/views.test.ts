@@ -172,13 +172,17 @@ test('live pane: work events only by default, one run on request, streamed outpu
     'tool events as sentences: the tools in their colors');
   assert.deepEqual(liveRows(events, { run: 6 }).map(r => r.run), [6]);
   (await import('@agent-spaghetti/ui')).setToolColors([{ id: 'claude-desktop', color: '#ea580c' }]);
-  const page = html(h(LiveList, { rows, all: false, run: null, paused: false, open: new Set([-2]), onAll: noop, onRun: noop, onPause: noop, onClear: noop, onToggle: noop, onClose: noop }));
+  const { runningRuns } = await import('@agent-spaghetti/ui/live');
+  assert.deepEqual([...runningRuns([ev(1, 'run.started', { id: 5 }), ev(2, 'run.started', { id: 6 }), ev(3, 'run.finished', { id: 5 })] as never)], [6]);
+  const page = html(h(LiveList, { rows, all: false, run: null, paused: false, open: new Set([-2]), running: new Set([6]), onAll: noop, onRun: noop, onPause: noop, onClear: noop, onToggle: noop, onStop: noop, onClose: noop }));
+  assert.match(page, /<div class="running">Running: <button class="stop" title="Stop run 6[^"]*">Stop #6<\/button><\/div>/, 'a run that hangs can be stopped from the pane');
   assert.match(page, /<header class="bar">.*<option value="work" selected="">Runs and hand-offs<\/option>.*>Pause<\/button>.*>Clear<\/button><button aria-label="Close"/s);
   assert.match(page, /<button class="tag" title="Only run 5">#5<\/button>/);
   assert.match(page, /<b class="tool" style="color:#ea580c">claude-desktop<\/b> <span class="act send">asks<\/span> <b class="tool tc\d">lmstudio<\/b>: Research X/, 'the request a tool sent: its own color from the manifest, else a palette one');
   assert.match(text(page), /Agent Spaghetti picks.*cursor → codex.*claude-desktop → lmstudio/s, 'newest on top; the arrow is plain text');
   assert.match(page, /<b class="tool hub">Agent Spaghetti<\/b> <span class="act decide">picks<\/span>/); assert.match(page, /<pre>Hello world<\/pre>/, 'an opened trace shows its full text');
-  const one = html(h(LiveList, { rows: liveRows(events, { run: 6 }), all: false, run: 6, paused: true, open: new Set<number>(), onAll: noop, onRun: noop, onPause: noop, onClear: noop, onToggle: noop, onClose: noop }));
+  const one = html(h(LiveList, { rows: liveRows(events, { run: 6 }), all: false, run: 6, paused: true, open: new Set<number>(), running: new Set<number>(), onAll: noop, onRun: noop, onPause: noop, onClear: noop, onToggle: noop, onStop: noop, onClose: noop }));
+  assert.doesNotMatch(one, /class="running"/);
   assert.match(one, /class="chip"[^>]*>run 6 ×</); assert.match(one, /aria-pressed="true">Resume</);
 });
 test('routing panel: per kind the targets best first with why, First / Never per kind, the routing switches, the shipped word lists', async () => {
