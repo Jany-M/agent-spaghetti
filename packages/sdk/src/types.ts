@@ -59,7 +59,8 @@ export interface Manifest {
                                                    // (`{key}` = that key's value at the file's root); free: what a task passes when none is set; keyed: ...unless a key is stored in `file` at `key` (only that it exists is checked), then this free model on that account
   models?: { path?: string; list: string; id: string; filter?: Array<{ field: string; in: Array<string | boolean> }>; context?: string[];
     order?: number;       // which local model server is used when several have a model loaded (lowest first; one at a time)
-    load?: { path: string; body: Record<string, unknown> } };   // POST that loads a model (`{model}` in a string is filled in): offered, with a question first, when the server is up and nothing is loaded
+    load?: { path: string; body: Record<string, unknown> };     // POST that loads a model (`{model}` in a string is filled in, a value that is exactly `{context}` becomes the token count): offered, with a question first, when the server is up and nothing is loaded
+    unload?: { path: string; body: Record<string, unknown> } }; // POST that unloads one, needed before a reload with a bigger context where the server keeps both
   speaks?: {
     openai?: { base: string; headers?: Record<string, string> };   // headers: {env:NAME} read at request time
     openaiClient?: {                                                 // takes a custom OpenAI endpoint (the gateway): steps with {url} {key}; the tool asks for model `auto`
@@ -108,6 +109,7 @@ export const EVENT_TYPES = [
   'session.started', 'session.updated', 'session.ended', 'backend.changed', 'tool.changed', 'switch.changed', 'permission.pending',
   'consent.requested', 'consent.answered', 'consent.expired', 'tool.checked',
   'run.started', 'run.event', 'run.finished', 'run.delivered', 'dispatcher.action', 'backend.queue', 'client.hook', 'client.connected',
+  'debug.capture',                         // setting `debug` on: what a request looked like (redacted, stored; for finding out how a tool talks to us)
   'trace.detail',                          // the live detail channel: redacted, streamed live, never stored (ADR 0007)
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];

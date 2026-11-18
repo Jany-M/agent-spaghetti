@@ -12,7 +12,7 @@ import { Bus } from '../../../packages/core/src/bus.ts';
 import { Consent } from '../../../packages/core/src/consent.ts';
 import { Settings } from '../../../packages/core/src/settings.ts';
 import { Ledger } from '../../../packages/core/src/ledger.ts';
-import { Runner, targets } from '../../../packages/core/src/runner.ts';
+import { Runner, contextFor, targets } from '../../../packages/core/src/runner.ts';
 import { openaiRun } from '../../../packages/core/src/engine/openai.ts';
 import { claudeArgs, toEvents } from '../../../integrations/claude-cli/index.ts';
 
@@ -240,15 +240,29 @@ test('offerLoad: a local server up with nothing loaded asks first, loads the las
   const s = setup(none);
   assert.equal(s.runner.offerLoad('vscode'), null, 'no history: nothing to offer');
   s.ledger.record({ ts: 1, source: 'vscode', target: 'lmstudio', model: 'gemma:2', kind: 'other', taskHash: 'h', outcome: 'done' });
-  assert.deepEqual(s.runner.offerLoad('vscode'), { name: 'LM Studio', model: 'gemma' }, 'the second instance suffix is dropped');
+  assert.deepEqual(s.runner.offerLoad('vscode'), { name: 'LM Studio', model: 'gemma', context: 16384 }, 'the second instance suffix is dropped');
   const q = await firstQuestion(s.consent);
   assert.equal(q.labels?.title, 'Load gemma in LM Studio?');
   assert.deepEqual(s.host.calls, [], 'nothing is loaded before the answer');
-  assert.deepEqual(s.runner.offerLoad('vscode'), { name: 'LM Studio', model: 'gemma' });
+  assert.deepEqual(s.runner.offerLoad('vscode'), { name: 'LM Studio', model: 'gemma', context: 16384 });
   s.consent.respond(q.id, true, 'once');
   for (let i = 0; i < 50 && !s.host.calls.length; i++) await new Promise(r => setTimeout(r, 5));
   assert.deepEqual(s.host.calls, ['POST http://127.0.0.1:1234/api/v1/models/load']);
-  assert.equal(s.host.inputs['POST http://127.0.0.1:1234/api/v1/models/load'], '{"model":"gemma"}');
+  assert.equal(s.host.inputs['POST http://127.0.0.1:1234/api/v1/models/load'], '{"model":"gemma","context_length":16384}');
   assert.equal(s.consent.pending().length, 0, 'asked once within the time');
   assert.equal(setup().runner.offerLoad('vscode'), null, 'a model is loaded: no offer');
+});
+
+test('contextFor: room for the request and its answer, in steps, within limits', () => {
+  assert.deepEqual([contextFor(), contextFor(100), contextFor(5000), contextFor(16080), contextFor(900000)], [16384, 8192, 8192, 32768, 131072]);
+});
+test('offerLoad: a model loaded with too little room is unloaded and loaded again with a bigger context, after the user says yes', async () => {
+  const s = setup({ ...snap, detections: [{ ...det('lmstudio', 'free'), endpoint: 'http://127.0.0.1:1234' }] });
+  assert.deepEqual(s.runner.offerLoad('vscode', { need: 16080, reload: { target: 'lmstudio', model: 'm' } }), { name: 'LM Studio', model: 'm', context: 32768 });
+  const q = await firstQuestion(s.consent);
+  assert.equal(q.labels?.title, 'Reload m with room for 32768 tokens?');
+  s.consent.respond(q.id, true, 'once');
+  for (let i = 0; i < 50 && s.host.calls.length < 2; i++) await new Promise(r => setTimeout(r, 5));
+  assert.deepEqual(s.host.calls, ['POST http://127.0.0.1:1234/api/v1/models/unload', 'POST http://127.0.0.1:1234/api/v1/models/load']);
+  assert.equal(s.host.inputs['POST http://127.0.0.1:1234/api/v1/models/load'], '{"model":"m","context_length":32768}');
 });

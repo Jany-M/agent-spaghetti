@@ -9,6 +9,7 @@ const TRACE_MAX = 8000, RECENT = 300;
 
 export class Bus {
   readonly store: Store;
+  debug: () => boolean = () => false;                  // setting `debug` (set at start-up)
   private subs = new Set<(e: StoredEvent) => void>();
   private nextEphemeralId = -Date.now();                   // ephemeral events are never stored: negative ids
   private recent: StoredEvent[] = [];
@@ -26,6 +27,10 @@ export class Bus {
   trace(source: string, data: TraceData): void {
     this.emit({ ts: Date.now(), type: 'trace.detail', envId: 'hub', source,
       data: { ...data, text: data.text.length > TRACE_MAX ? `${data.text.slice(0, TRACE_MAX)}\n… (${data.text.length - TRACE_MAX} more characters)` : data.text } }, { ephemeral: true });
+  }
+  /** Setting `debug` on: one captured step (what a request looked like, how it was read) as a stored, redacted event. */
+  capture(source: string, what: string, data: Record<string, unknown>): void {
+    if (this.debug()) this.emit({ ts: Date.now(), type: 'debug.capture', envId: 'hub', source, data: { what, ...data } });
   }
   subscribe(fn: (e: StoredEvent) => void): () => void { this.subs.add(fn); return () => { this.subs.delete(fn); }; }
 }

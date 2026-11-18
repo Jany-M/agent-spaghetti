@@ -4,9 +4,10 @@
 // question as a hand-off, the same server queue, the same record. Only `model` is rewritten; prompts are never stored.
 import { createHash, randomBytes } from 'node:crypto';
 import type { Target } from '@agent-spaghetti/sdk';
-import { AUTO, classify, parseHop, parseJson, rankTargets } from '@agent-spaghetti/sdk';
+import { AUTO, classify, parseDirective, parseHop, parseJson, rankTargets, splitMessage } from '@agent-spaghetti/sdk';
 import { http } from './http.ts';
 import { openaiForward } from './engine/openai.ts';
+import type { Bus } from './bus.ts';
 import type { Runner } from './runner.ts';
 import { serveJson, WRITTEN, type CallCtx, type Server } from './serve.ts';
 import type { Settings } from './settings.ts';
@@ -43,7 +44,7 @@ export function lastUserText(body: Record<string, unknown>): string {
 }
 
 export class Gateway {
-  private d: { settings: Settings; store: Store; runner: Runner; best?(source: string, text: string): Target | undefined };   // best: routing's model for a request (core/dispatcher.ts)
+  private d: { settings: Settings; store: Store; bus: Bus; runner: Runner; best?(source: string, text: string): Target | undefined };   // best: routing's model for a request (core/dispatcher.ts)
   private server: Server | null = null;
   private port = 0;
   private readonly session = `gateway-${Date.now()}`;      // "Allow for this job" = until the daemon restarts
@@ -93,14 +94,39 @@ export class Gateway {
     const models = this.d.runner.targets().filter(t => t.kind === 'model');
     return { object: 'list', data: [{ id: AUTO, object: 'model', owned_by: 'agent-spaghetti' }, ...models.flatMap(t => t.models.map(m => ({ id: `${t.id}:${m}`, object: 'model', owned_by: t.id })))] };
   }
-  private async forward(path: string, body: Record<string, unknown>, c: CallCtx): Promise<typeof WRITTEN> {
-    const said = lastUserText(body), what = classify(said);     // recorded under what the user asked for, not as "other"
+  /** A message that names tools (`cline <task>`, `a <task> then b`) is handed to them, and their answer comes back as the model's reply: no local model decides. */
+  private async handOff(body: Record<string, unknown>, c: CallCtx, d: NonNullable<ReturnType<typeof parseDirective>>, context: string, asked: string): Promise<unknown> {
+    const what = classify(d.task);
+    const { id, done } = await this.d.runner.begin(c.who, { target: d.target, model: d.model, task: d.task, context: context || undefined, then: d.then, kind: what.kind, difficulty: what.difficulty, classification: what,
+      reason: 'named in a chat message through the model gateway', returnTo: 'none' }, { asked }).catch(e => { throw fail(400, `Agent Spaghetti: ${(e as Error).message}`); });
+    c.signal.addEventListener('abort', () => this.d.runner.cancel(id), { once: true });
+    const row = await done, text = this.d.runner.result(row);
+    if (row.outcome !== 'done') throw fail(row.outcome === 'denied' || row.outcome === 'expired' ? 403 : 502, `Agent Spaghetti: ${row.error ?? row.outcome}`);
+    const out = { id: `chatcmpl-as-${row.id}`, created: Math.floor(Date.now() / 1000), model: `agent-spaghetti:${row.target}` }, content = text ?? '';
+    if (!body.stream) return { ...out, object: 'chat.completion', choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: row.inputTokens ?? 0, completion_tokens: row.outputTokens ?? 0, total_tokens: (row.inputTokens ?? 0) + (row.outputTokens ?? 0) } };
+    c.res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
+    for (const delta of [{ role: 'assistant', content }, {}]) c.res.write(`data: ${JSON.stringify({ ...out, object: 'chat.completion.chunk', choices: [{ index: 0, delta, finish_reason: Object.keys(delta).length ? null : 'stop' }] })}\n\n`);
+    c.res.end('data: [DONE]\n\n');
+    return WRITTEN;
+  }
+  private async forward(path: string, body: Record<string, unknown>, c: CallCtx): Promise<unknown> {
+    const bus = this.d.bus, messages = Array.isArray(body.messages) ? (body.messages as Array<{ role?: string; content?: unknown }>) : [];
+    const raw = lastUserText(body), { text: said, context } = splitMessage(raw);
+    bus.capture('gateway', 'request', { from: c.who, path, model: body.model, stream: body.stream, tools: Array.isArray(body.tools) ? body.tools.length : 0, roles: messages.map(m => m.role).join(','), lastUser: raw });
+    const directive = path === PATHS[0] ? parseDirective(said, this.d.runner.targets().filter(t => t.id !== c.who)) : null;
+    bus.capture('gateway', 'read', { text: said, context: context.length, directive });
+    if (directive) return this.handOff(body, c, directive, context, said);
+    const what = classify(said);     // recorded under what the user asked for, not as "other"
     const r = resolveRoute(this.d.settings.get('gateway.routes'), c.who, String(body.model ?? AUTO), this.d.runner.targets(), this.d.best?.(c.who, said));
-    if ('error' in r) { const o = this.d.runner.offerLoad(c.who); throw fail(404, o ? `${r.error}; asked to load ${o.model} in ${o.name}: answer in the Agent Spaghetti tray, then try again` : r.error); }
+    if ('error' in r) { const o = this.d.runner.offerLoad(c.who, { need: Math.round(JSON.stringify(body).length / 4) }); throw fail(404, o ? `${r.error}; asked to load ${o.model} in ${o.name}: answer in the Agent Spaghetti tray, then try again` : r.error); }
     const t = this.d.runner.targets().find(x => x.id === r.target)!;
     // a request bigger than the model's loaded context fails at the server with a message about tokens; say what to do instead
     const room = this.d.runner.contextOf(r.target, r.model), need = Math.round(JSON.stringify(body).length / 4);
-    if (room && need > room) throw fail(400, `Agent Spaghetti: ${r.model} is loaded with room for ${room} tokens; this request needs about ${need}. Load it with a larger context (e.g. 32768 in LM Studio's load settings), then try again.`);
+    if (room && need > room) {
+      const o = this.d.runner.offerLoad(c.who, { need, reload: { target: r.target, model: r.model } });
+      throw fail(400, `Agent Spaghetti: ${r.model} is loaded with room for ${room} tokens; this request needs about ${need}. ${o ? `Asked to reload it with room for ${o.context}: answer in the Agent Spaghetti tray, then try again.` : 'Load it with a larger context (e.g. 32768 in the load settings), then try again.'}`);
+    }
     let started = false;
     const write = (status: number, type: string, chunk?: string) => {
       if (!started) { c.res.writeHead(status, { 'content-type': type }); started = true; }

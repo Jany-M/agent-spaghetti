@@ -39,7 +39,7 @@ async function boot(scan: () => Promise<Snapshot> = async () => SNAP) {
   const resultsDir = mkdtempSync(join(tmpdir(), 'as-results-'));
   const runner = new Runner({ bus, consent, ledger, settings, resultsDir, host: () => host, snapshot: () => store.loadSnapshot('scan'), integrations: () => integrations,
     runOn: () => { throw new Error('no agents in this test'); } });
-  const services: Services = { store, bus, settings, consent, ledger, runner, gateway: new Gateway({ settings, store, runner }), dispatcher: new Dispatcher({ runner, settings, bus, ledger, live: () => live }), host: () => host, cli: () => ({ command: 'node', args: ['/x/cli.ts'] }),
+  const services: Services = { store, bus, settings, consent, ledger, runner, gateway: new Gateway({ settings, store, bus, runner }), dispatcher: new Dispatcher({ runner, settings, bus, ledger, live: () => live }), host: () => host, cli: () => ({ command: 'node', args: ['/x/cli.ts'] }),
     shutdown: () => { stopped++; }, gatewayClients: async () => {}, live: () => live, scan: async () => { const snap = await scan(); store.saveSnapshot('scan', snap); return snap; },
     loaded: () => ({ integrations, rejected: [] }),
     onEnvs: async (cmd, args, envIds) => {

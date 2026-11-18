@@ -30,6 +30,7 @@ export const SETTINGS = {
   'routing.prefer': { default: [] as string[], help: 'Your pick per kind of task, tried first: <kind>=<target> (Routing panel)' },
   'routing.never': { default: [] as string[], help: 'Targets never used for a kind of task: <kind>=<target> (Routing panel)' },
   'routing.tiers': { default: [] as string[], help: 'The hardest task a target takes, when its size does not say: <target>[:model]=light|medium|heavy' },
+  debug: { default: false, help: 'Records what requests through the gateway look like (the message as the tool sent it, how it was read, where it went; secrets removed) as events in Activity, to find out how a tool talks to Agent Spaghetti. Off by default: the text can include your prompts' },
   'gateway.routes': { default: [] as string[], help: 'Each tool\'s model through the gateway: <tool>=<target>:<model> or <tool>=auto (Tools → the tool → Model)' },
 } as const;
 export type SettingKey = keyof typeof SETTINGS;

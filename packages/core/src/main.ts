@@ -38,6 +38,7 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
   const store = new Store(join(dir, 'store.db'));
   const bus = new Bus(store);
   const settings = new Settings(store, () => loaded.integrations);
+  bus.debug = () => settings.get('debug');
   const prune = () => store.pruneEvents(Date.now() - settings.get('events.retentionDays') * DAY);
   prune();
   const pruneTimer = setInterval(prune, DAY); pruneTimer.unref();
@@ -82,7 +83,7 @@ export async function runDaemon(env: NodeJS.ProcessEnv = process.env, o: DaemonO
       yield* runOnEnv(e, await ctx(), id, req, ro);
     } });
   const dispatcher = new Dispatcher({ runner, settings, bus, ledger, live: () => live });
-  const gateway = new Gateway({ settings, store, runner, best: (source, text) => dispatcher.model(source, text) });
+  const gateway = new Gateway({ settings, store, bus, runner, best: (source, text) => dispatcher.model(source, text) });
   const watchdog = dispatcher.watch();
   const hubFiles = new Map<string, string>();
   /** Running distros reach the daemon on the Windows side of their network: listen there and tell them where (hub.json, user-only). */

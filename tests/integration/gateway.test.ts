@@ -61,7 +61,7 @@ test('gateway: keys name the tool; models listed; streams pass through with only
       { id: 'paid:big', integration: 'paid', model: 'big', envId: 'windows', endpoint: up.url, reachableFrom: ['windows'] }] };
   const runner = new Runner({ bus, consent, ledger, settings, resultsDir: mkdtempSync(join(tmpdir(), 'as-gw-')), host: () => fakeEnv({}), snapshot: () => snap, integrations: () => ints,
     runOn: () => { throw new Error('no agents'); } });
-  const gw = new Gateway({ settings, store, runner });
+  const gw = new Gateway({ settings, store, bus, runner });
   assert.equal(settings.get('gateway.port'), 4141, 'on by default (a fixed port: the tools set up with it keep working)');
   settings.set('gateway.port', 0); await gw.sync();
   assert.equal(gw.status().port, 0, 'off when set to 0');
@@ -129,7 +129,7 @@ test('gatewayClient op: a tool\'s model (route) and a key shown once with its se
   const { routesFor } = await import('../../packages/core/src/ops.ts');
   const { BUILTINS } = await import('@agent-spaghetti/integrations');
   const store = new Store(':memory:'), settings = new Settings(store);
-  const gateway = new Gateway({ settings, store, runner: { targets: () => [] } as unknown as Runner });
+  const gateway = new Gateway({ settings, store, bus: new Bus(store), runner: { targets: () => [] } as unknown as Runner });
   const s = { settings, store, gateway, loaded: () => ({ integrations: BUILTINS, rejected: [] }) } as never;
   const op = routesFor(s).find(r => r.path === '/v1/gateway/client')!;
   assert.deepEqual(await op.handle({ integration: 'vscode', model: 'lms:m1' }, null as never), { model: 'lms:m1' });
@@ -144,7 +144,7 @@ test('connect op: a tool that takes the gateway by itself gets a new key with th
   const { routesFor } = await import('../../packages/core/src/ops.ts');
   const { BUILTINS } = await import('@agent-spaghetti/integrations');
   const store = new Store(':memory:'), settings = new Settings(store), bus = new Bus(store);
-  const gateway = new Gateway({ settings, store, runner: { targets: () => [] } as unknown as Runner });
+  const gateway = new Gateway({ settings, store, bus: new Bus(store), runner: { targets: () => [] } as unknown as Runner });
   const probe = createServer(); await new Promise<void>(r => probe.listen(0, '127.0.0.1', () => r()));
   const port = (probe.address() as { port: number }).port; await new Promise<void>(r => probe.close(() => r()));
   settings.set('gateway.port', port); await gateway.sync();
@@ -165,5 +165,33 @@ test('connect op: a tool that takes the gateway by itself gets a new key with th
     assert.deepEqual([calls[2][4], gateway.status().clients], ['', []], 'disconnect: its key goes');
     await op('/v1/setting').handle({ key: 'gateway.port', value: String(port) }, null as never);
     assert.equal(again, 1, 'a port change sets the tools up again');
+  } finally { await gateway.close(); }
+});
+test('a chat message that names a tool goes to that tool (and `then` hops), and its answer is the model\'s reply; setting debug records what came in', async () => {
+  const store = new Store(':memory:'), settings = new Settings(store), bus = new Bus(store);
+  bus.debug = () => settings.get('debug');
+  const started: Array<Record<string, unknown>> = [];
+  const tool = { id: 'alpha', name: 'Alpha Agent', kind: 'agent', cost: 'free', envId: 'w', models: [], engine: 'acp', resumable: false } as Target;
+  const runner = { targets: () => [tool], begin: async (who: string, req: Record<string, unknown>) => { started.push({ who, ...req }); return { id: 7, done: Promise.resolve({ id: 7, target: 'alpha', outcome: 'done', inputTokens: 3, outputTokens: 4 }) }; },
+    result: () => 'It says hello.', cancel: () => true } as unknown as Runner;
+  const gateway = new Gateway({ settings, store, bus, runner });
+  const probe = createServer(); await new Promise<void>(r => probe.listen(0, '127.0.0.1', () => r()));
+  const port = (probe.address() as { port: number }).port; await new Promise<void>(r => probe.close(() => r()));
+  settings.set('gateway.port', port); await gateway.sync();
+  const key = gateway.key('vscode', true)!;
+  const call = (body: object) => fetch(`http://127.0.0.1:${port}/v1/chat/completions`, { method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const msg = (content: string) => [{ role: 'system', content: 's' }, { role: 'user', content }];
+  try {
+    const r = await (await call({ model: 'auto', messages: msg('<attachments>README.md</attachments>\n<userRequest>alpha What does this file say? then alpha:other check</userRequest>') })).json();
+    assert.deepEqual([r.choices[0].message.content, r.choices[0].finish_reason, r.model, r.usage.total_tokens], ['It says hello.', 'stop', 'agent-spaghetti:alpha', 7]);
+    assert.deepEqual([started[0].who, started[0].target, started[0].task, started[0].context, started[0].then, started[0].returnTo], ['vscode', 'alpha', 'What does this file say?', '<attachments>README.md</attachments>', ['alpha:other'], 'none']);
+    const s = await (await call({ model: 'auto', stream: true, messages: msg('alpha hi') })).text();
+    assert.ok(s.includes('"content":"It says hello."') && s.includes('"finish_reason":"stop"') && s.trim().endsWith('[DONE]'));
+    assert.equal(store.eventsSince(0).filter(e => e.type === 'debug.capture').length, 0, 'off: nothing is recorded');
+    settings.set('debug', true);
+    await call({ model: 'auto', messages: msg('alpha again') });
+    const cap = store.eventsSince(0).filter(e => e.type === 'debug.capture');
+    assert.deepEqual(cap.map(e => e.data.what), ['request', 'read']);
+    assert.deepEqual([cap[0].data.lastUser, (cap[1].data.directive as { target: string }).target], ['alpha again', 'alpha']);
   } finally { await gateway.close(); }
 });

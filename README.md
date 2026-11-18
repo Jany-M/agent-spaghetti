@@ -119,6 +119,7 @@ Settings, and Tools / Routing in the tray, change everything below. In a termina
 | `consent.timeoutSec` | 120 | how long a question waits before it is denied |
 | `backend.concurrency` | 1 | requests a local model server runs at once |
 | `gateway.port`, `gateway.routes` | 4141, none | see below |
+| `debug` | off | records what gateway requests look like (message as the tool sent it, how it was read, where it went; secrets removed) as events in Activity, to see how a tool talks to Agent Spaghetti. The text can include your prompts, so leave it off otherwise |
 | `connect.auto`, `connect.never` (Tools) | none | tools always / never connected |
 | `scan.everyMin`, `observe.*`, `events.retentionDays` | 10, 3000/2000 ms, 14 | rescan and polling intervals; how long events are kept |
 | `openclaw.model` | `auto` | OpenClaw's model: `auto`, `keep`, or `<server>:<model>` |
@@ -130,7 +131,8 @@ Targets take tasks through each tool's own standard: the model API (LM Studio, O
 Tools that accept a custom OpenAI-compatible endpoint (VS Code chat, OpenCode, Kilo, Cline) can use the gateway, so you pick each tool's LLM in one place, local or online (`auto` = the loaded model routing picks for what you asked).
 
 - On by default at `http://127.0.0.1:4141/v1`, this machine only (`gateway.port`; `0` turns it off).
-- **VS Code** is set up by itself when you connect it: an **Agent Spaghetti** model appears in its chat list and the **agent-spaghetti** agent uses it, so hand-offs need no Copilot credits. **Test gateway** in Tools → VS Code sends one short request. Load the local model with a context of at least 32768 tokens.
+- **VS Code** is set up by itself when you connect it: an **Agent Spaghetti** model appears in its chat list and the **agent-spaghetti** agent uses it, so hand-offs need no Copilot credits. **Test gateway** in Tools → VS Code sends one short request. Load the local model with a context of at least 32768 tokens, or let Agent Spaghetti do it: when a request needs more room than the loaded model has (or no model is loaded), it asks to load it again with a big enough context (LM Studio, Ollama), then you try again.
+- **Name a tool in the chat** and no model decides: `cline What does this file say?` goes straight to Cline, `cline summarise it then hermes:reviewer` chains them (each next one gets the previous result), and the answer comes back as the model's reply. A message that doesn't start with a tool's name is routed as before.
 - **Other tools:** Tools → the tool → **Use the gateway** gives a key (shown once) and the exact steps.
 - Tools → the tool → **Model**: `auto` or a specific one (`gateway.routes`).
 

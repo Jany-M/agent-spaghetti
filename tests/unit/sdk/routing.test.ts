@@ -2,7 +2,7 @@
 // ranking for one task (fit, cost, stretch, history, queue; skips with why).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fallbackAgent, modelSize, offloadText, ownModel, route, savings, summarizeRuns, tierOf, withCosts, type Ranked, type RunRow, type Target } from '@agent-spaghetti/sdk';
+import { fallbackAgent, parseDirective, splitMessage, modelSize, offloadText, ownModel, route, savings, summarizeRuns, tierOf, withCosts, type Ranked, type RunRow, type Target } from '@agent-spaghetti/sdk';
 
 const T = (id: string, o: Partial<Target> = {}): Target => ({ id, name: id, kind: 'model', cost: 'free', envId: 'w', models: [], engine: 'openai', resumable: false, ...o });
 test('tiers: model size from its name (active size when stated), paid → heavy, agents → medium, the owner\'s entry wins', () => {
@@ -86,4 +86,19 @@ test('withCosts: the owner\'s word on a tool\'s cost replaces the scan\'s; unkno
   const snap = { detections: [d('a', 'metered'), d('b', 'unknown')] };
   assert.deepEqual(withCosts(snap, ['a=free', 'b=cheap'])!.detections.map(x => x.cost), ['free', 'unknown']);
   assert.equal(withCosts(snap, []), snap); assert.equal(withCosts(null, ['a=free']), null);
+});
+
+test('splitMessage: the request apart from the blocks a tool wraps around it', () => {
+  assert.deepEqual(splitMessage('<attachments>file a</attachments>\n<userRequest>cline read it</userRequest>'), { text: 'cline read it', context: '<attachments>file a</attachments>' });
+  assert.deepEqual(splitMessage('<ctx>x</ctx>\ncline read it'), { text: 'cline read it', context: '<ctx>x</ctx>' });
+  assert.deepEqual(splitMessage('plain'), { text: 'plain', context: '' });
+});
+test('parseDirective: a message that starts with a tool hands the task to it; `then <tool>` chains; anything else is not one', () => {
+  const tools = [{ id: 'alpha', name: 'Alpha Agent' }, { id: 'beta', name: 'Beta' }, { id: 'gamma', name: 'Gamma' }];
+  assert.deepEqual(parseDirective('alpha What does this file say?', tools), { target: 'alpha', task: 'What does this file say?', then: [] });
+  assert.deepEqual(parseDirective('Alpha, summarise it then beta:rev check it then nobody later', tools), { target: 'alpha', task: 'summarise it', then: ['beta:rev'] });
+  assert.deepEqual(parseDirective('gamma:Big-Model hello', tools), { target: 'gamma', model: 'Big-Model', task: 'hello', then: [] });
+  assert.equal(parseDirective('please alpha do it', tools), null);
+  assert.equal(parseDirective('alpha', tools), null, 'no task');
+  assert.equal(parseDirective('Please write a brief title for the following request: alpha x', tools), null);
 });

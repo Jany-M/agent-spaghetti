@@ -63,7 +63,14 @@
     "load": {
       "path": "/api/v1/models/load",
       "body": {
-        "model": "{model}"
+        "model": "{model}",
+        "context_length": "{context}"
+      }
+    },
+    "unload": {
+      "path": "/api/v1/models/unload",
+      "body": {
+        "instance_id": "{model}"
       }
     }
   },

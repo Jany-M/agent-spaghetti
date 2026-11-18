@@ -40,7 +40,10 @@
     "load": {
       "path": "/api/generate",
       "body": {
-        "model": "{model}"
+        "model": "{model}",
+        "options": {
+          "num_ctx": "{context}"
+        }
       }
     }
   },

@@ -11,6 +11,26 @@ export const parseHop = (hop: string): { target: string; model?: string } => {
   const i = hop.indexOf(':');
   return i < 0 ? { target: hop } : { target: hop.slice(0, i), model: hop.slice(i + 1) || undefined };
 };
+/** What a chat message holds: the tool wraps what its user typed in blocks of its own (`<attachments>…</attachments>`, editor state, …).
+ *  A block named like the request (`userRequest`, `request`, `task`, `prompt`) is the text; else the text outside the blocks. The rest is `context`. */
+export function splitMessage(raw: string): { text: string; context: string } {
+  const blocks = [...raw.matchAll(/<([A-Za-z][\w-]*)>([\s\S]*?)<\/\1>/g)], named = blocks.find(b => /^(user_?request|request|task|prompt|query)$/i.test(b[1]));
+  const outside = raw.replace(/<([A-Za-z][\w-]*)>[\s\S]*?<\/\1>/g, '');
+  return { text: (named ? named[2] : outside).trim(), context: blocks.filter(b => b !== named).map(b => b[0]).join('\n').trim() };
+}
+/** A message that names tools: `<tool>[:agent] <task>`, then `then <tool>[:agent]` for each next hop (each gets the previous result). A tool is named by its id
+ *  or the first word of its name. Null when the message does not start with one. Words after a later hop's tool are not passed on: every hop gets the first task. */
+export function parseDirective(text: string, tools: Array<{ id: string; name: string }>): { target: string; model?: string; task: string; then: string[] } | null {
+  const find = (word: string) => { const w = parseHop(word.toLowerCase().replace(/[,;.]+$/, '')); const t = tools.find(x => x.id === w.target || x.name.toLowerCase().split(/\s+/)[0] === w.target);
+    return t ? { target: t.id, ...(w.model ? { model: parseHop(word.replace(/[,;.]+$/, '')).model } : {}) } : null; };
+  const head = /^\s*([^\s,:;]+(?::[^\s,;]+)?)[,:;]?\s+([\s\S]+)$/.exec(text), first = head && find(head[1]);
+  if (!head || !first) return null;
+  const hops: string[] = [], hop = /\s+then\s+([^\s,;]+)/gi;
+  let cut = head[2].length, m: RegExpExecArray | null;
+  while ((m = hop.exec(head[2]))) { const t = find(m[1]); if (!t) continue; cut = Math.min(cut, m.index); hops.push(t.model ? `${t.target}:${t.model}` : t.target); }
+  const task = head[2].slice(0, cut).trim();
+  return task ? { ...first, task, then: hops } : null;
+}
 const COST_RANK: Record<Cost, number> = { free: 0, unknown: 1, metered: 2 };
 export interface RankInfo { queued?(id: string): number }   // requests waiting at the target (its model server's queue)
 export function rankTargets<T extends { id: string; cost: Cost }>(items: T[], info: RankInfo = {}): T[] {
