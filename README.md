@@ -94,7 +94,7 @@ Status keeps itself current: running tools and model servers are re-checked ever
 
 - Free before paid; a target big enough for the task (model size from its name; a free one a size smaller may try first); then how its past runs of that kind went (finished, failed, your grades).
 - Research without files goes first to a tool that can search the web (Kilo, Cline, OpenCode and Hermes' researcher do); planning goes to the strongest target.
-- **One local model server at a time:** LM Studio, then llama.cpp, then Ollama; the first one with a model loaded. A server with no model loaded is skipped: Agent Spaghetti never loads a model for you, so the task goes to the next free tool until you load one (Hermes can start its own model when a task needs it).
+- **One local model server at a time:** LM Studio, then llama.cpp, then Ollama; the first one with a model loaded. A server with no model loaded is skipped and the task goes to the next free tool. For LM Studio and Ollama it also asks you (a notification, and a card in the tray) whether to load the model that server ran last, since that uses GPU memory; it loads it only on your yes and asks again about the same server no sooner than 10 minutes later. (Hermes can start its own model when a task needs it.)
 - A tool that would load its own local model isn't picked while another local model is loaded (name it to do that).
 - A busy free agent is passed over for the next one in line, even when you named it (paid ones take several at once).
 - If the chosen target fails or answers nothing, the next one tries, once per chain (paid ones ask first).

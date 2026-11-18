@@ -61,7 +61,9 @@
         "filter": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["field", "in"],
           "properties": { "field": { "type": "string" }, "in": { "type": "array" } } } },
         "context": { "type": "array", "items": { "type": "string" } },
-        "order": { "type": "integer", "minimum": 1, "description": "which local model server is used when several have a model loaded: lowest first, one at a time" }
+        "order": { "type": "integer", "minimum": 1, "description": "which local model server is used when several have a model loaded: lowest first, one at a time" },
+        "load": { "type": "object", "additionalProperties": false, "required": ["path", "body"], "description": "POST that loads a model; {model} in a string of the body is filled in. Agent Spaghetti offers it (asking first: it uses GPU memory) when the server is up with nothing loaded",
+          "properties": { "path": { "type": "string", "pattern": "^/" }, "body": { "type": "object" } } }
       }
     },
     "speaks": {

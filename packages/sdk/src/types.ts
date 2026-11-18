@@ -58,7 +58,8 @@ export interface Manifest {
   uses?: { config: string; model: string; provider?: string; free?: string; keyed?: { file: string; key: string; free: string } };   // the model the tool is set to use: its config file (JSON/JSONC), dotted paths
                                                    // (`{key}` = that key's value at the file's root); free: what a task passes when none is set; keyed: ...unless a key is stored in `file` at `key` (only that it exists is checked), then this free model on that account
   models?: { path?: string; list: string; id: string; filter?: Array<{ field: string; in: Array<string | boolean> }>; context?: string[];
-    order?: number };     // which local model server is used when several have a model loaded (lowest first; one at a time)
+    order?: number;       // which local model server is used when several have a model loaded (lowest first; one at a time)
+    load?: { path: string; body: Record<string, unknown> } };   // POST that loads a model (`{model}` in a string is filled in): offered, with a question first, when the server is up and nothing is loaded
   speaks?: {
     openai?: { base: string; headers?: Record<string, string> };   // headers: {env:NAME} read at request time
     openaiClient?: {                                                 // takes a custom OpenAI endpoint (the gateway): steps with {url} {key}; the tool asks for model `auto`

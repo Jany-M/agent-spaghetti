@@ -36,7 +36,13 @@
     "context": [
       "context_length"
     ],
-    "order": 3
+    "order": 3,
+    "load": {
+      "path": "/api/generate",
+      "body": {
+        "model": "{model}"
+      }
+    }
   },
   "speaks": {
     "openai": {

@@ -96,7 +96,7 @@ export class Gateway {
   private async forward(path: string, body: Record<string, unknown>, c: CallCtx): Promise<typeof WRITTEN> {
     const said = lastUserText(body), what = classify(said);     // recorded under what the user asked for, not as "other"
     const r = resolveRoute(this.d.settings.get('gateway.routes'), c.who, String(body.model ?? AUTO), this.d.runner.targets(), this.d.best?.(c.who, said));
-    if ('error' in r) throw fail(404, r.error);
+    if ('error' in r) { const o = this.d.runner.offerLoad(c.who); throw fail(404, o ? `${r.error}; asked to load ${o.model} in ${o.name}: answer in the Agent Spaghetti tray, then try again` : r.error); }
     const t = this.d.runner.targets().find(x => x.id === r.target)!;
     // a request bigger than the model's loaded context fails at the server with a message about tokens; say what to do instead
     const room = this.d.runner.contextOf(r.target, r.model), need = Math.round(JSON.stringify(body).length / 4);

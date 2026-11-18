@@ -234,3 +234,21 @@ test('cline: JSON mode, plan mode unless edits with a folder, the task as the pr
   assert.deepEqual(clineEvents(JSON.stringify({ type: 'run_result', finishReason: 'max_retries', usage: {} })).at(-1), { type: 'error', message: 'Cline stopped: max_retries' });
   assert.deepEqual(clineEvents('{"type":"error","message":"no key"}'), [{ type: 'error', message: 'no key' }]);
 });
+
+test('offerLoad: a local server up with nothing loaded asks first, loads the last model on a yes, and does not ask again soon', async () => {
+  const none: Snapshot = { ...snap, backends: [], detections: [{ ...det('lmstudio', 'free'), endpoint: 'http://127.0.0.1:1234' }] };
+  const s = setup(none);
+  assert.equal(s.runner.offerLoad('vscode'), null, 'no history: nothing to offer');
+  s.ledger.record({ ts: 1, source: 'vscode', target: 'lmstudio', model: 'gemma:2', kind: 'other', taskHash: 'h', outcome: 'done' });
+  assert.deepEqual(s.runner.offerLoad('vscode'), { name: 'LM Studio', model: 'gemma' }, 'the second instance suffix is dropped');
+  const q = await firstQuestion(s.consent);
+  assert.equal(q.labels?.title, 'Load gemma in LM Studio?');
+  assert.deepEqual(s.host.calls, [], 'nothing is loaded before the answer');
+  assert.deepEqual(s.runner.offerLoad('vscode'), { name: 'LM Studio', model: 'gemma' });
+  s.consent.respond(q.id, true, 'once');
+  for (let i = 0; i < 50 && !s.host.calls.length; i++) await new Promise(r => setTimeout(r, 5));
+  assert.deepEqual(s.host.calls, ['POST http://127.0.0.1:1234/api/v1/models/load']);
+  assert.equal(s.host.inputs['POST http://127.0.0.1:1234/api/v1/models/load'], '{"model":"gemma"}');
+  assert.equal(s.consent.pending().length, 0, 'asked once within the time');
+  assert.equal(setup().runner.offerLoad('vscode'), null, 'a model is loaded: no offer');
+});

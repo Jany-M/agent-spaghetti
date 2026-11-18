@@ -22,6 +22,8 @@ export interface RunnerDeps {
   /** An agent's run in the environment where it was found (core/dispatch.ts runOnEnv). */
   runOn(envId: string, id: string, req: RunRequest, o: { signal: AbortSignal; runId: number }): AsyncIterable<RunEvent>;
 }
+/** The user is not asked again about the same server within this time (every gateway request would ask). */
+const OFFER_AGAIN_MS = 10 * 60_000;
 export interface StartOpts { preapproved?: boolean; engine?(signal: AbortSignal): AsyncIterable<RunEvent>; asked?: string }   // asked: the request as shown and kept (gateway: the user's last message)
 /** What the runner keeps about a hand-off chain while it runs: who asked and where the result goes. */
 export interface Chain { id: number; source: string; returnTo: 'caller' | 'none'; returnSession?: string; parentRunId?: number; watchedAt?: number }
@@ -66,6 +68,7 @@ const INLINE_MS = 5000;   // a caller that polled this recently is still waiting
 
 export class Runner {
   private d: RunnerDeps;
+  private offered = new Map<string, number>();   // server → when the user was last asked to load a model there
   private running = new Map<number, { ac: AbortController; done: Promise<RunRow>; target: string; source: string; chainId: number; at: number }>();
   private retries = new Map<number, string>();                                               // stuck hop → the target that takes it over
   private escalated = new Set<number>();                                                     // chains that already escalated once
@@ -125,7 +128,28 @@ export class Runner {
     // a free agent busy with another task does one at a time: the next one in line takes this one, even when it was named
     const busy = named?.kind === 'agent' && named.cost !== 'metered' && [...this.running.values()].some(r => r.target === named.id);
     if (busy && this.d.route) return this.start(source, await this.d.route(source, { ...req, target: AUTO }, [named.id]).catch(() => req), o);
+    if (!named) this.offerLoad(source);
     return this.start(source, named || !this.d.route ? req : await this.d.route(source, req), o);
+  }
+  /** A local model server is up with nothing loaded: ask the user (it takes GPU memory) to load the model it ran last, and load it on a yes.
+   *  Never waits: the caller carries on (another tool, or an error saying a question is waiting) and the next scan finds the model. */
+  offerLoad(source: string): { name: string; model: string } | null {
+    const snap = this.d.snapshot(), host = this.d.host(), all = this.d.integrations(), local = (id: string) => all.find(x => x.manifest.id === id)?.manifest.models?.order;
+    if (!snap || !host || snap.backends.some(b => local(b.integration))) return null;   // a local server has a model loaded
+    const i = all.filter(x => x.manifest.models?.load && snap.detections.some(d => d.integration === x.manifest.id && d.endpoint)).sort((a, b) => local(a.manifest.id)! - local(b.manifest.id)!)[0];
+    const last = i && this.d.ledger.list({ target: i.manifest.id, limit: 30 }).find(r => r.model)?.model?.replace(/:\d+$/, '');   // `:2` = a second instance of the same model
+    if (!i || !last) return null;
+    const recently = Date.now() - (this.offered.get(i.manifest.id) ?? 0) < OFFER_AGAIN_MS;
+    if (!recently) {
+      this.offered.set(i.manifest.id, Date.now());
+      const { path, body } = i.manifest.models!.load!, endpoint = snap.detections.find(d => d.integration === i.manifest.id)!.endpoint!;
+      void this.d.consent.request({ subject: source, action: 'config', resource: `load ${last} in ${i.manifest.name}`, scopes: ['once'], timeoutMs: this.d.settings.get('consent.timeoutSec') * 1000,
+        labels: { title: `Load ${last} in ${i.manifest.name}?`, once: 'Load it', deny: 'Not now' },
+        why: `${i.manifest.name} is running with no model loaded, so ${source}'s request has no model to use. ${last} was the last one used here; loading it uses your GPU memory.` })
+        .then(async a => { if (a.answer === 'granted') await host.http({ method: 'POST', url: endpoint + path, headers: { 'content-type': 'application/json' }, timeoutMs: 300_000,
+          body: JSON.stringify(body, (_, v) => (typeof v === 'string' ? v.replaceAll('{model}', last) : v)) }); });
+    }
+    return { name: i.manifest.name, model: last };
   }
   cancel(id: number, why = 'cancelled'): boolean { const r = this.running.get(id); r?.ac.abort(new Error(why)); return !!r; }
   /** Runs in progress and when each last showed progress (the dispatcher's watchdog). */

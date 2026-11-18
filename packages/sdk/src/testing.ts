@@ -23,7 +23,7 @@ export function fakeEnv(s: FakeSpec = {}): Environment & { calls: string[]; inpu
   return {
     calls, inputs, id: s.id ?? 'windows', kind: s.kind ?? 'windows',
     async exec(cmd, args, o) { calls.push(['exec', cmd, ...args].join(' ')); if (o?.input !== undefined) inputs[[cmd, ...args].join(' ')] = String(o.input); return s.exec?.[[cmd, ...args].join(' ')] ?? { code: 127, stdout: '', stderr: 'not found' }; },
-    async http(req) { const m = req.method ?? 'GET'; calls.push(`${m} ${req.url}`); return s.http?.[`${m} ${req.url}`] ?? (m === 'GET' ? s.http?.[req.url] : undefined) ?? null; },
+    async http(req) { const m = req.method ?? 'GET'; calls.push(`${m} ${req.url}`); if (req.body !== undefined) inputs[`${m} ${req.url}`] = req.body; return s.http?.[`${m} ${req.url}`] ?? (m === 'GET' ? s.http?.[req.url] : undefined) ?? null; },
     execLines: (cmd, args, o) => { const k = [cmd, ...args].join(' '); calls.push(`lines ${k}`); if (typeof o?.input === 'string') inputs[k] = o.input; return replay(s.lines?.[k], k); },
     httpLines: req => { const k = `${req.method ?? 'GET'} ${req.url}`; calls.push(`lines ${k}`); if (req.body !== undefined) inputs[k] = req.body; return replay(s.lines?.[k], k); },
     async writeFile(p, c) { calls.push(`write ${p}`); (s.files ??= {})[p] = c; },

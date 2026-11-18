@@ -59,7 +59,13 @@
       "loaded_context_length",
       "max_context_length"
     ],
-    "order": 1
+    "order": 1,
+    "load": {
+      "path": "/api/v1/models/load",
+      "body": {
+        "model": "{model}"
+      }
+    }
   },
   "speaks": {
     "openai": {
