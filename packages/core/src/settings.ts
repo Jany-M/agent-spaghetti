@@ -17,6 +17,7 @@ export const SETTINGS = {
   'consent.timeoutSec': { default: 120, help: 'Seconds a delegation waits for your answer before it is denied' },
   'tools.cost': { default: [] as string[], help: 'What a tool costs when you know better than the scan: <tool>=free|metered|unknown (Tools → the tool → Cost). Paid and unknown ones ask before use' },
   'delegate.deadlineSec': { default: 1800, help: 'Longest a delegated run may take' },
+  'agents.use': { default: [] as string[], help: 'A tool\'s own agents (e.g. Hermes profiles) to use or not: <tool>:<agent>=on|off. Without an entry, agents on a paid provider or a local model of their own are off, the rest on (Tools → the tool)' },
   'delegate.models': { default: [] as string[], help: 'The model (or agent) an agent target uses when a task names none, instead of the tool\'s own default: <target>=<model>, or for one task kind or difficulty <target>:<kind|difficulty>=<model> (e.g. <agent>:research=<its researcher agent>, <agent>:heavy=<its strongest model>)' },
   'delegate.maxHops': { default: 8, help: 'Most hand-offs in one chain (hops plus nested delegations); stops loops' },
   'dispatcher.model': { default: '', help: 'Model the dispatcher thinks with: <target>:<model> from targets (empty = off: auto hand-offs go to the best-ranked target)', choices: { from: 'models', extra: [''] } },

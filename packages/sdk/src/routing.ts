@@ -1,6 +1,6 @@
 // Routing (ADR 0010): JEV's classification of a task, the plain target ranking (free before unknown before metered, then the least
 // queued) and the ranking for one task (route). No tool is preferred by name: among equals the input order (the scan's) stays.
-import type { Classification, Cost, Detection, Difficulty, RunRequest, RunRow, Target, TaskKind } from './types.ts';
+import type { AgentInfo, Classification, Cost, Detection, Difficulty, RunRequest, RunRow, Target, TaskKind } from './types.ts';
 import { DIFFICULTIES, TASK_KINDS } from './types.ts';
 import JEV from './jev-defaults.json' with { type: 'json' };
 /** The shipped defaults (word lists, thresholds, routing data), shown read-only in the Routing panel. */
@@ -69,6 +69,18 @@ export function tierOf(t: Pick<Target, 'id' | 'kind' | 'cost' | 'models'>, tiers
   const b = model ? modelSize(model) : null;
   return b === null ? 'medium' : b <= R.lightMaxB ? 'light' : b <= R.mediumMaxB ? 'medium' : 'heavy';
 }
+/** A model id that names a provider's free variant: OpenRouter's `:free` suffix (openrouter.ai/docs, model variants), a `/free` route
+ *  such as an agent's `<vendor>-auto/free` or OpenRouter's `openrouter/free` router (checked 2026-11-18). */
+export const freeModel = (id = '') => /(:|\/)free$/i.test(id);
+/** One of a tool's agents is used when the owner's setting agents.use says so (`<agent id>=on|off`, e.g. `<tool>:<agent>=on`), else
+ *  unless its tool marks it off. */
+export const agentOn = (a: Pick<AgentInfo, 'id' | 'off'>, use: string[] = []) => {
+  const set = use.find(x => x.startsWith(`${a.id}=`))?.slice(a.id.length + 1);
+  return set ? set === 'on' : !a.off;
+};
+/** For a tool whose own default would load a local model of its own (`loads`): its first agent in use that does not spend a paid
+ *  account, which takes its tasks instead. */
+export const fallbackAgent = (t: Pick<Target, 'kind' | 'models' | 'costs' | 'cost'>) => t.kind === 'agent' ? t.models.find(m => (t.costs?.[m] ?? t.cost) !== 'metered') : undefined;
 /** The owner's model for an agent target (`delegate.models`, `<target>[:<kind>|:<difficulty>]=<model>`): the most specific entry,
  *  kind before difficulty before the plain one (e.g. `<agent>:research=<its researcher>`, `<agent>:heavy=<its strongest model>`). */
 export function ownModel(list: string[], target: string, kind?: string, difficulty?: string): string | undefined {
@@ -123,7 +135,7 @@ export function route(c: { kind: TaskKind; difficulty: Difficulty; edits?: boole
     const preferred = prefer.includes(t.id) && !busy;
     const skip = t.id === o.source ? 'the caller itself' : never.includes(t.id) ? `never for ${c.kind} (your choice)`
       : c.edits && t.kind !== 'agent' ? 'edits files: needs an agent'
-      : t.loads && loaded && !preferred && !ownModel(o.models ?? [], t.id, c.kind, c.difficulty) ? `would load ${t.loads} while ${loaded.name} has a model loaded (name it as the target to do that)` : undefined;
+      : t.loads && loaded && !preferred && !ownModel(o.models ?? [], t.id, c.kind, c.difficulty) && !fallbackAgent(t) ? `would load ${t.loads} while ${loaded.name} has a model loaded (name it as the target to do that)` : undefined;
     const fit = level(tier) >= need ? 0 : stretch && t.cost === 'free' && level(tier) === need - 1 ? 1 : 2;
     const offline = !!o.web && !t.web, paid = t.cost === 'metered';
     const history = o.learn && s && s.runs >= R.minRuns ? s.rate : 0.5;      // unknown sits between a good and a bad record

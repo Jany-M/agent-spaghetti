@@ -6,8 +6,8 @@
 // generic `-- <command…>` form of speaks.mcpCli does not fit it), so the module does it. The real cause of earlier probe failures
 // was the spawned probe child not finding the daemon (env/discovery), not path separators; no backslash conversion is applied.
 // It asks "enable all tools?" on stdin; the add sequence feeds `Y` explicitly. Identity: shared server name 'agent-spaghetti' with '--as hermes'.
-import type { Environment, IntegrationModule, RunEvent, RunRequest } from '@agent-spaghetti/sdk';
-import { parseJson, programOf } from '@agent-spaghetti/sdk';
+import type { AgentInfo, Environment, IntegrationModule, RunEvent, RunRequest } from '@agent-spaghetti/sdk';
+import { freeModel, parseJson, programOf } from '@agent-spaghetti/sdk';
 
 const SERVER_NAME = 'agent-spaghetti';
 const CONFIG = '%LOCALAPPDATA%/hermes/config.yaml';
@@ -37,10 +37,17 @@ const provider = (yaml: string | null) => modelKey(yaml, 'provider');
  *  (docs: hermes-agent.nousresearch.com/docs/reference/profile-commands, checked 2026-11-18). */
 const PROFILES = CONFIG.replace(/config\.yaml$/, 'profiles/*/config.yaml');
 const profileOf = (path: string) => path.replaceAll('\\', '/').split('/').at(-2) ?? '';
-async function profiles(env: Environment): Promise<Array<{ name: string; model: string; provider: string }>> {
+async function profiles(env: Environment): Promise<Array<{ name: string; model: string; provider: string; local: boolean }>> {
   const paths = (await env.globAll(PROFILES).catch(() => [])).filter(p => !profileOf(p).startsWith('.'));   // '.deleted': Hermes' bin
-  return Promise.all(paths.map(async p => { const y = await env.readFile(p).catch(() => null); return { name: profileOf(p), model: modelKey(y, 'default'), provider: provider(y) }; }));
+  return Promise.all(paths.map(async p => { const y = await env.readFile(p).catch(() => null);
+    return { name: profileOf(p), model: modelKey(y, 'default'), provider: provider(y), local: !!localModel(y) }; }));
 }
+/** A profile as one of Hermes' agents: free when its model is a provider's free variant (freeModel) or runs on this machine; on by
+ *  default only with a free remote model (a local one would load beside another model; a paid one spends the owner's account). */
+export const profileAgent = (p: { name: string; model: string; provider: string; local: boolean }, envId: string): AgentInfo => ({
+  id: `hermes:${p.name}`, integration: 'hermes', name: p.name, envId, ...(p.model ? { model: p.model } : {}), ...(p.provider ? { provider: p.provider } : {}),
+  cost: p.local || freeModel(p.model) ? 'free' : 'metered',
+  ...(p.local ? { off: 'runs a local model of its own' } : freeModel(p.model) ? {} : { off: `a paid provider (${p.provider || 'its own'})` }) });
 const LLAMACPP = ['llamacpp', 'llama.cpp', 'llama-cpp'];           // Hermes' names for its own managed server (hermes_cli/local_runtime/endpoint.py)
 const MANAGED_URL = 'http://127.0.0.1:18434/v1';                  // where that server listens when config.yaml names no base_url (Hermes' default port)
 /** Hermes' local model as Agent Spaghetti uses it: on this machine (free), and whether Hermes itself can start its server. Either
@@ -81,8 +88,7 @@ export const hermesModule: IntegrationModule = {
    *  `loads`: its managed model is not in memory now, so a task loads it (routing keeps that away from another loaded model: two
    *  local models at once ran the test machine out of memory, 2026-11-05). */
   async inspect(env, base) {
-    const agents = (await profiles(env)).map(p => ({ id: `hermes:${p.name}`, integration: 'hermes', name: p.name, envId: env.id,
-      ...(p.model ? { model: p.model } : {}), ...(p.provider ? { provider: p.provider } : {}) }));
+    const agents = (await profiles(env)).map(p => profileAgent(p, env.id));
     base = { ...base, agents: [...base.agents, ...agents] };
     const local = localModel(await env.readFile(CONFIG).catch(() => null));
     if (!local) return base;

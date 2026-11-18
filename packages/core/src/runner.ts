@@ -4,8 +4,8 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ConsentScope, Delivery, Environment, Integration, RunEvent, RunOutcome, RunRequest, RunRow, Snapshot, Target } from '@agent-spaghetti/sdk';
-import { AUTO, classifyRequest, envPath, ownModel, parseHop, programOf, runDecision, withGrants } from '@agent-spaghetti/sdk';
+import type { AgentInfo, ConsentScope, Delivery, Environment, Integration, RunEvent, RunOutcome, RunRequest, RunRow, Snapshot, Target } from '@agent-spaghetti/sdk';
+import { AUTO, agentOn, classifyRequest, fallbackAgent, envPath, ownModel, parseHop, programOf, runDecision, withGrants } from '@agent-spaghetti/sdk';
 import type { Bus } from './bus.ts';
 import type { Consent } from './consent.ts';
 import type { Ledger } from './ledger.ts';
@@ -27,7 +27,7 @@ export interface StartOpts { preapproved?: boolean; engine?(signal: AbortSignal)
 export interface Chain { id: number; source: string; returnTo: 'caller' | 'none'; returnSession?: string; parentRunId?: number; watchedAt?: number }
 /** What `delegate` can use right now on this machine (from the last scan). Models: servers the host reaches. Agents: tools that speak
  *  ACP, have a run hook or take tasks in their chat, in a running environment where their own program was found (the host first); `models` lists their agents. */
-export function targets(d: Pick<RunnerDeps, 'host' | 'snapshot' | 'integrations'>): Target[] {
+export function targets(d: Pick<RunnerDeps, 'host' | 'snapshot' | 'integrations'> & { settings?: Settings }): Target[] {
   const snap = d.snapshot(), hostId = d.host()?.id;
   if (!snap || !hostId) return [];
   const byId = new Map(d.integrations().map(i => [i.manifest.id, i]));
@@ -42,7 +42,7 @@ export function targets(d: Pick<RunnerDeps, 'host' | 'snapshot' | 'integrations'
     if (sp?.openai && models.length) out.push({ id: det.integration, name: det.name, kind: 'model', cost: det.cost, envId: hostId, models, engine: 'openai', resumable: false });
     else if (engine && running.has(det.envId) && programOf(det, (sp?.acp ?? (engine === 'chat' ? sp?.chat : undefined))?.command[0] ?? i.manifest.detect?.bin?.[0]))
       out.push({ id: det.integration, name: det.name, kind: 'agent', cost: det.cost, envId: det.envId, engine, resumable: engine === 'acp' || (engine === 'module' && !!i.module?.resumes), ...extra,
-        models: snap.agents.filter(a => a.integration === det.integration && a.envId === det.envId).map(a => a.id.slice(det.integration.length + 1)) });
+        ...agentsOf(det.integration, snap.agents.filter(a => a.integration === det.integration && a.envId === det.envId && agentOn(a, d.settings?.get('agents.use')))) });
   }
   // one local model server at a time (two loaded models ran the owner's machine out of memory): the first by its manifest's
   // `models.order` among the free ones with a model loaded; a paid (remote) model server is not held back
@@ -50,6 +50,10 @@ export function targets(d: Pick<RunnerDeps, 'host' | 'snapshot' | 'integrations'
   return out.filter(t => t.kind !== 'model' || t.cost !== 'free' || t === local[0]);
 }
 
+/** A tool's agents as its target lists them (the owner's agents.use already applied): names, and those that cost other than the tool. */
+const agentsOf = (tool: string, list: AgentInfo[]) => { const name = (a: AgentInfo) => a.id.slice(tool.length + 1);
+  const costs = Object.fromEntries(list.filter(a => a.cost).map(a => [name(a), a.cost!]));
+  return { models: list.map(name), ...(Object.keys(costs).length ? { costs } : {}) }; };
 const SCOPES = (jobId?: string): ConsentScope[] => (jobId ? ['once', 'job', 'always'] : ['once', 'always']);
 /** The task with what travels with it: the previous step's result and the files meant. */
 const withContext = (req: RunRequest) => [req.task, req.context && `## Context from the previous step\n${req.context}`,
@@ -81,7 +85,8 @@ export class Runner {
     const kind = c.kind;
     // the owner's model for this agent and task (delegate.models: by kind, then difficulty)
     const own = t.kind === 'agent' && !req.model ? ownModel(this.d.settings.get('delegate.models'), t.id, kind, c.difficulty) : undefined;
-    if (own) req = { ...req, model: own };
+    if (own && (!t.models.length || t.models.includes(own))) req = { ...req, model: own };   // one of its agents that is off: its own default
+    else if (!req.model && t.loads) { const free = fallbackAgent(t); if (free) req = { ...req, model: free }; }   // its default would load a local model: one of its free agents
     if (req.model && t.models.length && !t.models.includes(req.model))
       throw new Error(`${t.name} has no ${t.kind === 'model' ? 'loaded model' : 'agent'} ${req.model} (${t.kind === 'model' ? 'loaded' : 'agents'}: ${t.models.join(', ')})`);
     // An agent that delegates while it runs a delegated task works on that task (one such run: it is the parent).
@@ -182,13 +187,13 @@ export class Runner {
       this.emit('run.finished', id, { outcome, target: t.id, error: patch.error ?? null, chainId: req.chainId });
       return this.d.ledger.get(id)!;
     };
-    const s = this.d.settings;
+    const s = this.d.settings, cost = (req.model && t.costs?.[req.model]) || t.cost;   // one of its agents on a paid provider asks first
     const decision = o.preapproved ? { mode: 'allow' as const, why: 'a result going back to its caller' }
-      : runDecision(s.grants(), source, t.id, t.cost, { jobId: req.jobId, spentUsd: g => this.d.ledger.spentUsd(g) });
+      : runDecision(s.grants(), source, t.id, cost, { jobId: req.jobId, spentUsd: g => this.d.ledger.spentUsd(g) });
     if (decision.mode === 'deny') return finish('denied', { error: decision.why });
     if (decision.mode === 'ask') {
-      const a = await this.d.consent.request({ subject: source, action: 'run', resource: t.id, task: withContext(req), cost: t.cost, scopes: SCOPES(req.jobId),
-        why: `${req.reason ?? 'no reason given'} (${decision.why})`, billing: t.cost === 'free' ? undefined : `uses your ${t.name} account or plan`,
+      const a = await this.d.consent.request({ subject: source, action: 'run', resource: t.id, task: withContext(req), cost, scopes: SCOPES(req.jobId),
+        why: `${req.reason ?? 'no reason given'} (${decision.why})`, billing: cost === 'free' ? undefined : `uses your ${t.name} account or plan`,
         timeoutMs: s.get('consent.timeoutSec') * 1000, signal: ac.signal });
       if (ac.signal.aborted) return finish('cancelled', { error: 'cancelled' });
       if (a.answer !== 'granted') return finish(a.answer, { error: a.answer === 'denied' ? 'denied by the user' : 'no answer in time (questions wait in the Agent Spaghetti tray)' });

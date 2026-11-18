@@ -51,11 +51,11 @@ const det = (integration: string, cost: 'free' | 'metered', envId = 'windows', i
   ({ integration, name: integration, envId, installs, levels: [], cost, connectable: 'yes' as const, why: '' });
 const snap: Snapshot = { ts: 1, envs: [{ id: 'windows', state: 'running' }], agents: [], rejected: [], detections: [det('lmstudio', 'free'), det('paid-agent', 'metered')],
   backends: [{ id: 'b', integration: 'lmstudio', model: 'm', envId: 'windows', endpoint: 'http://127.0.0.1:1234', reachableFrom: ['windows'] }] };
-function setup() {
+function setup(sn: Snapshot = snap) {
   const store = new Store(':memory:'), bus = new Bus(store), consent = new Consent(bus), settings = new Settings(store), ledger = new Ledger(store);
   const host = fakeEnv({ lines: { 'POST http://127.0.0.1:1234/v1/chat/completions': ['data: {"choices":[{"delta":{"content":"He"}}]}', 'data: {"choices":[{"delta":{"content":"llo"}}]}', 'data: [DONE]'] } });
   const resultsDir = mkdtempSync(join(tmpdir(), 'as-res-'));
-  const runner = new Runner({ bus, consent, ledger, settings, resultsDir, host: () => host, snapshot: () => snap, integrations: () => [lms, agent],
+  const runner = new Runner({ bus, consent, ledger, settings, resultsDir, host: () => host, snapshot: () => sn, integrations: () => [lms, agent],
     runOn: (envId, id, req, o) => agent.module!.run!(host, det(id, 'metered', envId), req, { ...o, inventory: { installed: [], processes: [], listening: [], env: {}, partial: [] } }) });
   return { store, bus, consent, settings, ledger, runner, resultsDir, host };
 }
@@ -77,6 +77,26 @@ test('targets: loaded models the host reaches; agents with run() where their pro
   const local = (ints: Integration[], sn: Snapshot) => targets({ host: () => s.host, snapshot: () => sn, integrations: () => ints }).map(x => x.id);
   assert.deepEqual(local([llama, lms], two), ['lmstudio'], 'two local model servers with a model loaded: one is used (models.order: LM Studio first)');
   assert.deepEqual(local([llama, lms], { ...two, backends: [two.backends[0]] }), ['llamacpp'], 'the next one when the first has no model loaded');
+  // a tool's own agents: one marked off (paid provider, own local model) is left out unless the owner turns it on; its cost travels
+  const own: Snapshot = { ...wsl, detections: [det('paid-agent', 'free', 'wsl:T')], agents: [{ id: 'paid-agent:main', integration: 'paid-agent', name: 'Main', envId: 'wsl:T' },
+    { id: 'paid-agent:pro', integration: 'paid-agent', name: 'Pro', envId: 'wsl:T', cost: 'metered', off: 'a paid provider' }] };
+  const of = (use: string) => { s.settings.setText('agents.use', use); return targets({ host: () => s.host, snapshot: () => own, integrations: () => [agent], settings: s.settings }).map(x => [x.models.join(), JSON.stringify(x.costs ?? {})]); };
+  assert.deepEqual(of(''), [['main', '{}']]);
+  assert.deepEqual(of('paid-agent:pro=on, paid-agent:main=off'), [['pro', '{"pro":"metered"}']], 'the owner\'s say-so both ways');
+});
+test('runner: one agent of a free tool on a paid provider asks first, like a paid tool', async () => {
+  const s = setup({ ...snap, detections: [det('paid-agent', 'free')], agents: [{ id: 'paid-agent:pro', integration: 'paid-agent', name: 'Pro', envId: 'windows', cost: 'metered' }] });
+  const { done } = s.runner.start('cursor', { target: 'paid-agent', task: 'x', model: 'pro' });
+  assert.equal((await firstQuestion(s.consent)).cost, 'metered');
+  await answerNext(s.consent, false);
+  assert.equal((await done).outcome, 'denied');
+  assert.equal((await s.runner.start('cursor', { target: 'paid-agent', task: 'y' }).done).outcome, 'done', 'the tool itself: free, no question');
+});
+test('runner: a tool whose own default would load a local model of its own gives the task to its first free agent', async () => {
+  const s = setup({ ...snap, detections: [{ ...det('paid-agent', 'free'), loads: 'its own local model' }],
+    agents: [{ id: 'paid-agent:pro', integration: 'paid-agent', name: 'Pro', envId: 'windows', cost: 'metered' }, { id: 'paid-agent:lite', integration: 'paid-agent', name: 'Lite', envId: 'windows' }] });
+  s.settings.setText('agents.use', 'paid-agent:pro=on');
+  assert.equal((await s.runner.start('cursor', { target: 'paid-agent', task: 'y' }).done).model, 'lite');
 });
 test('runner: free model runs at once; result file + sha; the prompt never reaches the database', async () => {
   const s = setup();

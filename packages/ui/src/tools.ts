@@ -7,8 +7,8 @@ import { useAct, useOp } from './hooks.ts';
 
 export type Preference = NonNullable<ToolRow['preference']>;
 const COST_LABEL: Record<Cost, string> = { free: 'free', metered: 'paid', unknown: 'unknown' };
-/** The setting tools.cost with one tool's cost set, or cleared (''). */
-export const costList = (list: string[], id: string, cost: Cost | '') => [...list.filter(x => !x.startsWith(`${id}=`)), ...(cost ? [`${id}=${cost}`] : [])];
+/** A `<id>=<value>` list setting (tools.cost, agents.use) with one entry set, or cleared (''). */
+export const costList = (list: string[], id: string, value: string) => [...list.filter(x => !x.startsWith(`${id}=`)), ...(value ? [`${id}=${value}`] : [])];
 const PREF_LABEL: Record<Preference, string> = { ask: 'Ask at start', always: 'Always connect', never: "Don't connect" };
 export interface Output { ok: boolean | null; lines: string[] }
 /** Per-environment results (test, setup) as one output block. */
@@ -24,6 +24,7 @@ export interface ToolsProps {
   onSetup(id: string, o: { check?: boolean; dryRun?: boolean }): void;
   onSwitch(s: Switch, on: boolean): void; onGrant(id: string, a: DeclaredAction, mode: Mode | null): void;
   onModel(id: string, model: string): void; onKey(id: string, create: boolean): void; onGatewayTest(id: string): void; onCost(id: string, cost: Cost | ''): void;
+  onAgent(id: string, on: boolean): void;              // one of a tool's own agents used or not (agents.use)
 }
 
 function Row({ r, p }: { r: ToolRow; p: ToolsProps }) {
@@ -50,6 +51,10 @@ function Row({ r, p }: { r: ToolRow; p: ToolsProps }) {
     r.parts ? h('div', { className: 'parts' }, ...r.parts.map(x => h('span', { key: x.path, className: `part${r.uses === x.kind ? ' used' : ''}`, title: `${x.path}${r.uses === x.kind
       ? (x.kind === 'cli' ? '\nAgent Spaghetti runs tasks through this program' : '\nAgent Spaghetti works with this program') : ''}${x.inApp ? '\nIt comes with the app: uninstalling the app removes it' : ''}` }, partLabel(x, r.uses)))) : null,
     h('div', { className: 'why' }, [r.why, r.envs.join(', ')].filter(Boolean).join(' · ')),
+    r.agents ? h('div', { className: 'sub' }, h('h3', null, 'Its agents'), ...r.agents.map(a =>
+      h('label', { key: a.id, className: 'check', title: a.off ? `Off unless you turn it on: ${a.off}` : 'Used for tasks' },
+        h('input', { type: 'checkbox', checked: a.on, disabled: busy, onChange: () => p.onAgent(a.id, !a.on) }),
+        ` ${a.name}${a.model ? ` · ${a.model}` : ''}${a.cost ? ` · ${COST_LABEL[a.cost]}` : ''}${a.off && !a.on ? ` (${a.off})` : ''}`))) : null,
     h('div', { className: 'row' },
       r.connection ? h('button', { className: r.connection === 'connected' ? '' : 'allow', disabled: busy, onClick: () => p.onConnect(r.id, r.connection !== 'connected') },
         r.connection === 'connected' ? 'Disconnect' : 'Connect') : null,
@@ -124,6 +129,7 @@ export function ToolsPanel({ bridge }: { bridge: Bridge }) {
     rows, busy, error: error ?? tools.error, closed, output, details, gatewayUrl: gateway.data?.url ?? null,
     models: (targets.data ?? []).filter(t => t.kind === 'model').flatMap(t => t.models.map(m => `${t.id}:${m}`)),
     onCost: (id, cost) => act(`cost ${id}`, async () => { await bridge.call('setting', { key: 'tools.cost', value: costList((settings.data?.['tools.cost']?.value as string[]) ?? [], id, cost).join(',') }); await settings.reload(); }),
+    onAgent: (id, on) => act(`agent ${id}`, async () => { await bridge.call('setting', { key: 'agents.use', value: costList((settings.data?.['agents.use']?.value as string[]) ?? [], id, on ? 'on' : 'off').join(',') }); await Promise.all([settings.reload(), tools.reload()]); }),
     onModel: (id, model) => act(`model ${id}`, () => bridge.call('gatewayClient', { integration: id, model })),
     onGatewayTest: id => act(`gateway ${id}`, async () => { const r = (await bridge.call('gatewayClient', { integration: id, test: true })).test!; show(id, { ok: r.ok, lines: r.lines }); }),
     onKey: (id, create) => act(`key ${id}`, async () => {

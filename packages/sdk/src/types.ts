@@ -88,7 +88,9 @@ export interface Detection {
   unready?: string;      // agents: why it cannot take tasks now (e.g. the model server it uses is down); not a target until a scan finds it ready
   loads?: string;        // agents: a task would load this local model of its own, not loaded now (routing: never beside another loaded model)
 }
-export interface AgentInfo { id: string; integration: string; name: string; envId: string; provider?: string; model?: string; endpoint?: string; isDefault?: boolean }
+export interface AgentInfo { id: string; integration: string; name: string; envId: string; provider?: string; model?: string; endpoint?: string; isDefault?: boolean;
+  cost?: Cost;           // what a task given this agent costs, when it differs from its tool's (e.g. one agent on a paid provider)
+  off?: string }         // why it is not used unless the owner turns it on (setting agents.use): a paid provider, a local model it would load
 export interface BackendInfo { id: string; integration: string; model: string; envId: string; endpoint: string; contextLength?: number; reachableFrom: string[] }
 export interface Inspection { detection: Detection; agents: AgentInfo[]; backends: BackendInfo[] }
 export interface EnvStatus { id: string; state: 'running' | 'stopped' | 'error'; why?: string; partial?: string[] }
@@ -158,6 +160,7 @@ export type Delivery = 'inline' | 'resumed' | 'injected' | 'unread' | 'read';
 /** Something `delegate` can hand a task to: a local model server (OpenAI API) or an agent with a run hook.
  *  `engine`: how its runs are made; `resumable`: a run can continue one of its sessions (results can go back into it). */
 export interface Target { id: string; name: string; kind: 'model' | 'agent'; cost: Cost; envId: string; models: string[]; engine: 'openai' | 'acp' | 'module' | 'chat'; resumable: boolean;
+  costs?: Record<string, Cost>;   // agents (in models) whose cost is not the tool's
   web?: true;            // it can look things up online (manifest `abilities`)
   loads?: string }       // Detection.loads
 export interface Ctx { signal: AbortSignal; inventory: Inventory; pollMs?: number; runId?: number }   // runId: set for run(), so nested delegations link to it

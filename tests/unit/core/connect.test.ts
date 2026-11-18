@@ -234,7 +234,11 @@ test('hermes profiles: each is one of its agents (model, provider); a task namin
   const env = fakeEnv({ files: { [`${root}/config.yaml`]: 'model:\n  default: big\n', [`${root}/profiles/researcher/config.yaml`]: 'model:\n  # note\n  default: "r/m:free"\n  provider: "openrouter"\n',
     [`${root}/profiles/.deleted/config.yaml`]: 'model:\n  default: x\n' }, lines: { [`${exe} -p researcher ${base}`]: ['{"type":"result","exit_code":0,"text":"ok","tokens":{}}'] } });
   const i = await hermesModule.inspect!(env, { detection: det, agents: [], backends: [] }, {} as never);
-  assert.deepEqual(i.agents, [{ id: 'hermes:researcher', integration: 'hermes', name: 'researcher', envId: 'windows', model: 'r/m:free', provider: 'openrouter' }], 'Hermes\' deleted-profiles bin is left out');
+  assert.deepEqual(i.agents, [{ id: 'hermes:researcher', integration: 'hermes', name: 'researcher', envId: 'windows', model: 'r/m:free', provider: 'openrouter', cost: 'free' }], 'Hermes\' deleted-profiles bin is left out');
+  const { profileAgent } = await import('../../../integrations/hermes/index.ts');
+  const p = (model: string, provider: string, local = false) => { const a = profileAgent({ name: 'x', model, provider, local }, 'windows'); return [a.cost, a.off]; };
+  assert.deepEqual([p('claude-sonnet-5-5', 'anthropic'), p('q-27b', 'llamacpp', true), p('openrouter/free', 'openrouter')],
+    [['metered', 'a paid provider (anthropic)'], ['free', 'runs a local model of its own'], ['free', undefined]], 'on by default: free remote models only');
   const out = []; for await (const e of hermesModule.run!(env, det, { target: 'hermes', task: 't', model: 'researcher' }, { signal: new AbortController().signal } as never)) out.push(e);
   assert.deepEqual(out.at(-1), { type: 'done', result: 'ok' });
 });

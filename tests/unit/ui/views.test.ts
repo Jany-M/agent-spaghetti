@@ -58,7 +58,7 @@ test('tools panel: blocks by type with counts, found first, missing folded; clie
   const { ToolsView, preferenceLists } = await import('@agent-spaghetti/ui');
   const row = (id: string, o: Record<string, unknown>) => ({ id, name: id.toUpperCase(), group: 'apps', source: 'builtin', levels: [], envs: ['windows'], state: 'installed', why: 'w', asks: 0, ...o }) as never;
   const props = { busy: null, error: null, closed: new Set(['apps', 'models']), output: { ed: { ok: true, lines: ['OK    detect'] }, cur: { ok: false, lines: ['FAIL  x'] } }, details: {},
-    onToggleGroup: noop, onExpand: noop, onConnect: noop, onPreference: noop, onTest: noop, onSkip: noop, onSwitch: noop, onGrant: noop, onSetup: noop, onModel: noop, onKey: noop, onGatewayTest: noop, onCost: noop, gatewayUrl: null, models: ['lms:m1'],
+    onToggleGroup: noop, onExpand: noop, onConnect: noop, onPreference: noop, onTest: noop, onSkip: noop, onSwitch: noop, onGrant: noop, onSetup: noop, onModel: noop, onKey: noop, onGatewayTest: noop, onCost: noop, onAgent: noop, gatewayUrl: null, models: ['lms:m1'],
     rows: [row('oc', { group: 'agents', setup: true, cost: { is: 'metered', set: true } }), row('ed', { connection: 'not connected', preference: 'ask', asks: 1, gateway: { model: 'auto', key: false, auto: false, ready: false } }), row('cur', { connection: 'connected', preference: 'always' }),
       row('lms', { group: 'models', state: 'ready', receives: 'acp' }), row('gone', { state: 'not found' })] };
   const a = html(h(ToolsView, props));
@@ -78,6 +78,8 @@ test('tools panel: blocks by type with counts, found first, missing folded; clie
   assert.match(auto, />gateway not set up<\/span>.*?>Set up gateway<\/button>.*?>Test gateway<\/button>/s, 'a tool that takes the gateway by itself: set up by connecting, no key to copy');
   assert.doesNotMatch(auto, /Revoke key|Use the gateway/);
   assert.match(a, /LMS<\/span>.*?<span class="state ready" title="Tasks can be handed to it now">takes tasks \(ACP\)<\/span>/s);
+  const ag = html(h(ToolsView, { ...props, rows: [row('hm', { group: 'agents', agents: [{ id: 'hm:r', name: 'r', model: 'x:free', cost: 'free', on: true }, { id: 'hm:c', name: 'c', model: 'p', cost: 'metered', on: false, off: 'a paid provider (p)' }] })] }));
+  assert.match(ag, /Its agents.*?checked=""\/> r · x:free · free.*?<input type="checkbox"\/> c · p · paid \(a paid provider \(p\)\)/s, 'a tool\'s own agents: on, or off and why');
   assert.match(a, /OC<\/span>.*?>Set up<\/button>.*?>Dry run<\/button>.*?>Check<\/button>/s, 'tools with setup offer it');
   assert.ok(!/ED<\/span>.*?>Set up</s.test(a.slice(a.indexOf('ED</span>'), a.indexOf('CUR</span>'))));
   assert.deepEqual(preferenceLists(['a', 'x'], ['x'], 'x', 'never'), { 'connect.auto': ['a'], 'connect.never': ['x'] });

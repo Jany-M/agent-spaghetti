@@ -3,6 +3,7 @@ import type { AgentInfo, BackendInfo, Cost, Delivery, Install, Level, Role, RunR
 import { AUTO } from './types.ts';
 import type { LiveState } from './state.ts';
 import type { Saved } from './routing.ts';
+import { agentOn } from './routing.ts';
 import type { ConsentRequest, DeclaredAction, Grant } from './permissions.ts';
 
 const portOf = (url?: string) => { try { return url ? new URL(url).port : ''; } catch { return ''; } };
@@ -199,6 +200,7 @@ export interface ToolRow {
   setup?: true;                                             // has tool-side setup (Set up / Check)
   receives?: Target['engine'];                              // can take tasks now, through this engine
   cost?: { is: Cost; set: boolean };                        // found tools that can do work: what it costs, and whether you set it (tools.cost)
+  agents?: Array<{ id: string; name: string; model?: string; cost?: Cost; on: boolean; off?: string }>;   // its own agents (e.g. profiles): used or not (agents.use), why off by default
   gateway?: { model: string; key: boolean; auto: boolean; ready: boolean };   // takes a custom model endpoint: its model through the gateway, whether it
                                                             // has a key, sets it up by itself when connected (auto), can use it now (gateway on + key)
 }
@@ -222,6 +224,7 @@ export interface ToolInput {
   snapshot: Snapshot | null; live: LiveState; targets: Target[]; prefs: { auto: string[]; never: string[] }; consents: Array<{ subject: string }>;
   gateway?: { on: boolean; routes: string[]; keyed: string[] };
   costs?: string[];                                         // the setting tools.cost
+  use?: string[];                                           // the setting agents.use
 }
 /** The one row model behind the Tools panel and the CLI (ADR 0009). */
 export function toolRows(x: ToolInput): ToolRow[] {
@@ -229,6 +232,7 @@ export function toolRows(x: ToolInput): ToolRow[] {
     const dets = x.snapshot?.detections.filter(d => d.integration === i.id) ?? [];
     const live = Object.values(x.live.tools).filter(t => t.integration === i.id);
     const client = dets.filter(d => d.connected !== undefined), target = x.targets.find(t => t.id === i.id);
+    const agents = [...new Map((x.snapshot?.agents ?? []).filter(a => a.integration === i.id).map(a => [a.id, a])).values()];   // one per id across environments
     const parts = toolParts(dets.flatMap(d => d.installs)), has = (k: ToolPart['kind']) => parts.some(p => p.kind === k);
     const uses = target ? (target.engine === 'chat' ? 'app' : target.engine === 'openai' ? undefined : 'cli')   // a model server is neither: its server answers
       : i.roles.includes('backend') ? undefined : has('app') ? 'app' : has('cli') ? 'cli' : undefined;
@@ -244,6 +248,7 @@ export function toolRows(x: ToolInput): ToolRow[] {
         preference: x.prefs.auto.includes(i.id) ? 'always' as const : x.prefs.never.includes(i.id) ? 'never' as const : 'ask' as const } : {}),
       asks: x.consents.filter(c => c.subject === i.id).length, ...(i.setup ? { setup: true as const } : {}),
       ...(target ? { receives: target.engine } : {}),
+      ...(agents.length ? { agents: agents.map(a => ({ id: a.id, name: a.name, ...(a.model ? { model: a.model } : {}), ...(a.cost ? { cost: a.cost } : {}), on: agentOn(a, x.use), ...(a.off ? { off: a.off } : {}) })) } : {}),
       ...(dets.length && (i.roles.includes('agent') || i.roles.includes('backend')) ? { cost: { is: dets[0].cost, set: !!x.costs?.some(c => c.startsWith(`${i.id}=`)) } } : {}),
       ...(i.gatewayClient ? { gateway: { model: x.gateway?.routes.find(r => r.startsWith(`${i.id}=`))?.slice(i.id.length + 1) ?? AUTO, key: !!x.gateway?.keyed.includes(i.id),
         auto: i.gatewayClient === 'auto', ready: !!x.gateway?.on && !!x.gateway.keyed.includes(i.id) } } : {}),
