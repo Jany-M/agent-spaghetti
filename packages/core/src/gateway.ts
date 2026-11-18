@@ -95,9 +95,9 @@ export class Gateway {
     return { object: 'list', data: [{ id: AUTO, object: 'model', owned_by: 'agent-spaghetti' }, ...models.flatMap(t => t.models.map(m => ({ id: `${t.id}:${m}`, object: 'model', owned_by: t.id })))] };
   }
   /** A message that names tools (`cline <task>`, `a <task> then b`) is handed to them, and their answer comes back as the model's reply: no local model decides. */
-  private async handOff(body: Record<string, unknown>, c: CallCtx, d: NonNullable<ReturnType<typeof parseDirective>>, context: string, asked: string): Promise<unknown> {
+  private async handOff(body: Record<string, unknown>, c: CallCtx, d: NonNullable<ReturnType<typeof parseDirective>>, context: string, files: string[], asked: string): Promise<unknown> {
     const what = classify(d.task);
-    const { id, done } = await this.d.runner.begin(c.who, { target: d.target, model: d.model, task: d.task, context: context || undefined, then: d.then, kind: what.kind, difficulty: what.difficulty, classification: what,
+    const { id, done } = await this.d.runner.begin(c.who, { target: d.target, model: d.model, task: d.task, context: context || undefined, files: files.length ? files : undefined, then: d.then, kind: what.kind, difficulty: what.difficulty, classification: what,
       reason: 'named in a chat message through the model gateway', returnTo: 'none' }, { asked }).catch(e => { throw fail(400, `Agent Spaghetti: ${(e as Error).message}`); });
     c.signal.addEventListener('abort', () => this.d.runner.cancel(id), { once: true });
     const row = await done, text = this.d.runner.result(row);
@@ -112,11 +112,11 @@ export class Gateway {
   }
   private async forward(path: string, body: Record<string, unknown>, c: CallCtx): Promise<unknown> {
     const bus = this.d.bus, messages = Array.isArray(body.messages) ? (body.messages as Array<{ role?: string; content?: unknown }>) : [];
-    const raw = lastUserText(body), { text: said, context } = splitMessage(raw);
+    const raw = lastUserText(body), { text: said, context, files } = splitMessage(raw);
     bus.capture('gateway', 'request', { from: c.who, path, model: body.model, stream: body.stream, tools: Array.isArray(body.tools) ? body.tools.length : 0, roles: messages.map(m => m.role).join(','), lastUser: raw });
     const directive = path === PATHS[0] ? parseDirective(said, this.d.runner.targets().filter(t => t.id !== c.who)) : null;
-    bus.capture('gateway', 'read', { text: said, context: context.length, directive });
-    if (directive) return this.handOff(body, c, directive, context, said);
+    bus.capture('gateway', 'read', { text: said, context: context.length, files, directive });
+    if (directive) return this.handOff(body, c, directive, context, files, said);
     const what = classify(said);     // recorded under what the user asked for, not as "other"
     const r = resolveRoute(this.d.settings.get('gateway.routes'), c.who, String(body.model ?? AUTO), this.d.runner.targets(), this.d.best?.(c.who, said));
     if ('error' in r) { const o = this.d.runner.offerLoad(c.who, { need: Math.round(JSON.stringify(body).length / 4) }); throw fail(404, o ? `${r.error}; asked to load ${o.model} in ${o.name}: answer in the Agent Spaghetti tray, then try again` : r.error); }

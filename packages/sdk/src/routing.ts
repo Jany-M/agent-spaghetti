@@ -12,11 +12,16 @@ export const parseHop = (hop: string): { target: string; model?: string } => {
   return i < 0 ? { target: hop } : { target: hop.slice(0, i), model: hop.slice(i + 1) || undefined };
 };
 /** What a chat message holds: the tool wraps what its user typed in blocks of its own (`<attachments>…</attachments>`, editor state, …).
- *  A block named like the request (`userRequest`, `request`, `task`, `prompt`) is the text; else the text outside the blocks. The rest is `context`. */
-export function splitMessage(raw: string): { text: string; context: string } {
+ *  A block named like the request (`userRequest`, `request`, `task`, `prompt`) is the text, else the text outside the blocks. A block that lists files
+ *  (list items that are absolute paths) gives `files`; a block that only says the time is dropped; the rest is `context`. */
+export function splitMessage(raw: string): { text: string; context: string; files: string[] } {
   const blocks = [...raw.matchAll(/<([A-Za-z][\w-]*)>([\s\S]*?)<\/\1>/g)], named = blocks.find(b => /^(user_?request|request|task|prompt|query)$/i.test(b[1]));
-  const outside = raw.replace(/<([A-Za-z][\w-]*)>[\s\S]*?<\/\1>/g, '');
-  return { text: (named ? named[2] : outside).trim(), context: blocks.filter(b => b !== named).map(b => b[0]).join('\n').trim() };
+  const outside = raw.replace(/<([A-Za-z][\w-]*)>[\s\S]*?<\/\1>/g, ''), files: string[] = [], rest: string[] = [];
+  for (const b of blocks.filter(x => x !== named)) {
+    const paths = [...b[2].matchAll(/^\s*[*-]\s+((?:[A-Za-z]:[\\/]|\/)\S.*?)(?:\s+\(\d+ lines?\))?\s*$/gm)].map(m => m[1]);
+    if (paths.length) files.push(...paths); else if (!/(date|time)/i.test(b[1])) rest.push(b[0]);
+  }
+  return { text: (named ? named[2] : outside).trim(), context: rest.join('\n').trim(), files };
 }
 /** A message that names tools: `<tool>[:agent] <task>`, then `then <tool>[:agent]` for each next hop (each gets the previous result). A tool is named by its id
  *  or the first word of its name. Null when the message does not start with one. Words after a later hop's tool are not passed on: every hop gets the first task. */

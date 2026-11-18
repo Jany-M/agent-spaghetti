@@ -89,9 +89,10 @@ test('withCosts: the owner\'s word on a tool\'s cost replaces the scan\'s; unkno
 });
 
 test('splitMessage: the request apart from the blocks a tool wraps around it', () => {
-  assert.deepEqual(splitMessage('<attachments>file a</attachments>\n<userRequest>cline read it</userRequest>'), { text: 'cline read it', context: '<attachments>file a</attachments>' });
-  assert.deepEqual(splitMessage('<ctx>x</ctx>\ncline read it'), { text: 'cline read it', context: '<ctx>x</ctx>' });
-  assert.deepEqual(splitMessage('plain'), { text: 'plain', context: '' });
+  assert.deepEqual(splitMessage('<attachments>file a</attachments>\n<userRequest>cline read it</userRequest>'), { text: 'cline read it', context: '<attachments>file a</attachments>', files: [] });
+  assert.deepEqual(splitMessage('<ctx>x</ctx>\ncline read it'), { text: 'cline read it', context: '<ctx>x</ctx>', files: [] });
+  assert.deepEqual(splitMessage('plain'), { text: 'plain', context: '', files: [] });
+  assert.deepEqual(splitMessage('<current_datetime>2026-11-18T12:21</current_datetime>\n\ncline hi\n\n<tagged_files>\n* e:\\p\\README.md (181 lines)\n* /home/u/a b.txt\n</tagged_files>'), { text: 'cline hi', context: '', files: ['e:\\p\\README.md', '/home/u/a b.txt'] });
 });
 test('parseDirective: a message that starts with a tool hands the task to it; `then <tool>` chains; anything else is not one', () => {
   const tools = [{ id: 'alpha', name: 'Alpha Agent' }, { id: 'beta', name: 'Beta' }, { id: 'gamma', name: 'Gamma' }];

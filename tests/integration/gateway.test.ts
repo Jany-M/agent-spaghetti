@@ -182,9 +182,9 @@ test('a chat message that names a tool goes to that tool (and `then` hops), and 
   const call = (body: object) => fetch(`http://127.0.0.1:${port}/v1/chat/completions`, { method: 'POST', headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const msg = (content: string) => [{ role: 'system', content: 's' }, { role: 'user', content }];
   try {
-    const r = await (await call({ model: 'auto', messages: msg('<attachments>README.md</attachments>\n<userRequest>alpha What does this file say? then alpha:other check</userRequest>') })).json();
+    const r = await (await call({ model: 'auto', messages: msg('<notes>keep it short</notes>\n<tagged_files>\n* /home/u/README.md (3 lines)\n</tagged_files>\n<userRequest>alpha What does this file say? then alpha:other check</userRequest>') })).json();
     assert.deepEqual([r.choices[0].message.content, r.choices[0].finish_reason, r.model, r.usage.total_tokens], ['It says hello.', 'stop', 'agent-spaghetti:alpha', 7]);
-    assert.deepEqual([started[0].who, started[0].target, started[0].task, started[0].context, started[0].then, started[0].returnTo], ['vscode', 'alpha', 'What does this file say?', '<attachments>README.md</attachments>', ['alpha:other'], 'none']);
+    assert.deepEqual([started[0].who, started[0].target, started[0].task, started[0].context, started[0].files, started[0].then, started[0].returnTo], ['vscode', 'alpha', 'What does this file say?', '<notes>keep it short</notes>', ['/home/u/README.md'], ['alpha:other'], 'none']);
     const s = await (await call({ model: 'auto', stream: true, messages: msg('alpha hi') })).text();
     assert.ok(s.includes('"content":"It says hello."') && s.includes('"finish_reason":"stop"') && s.trim().endsWith('[DONE]'));
     assert.equal(store.eventsSince(0).filter(e => e.type === 'debug.capture').length, 0, 'off: nothing is recorded');
